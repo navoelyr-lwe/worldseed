@@ -39,3 +39,12 @@
 
 - Fotogerçekçilik yalnız varlık hattıyla gelmez; ışık/malzeme/biyomekanik/kamera birlikte gerekir (`08-CIZICI-VE-VARLIK-HATTI.md`).
 - Bu belge plan aşamasındadır; ilk varlık biçimi P2'de uygulanır ve ADR ile kayda geçirilir.
+
+## P2 uygulaması (ilk adım)
+
+- **Prosedürel geometri:** `src/render/ws_mesh.c` küp/düzlem/küre üretir; harici asset yok.
+- **İlk sürümlü biçim:** metin tabanlı `worldseed-mesh 1` (başlık + `vertex`/`index` kayıtları). Ham C struct diske yazılmaz; alanlar açıkça biçimlenir.
+- **Validator:** `ws_asset_validate_mesh` indeks aralığı, indeks sayısı 3'ün katı, sonlu konum/normal ve NULL kontrolü yapar; tarayıcı yanlış sürümü (`WS_ERR_UNSUPPORTED`) ve bozuk kaydı (`WS_ERR_PARSE`) reddeder.
+- **Determinizm:** aynı üretici girdisi bit düzeyinde aynı varlığı verir (unit test + golden scene kare SHA-256).
+
+İlerideki dilimlerde ikili/sıkıştırılmış biçim, normal/tangent, malzeme bölümü, LOD ve checksum eklenir. Detay `docs/P2-RENDER-TEMELI.md` içindedir.

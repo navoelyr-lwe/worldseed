@@ -10,6 +10,7 @@ Bu klasör bağlayıcı mimari kararları tek tek dosyalar hâlinde tutar. `15-R
 | `ADR-008-varlik-ve-icerik-uretimi.md` | Varlık ve içerik üretimi (özgün C17 hattı) | Kapalı |
 | `ADR-009-ci-dal-korumasi-ve-runner.md` | CI, dal koruması ve izole GUI runner politikası | Kapalı |
 | `ADR-010-kaynak-kodu-lisansi.md` | Kaynak kodu lisansı ve içerik menşei kaydı | Kapalı |
+| `ADR-011-render-ve-varlik-formati.md` | Sahne sözleşmesi, CPU renderer ve ilk varlık formatı | Kapalı |
 
 ## Kural
 

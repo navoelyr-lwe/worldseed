@@ -6,7 +6,7 @@ Bu pano `13-YOL-HARITASI.md` aşamalarının durumunu izler. Durum yalnız kanı
 |---|---|---|---|
 | P0 | Ürün ve bilimsel temel | Tamamlanan denetim | `DENETIM-RAPORU.md`, ADR-007…010 |
 | P1 | C17 motor çekirdeği | Tamamlandı (altyapı) | `docs/P1-MOTOR-CEKIRDEGI.md`, `src/core`, `src/world`, `tests/`, `ci.yml` |
-| P2 | Render ve içerik temeli | Başlangıç (spike) | `src/render`, `FEASIBILITY-CPU-RENDERER.md` |
+| P2 | Render ve içerik temeli | Sürüyor (sahne renderer + golden scene) | `docs/P2-RENDER-TEMELI.md`, `src/render`, `tests/test_render.c`, `tests/golden/` |
 | P3 | İlk doğal çevre | Planlandı | — |
 | P4 | Çevresel fizik | Planlandı | — |
 | P5 | Referans canlı biyomekaniği | Planlandı | — |

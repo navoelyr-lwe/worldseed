@@ -33,6 +33,10 @@ Kendi C17 CPU rasterizer'ımızın zorunlu referans/fallback yolu olarak çalı�
 - PBR/HDR, gölge haritası, atmosfer, su, bitki LOD P2'de ayrı görevlerdir.
 - Performans iddiası yok; p95 frame-time ölçümü gerçek renderer ile yapılır.
 
+## P2 uygulaması
+
+Bu spike'ın üzerine kurulan gerçek sahne renderer'ı (`ws_render_scene`: MVP dönüşümü, yakın-düzlem kırpma, perspektif-doğru interpolasyon, Lambert aydınlatma), prosedürel mesh, varlık formatı ve golden-scene kanıtı `docs/P2-RENDER-TEMELI.md` içinde kayıtlıdır. Bu belge tarihsel fizibilite kaydıdır; güncel durum P2 belgesindedir.
+
 ## Karar
 
 CPU rasterizer yolu bağımlılık eklemeden uygulanabilir. Referans/fallback rolü korunur. Hiçbir görsel kalite veya FPS iddiası bu spike ile yapılmaz.
