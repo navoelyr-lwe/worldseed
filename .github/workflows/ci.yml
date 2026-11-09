@@ -169,6 +169,14 @@ jobs:
           & build/tools/${{ matrix.build_type }}/ws_golden.exe evidence/golden 20260101 |
             Tee-Object -FilePath evidence/golden/golden-msvc-${{ matrix.build_type }}.txt
           if (-not (Select-String -Path evidence/golden/golden-msvc-${{ matrix.build_type }}.txt -Pattern "WS_GOLDEN_OK" -Quiet)) { exit 1 }
+          # Same input must reproduce the same frame digests within a run.
+          New-Item -ItemType Directory -Force -Path evidence/golden/repeat | Out-Null
+          & build/tools/${{ matrix.build_type }}/ws_golden.exe evidence/golden/repeat 20260101 | Out-Null
+          foreach ($s in "orbit","lowlight","spheres") {
+            $a = (Select-String -Path evidence/golden/manifest.csv -Pattern "^$s,").Line.Split(",")[9]
+            $b = (Select-String -Path evidence/golden/repeat/manifest.csv -Pattern "^$s,").Line.Split(",")[9]
+            if ($a -ne $b) { Write-Error "golden scene $s not reproducible"; exit 1 }
+          }
 
       - name: Golden reference comparison
         shell: pwsh
