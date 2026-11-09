@@ -1,47 +1,84 @@
-# P2 — Render ve içerik temeli (durum ve kanıt)
+# P2 — Render ve içerik temeli
 
-Bu belge `13-YOL-HARITASI.md` P2 aşamasının ilk dilimini kaydeder: 3B sahne sözleşmesi, referans CPU sahne renderer'ı, prosedürel mesh üretimi, sürümlü mesh varlık formatı + doğrulayıcı, görüntü metrikleri ve otomatik golden-scene kanıtı. Bu dilim hâlâ kullanıcıya görünür tam bir ürün değildir; görsel kalite iddiası taşımaz.
+Bu belge `13-YOL-HARITASI.md` P2 aşamasının durumunu ve kanıtlarını kaydeder.
+P2 hâlâ kullanıcıya görünür tam bir ürün değildir ve görsel kalite iddiası
+taşımaz; buradaki renderer zorunlu doğruluk referansı ve CPU fallback yoludur.
 
-## P2 (bu dilim) çıktıları
+## Dilim 1 — Sahne renderer, varlık hattı, golden scene (tamamlandı)
 
-- Matematik: `ws_vec4`, `ws_mat4` (çarpım, look-at, perspektif), vektör çarpım/normalize/lerp.
-- Mesh: `ws_vertex` (pozisyon, normal, UV, renk) ve prosedürel küp/düzlem/küre üreticileri.
-- Varlık hattı: sürümlü metin mesh formatı (`worldseed-mesh 1`), tarayıcı/yükleyici/yazıcı ve yapısal doğrulayıcı.
-- Sahne sözleşmesi: kamera, yönlü ışık, malzeme, örnek (instance) listesi (`ws_scene`).
-- Renderer: `ws_render_scene` — MVP dönüşümü, yakın-düzlem kırpma, perspektif bölme, karo tabanlı tarama, perspektif-doğru nitelik interpolasyonu ve Lambert aydınlatma.
-- Görüntü: PPM okuma/yazma, karşılaştırma metrikleri (ortalama/tepe fark, PSNR, SSIM), kapsam (coverage) ölçümü.
-- Araçlar: `ws_golden` (golden scene üretimi + manifest) ve `ws_imgdiff` (toleranslı karşılaştırma).
+- Sözleşme: `ws_scene` (instanced mesh listesi + kamera + tek yönlü ışık),
+  `ws_mesh` prosedürel küp/düzlem/uv-küre üretimi.
+- Referans CPU renderer (`src/render/ws_render.c`): model/view/projection,
+  yakın düzlem kırpma, perspektif-doğru interpolasyon, karo tabanlı tarama,
+  derinlik tamponu, Lambert aydınlatma.
+- Sürümlü mesh varlık formatı (`wsmesh`) + yapısal doğrulayıcı ve yükleyici.
+- Araçlar: `ws_golden`, `ws_imgdiff`, `ws_assetgen`.
+- Golden scene: `orbit`, `lowlight`, `spheres`.
 
-## Sahne sözleşmesi (mimari sınır)
+## Dilim 2 — Materyal, aydınlatma, doku (bu dilim)
 
-- Dünya/simülasyon katmanı renderer'a doğrudan bağlanmaz; yalnız `ws_scene` snapshot'ı üretir.
-- Renderer dünya durumunu değiştiremez; sahne salt-okunurdur.
-- Aynı sahne CPU ve (gelecekte) GPU backend'lerine verilebilir; beklenen eşitlik geometri/semantik düzeyinde ve tanımlı toleransta, piksel-bit eşitliği değil.
+Bu dilim malzeme/ışık/doku temelini ekler ve golden-scene kanıtını genişletir.
 
-## Golden scene seti (bu dilim)
+### Matematik
+- `ws_vec4` (make/add/sub/scale/dot/lerp), yön vektörü dönüşümü
+  (`ws_mat4_mul_vec4_dir`).
+- `ws_mat3` (sütun-büyük) ve normal matrisi (`ws_mat4_normal_matrix`),
+  düzgün olmayan ölçekte bile doğru normal dönüşümü.
 
-| Sahne | İçerik | Metrik |
-|---|---|---|
-| `orbit` | küp + küre + zemin, 3/4 kamera | üçgen, kapsam, SHA-256 |
-| `lowlight` | tek küp, düşük yoğunluk/ortam ışığı | üçgen, kapsam, SHA-256 |
-| `spheres` | üç küre + zemin | üçgen, kapsam, SHA-256 |
+### Malzeme ve aydınlatma
+- `ws_material`: doğrusal albedo, roughness, metallic, specular ölçeği ve
+  isteğe bağlı albedo dokusu. `ws_material_make` ile güvenli kurulum.
+- `ws_light`: yönlü ışık (renk + şiddet), yarım-küre ambient (gökyüzü/zemin
+  renkleri) ve gradyan gökyüzü (zenit/ufuk).
+- Per-piksel gölgeleme: Lambert diffuse + Blinn-Phong specular + yarım-küre
+  ambient. Yüzey öznitelikleri (dünya konumu, dünya normali, albedo) perspektif
+  düzeltmeli olarak enterpole edilir.
+- Tüm gölgeleme doğrusal uzayda yapılır; çıkışta sRGB kodlama (IEC 61966-2-1).
 
-Her sahne `tests/golden/manifest.csv` içinde çözünürlük, seed, üçgen sayısı, kapsam ve kare SHA-256 değerini kaydeder. CI hem aynı girdi tekrarında kare parmak izinin değişmediğini hem de üretilen karenin sürümlenmiş referansla tolerans içinde eşleştiğini denetler.
+### Render ayarları
+- `ws_render_settings`: pozlama, ton eşleme (0 = kırpma, 1 = Reinhard),
+  gökyüzü aç/kapa ve üstel mesafe sisi.
+- Gökyüzü: kamera ışınına göre dikey gradyan (ufuk → zenit).
+- Sis: derinliğe bağlı üstel zayıflama; gökyüzü rengine (veya arka plan rengine)
+  doğru karıştırma.
 
-## Kabul kapıları ve kanıtlar
+### Doku
+- `ws_texture`: RGBA8, sRGB→doğrusal dönüşüm, bilinear örnekleme, negatif
+  kafes koordinatları için güvenli sarma.
+- Üreticiler: `ws_texture_make_checker`, `ws_texture_make_noise` (deterministik
+  value-noise, seed'li).
+- Sürümlü doku varlık formatı (`wstex`) + okuyucu/yazıcı; bozuk ve desteklenmeyen
+  sürümler reddedilir.
 
-- Birim/entegrasyon testleri: `tests/test_render.c` (matematik, mesh, varlık, renderer, görüntü) — CI `render` suite.
-- Karo boyutu değişmezliği: aynı sahne 8 ve 64 karo için bit düzeyinde aynı çıktı (unit test).
-- Derinlik sıralaması: yakın nesne uzak nesneyi örter (unit test).
-- Determinizm: aynı sahne iki kez bit düzeyinde aynı; GCC/Clang ve Debug/Release arasında aynı kare SHA-256 (yerel kanıt).
-- Golden-scene: `ws_golden` `WS_GOLDEN_OK` üretir; manifest kare parmak izlerini yazar.
-- Toleranslı görsel regresyon: `ws_imgdiff` referans kareye karşı ortalama fark ≤ 3.0 ve SSIM ≥ 0.99 kapısını uygular.
-- Platform: Linux GCC/Clang (Debug ASan/UBSan + Release) ve Windows MSVC (Debug/Release) aynı adımları çalıştırır.
+### Golden scene genişletmesi
+Altı sahne: `orbit`, `lowlight`, `spheres`, `materials`, `textured`, `sky`.
+`materials` roughness/metallic süpürmesini, `textured` doku örnekleyicisini,
+`sky` gradyan gökyüzü + yarım-küre ambient + sis + filmik ton eşlemeyi
+çalıştırır. Manifest `tests/golden/manifest.csv` şu alanları kaydeder:
 
-## Bilinen sınırlar (sonraki P2 dilimleri)
+`scene,seed,width,height,triangles_submitted,triangles_drawn,pixels_shaded,coverage,mean_luma,max_luma,render_ms,sha256`
 
-- Yalnız Lambert aydınlatma; PBR/HDR, gölge haritası, atmosfer, su, doku ve bitki LOD henüz yok.
-- Mesh üreticileri düz renk ve tek malzeme kullanır; UV var ama doku örnekleme yok.
-- Perspektif bölme sonrası yalnız yakın-düzlem kırpma yapılır; yan düzlem kırpma henüz yok (tam ekran dışı üçgenler tarama aşamasında kırpılır).
-- Golden scene seti `08-CIZICI-VE-VARLIK-HATTI.md` hedef listesinin ilk üç sahnesidir; orman, su, yağmur/sis, gece ve motion blur sonraki dilimlerdedir.
-- Performans iddiası yok; p95 frame-time ölçümü gerçek renderer ile sonraki dilimde yapılır.
+## Otomatik doğrulama
+
+CI (`.github/workflows/ci.yml`) Linux (gcc/clang, Debug/Release) ve Windows
+(MSVC, Debug/Release) üzerinde şunları koşar:
+
+- Tüm birim testleri (`ws_test_render` dahil 28 render/… testi).
+- Golden scene: `WS_GOLDEN_OK`; aynı girdi tekrarında kare parmak izi değişmez.
+- Golden referans karşılaştırması: üretilen kare sürümlenmiş referansla
+  tolerans içinde eşleşir (`ws_imgdiff`).
+- Varlık hattı: mesh ve doku varlıkları yeniden üretilebilir ve commit'lenmiş
+  kayıtla byte-özdeş; provenance manifesti (`ASSET-MANIFEST.csv`) kaynak/lisans
+  alanlarını taşır.
+- Windows MSVC'de golden kare parmak izi determinizmi ayrıca denetlenir.
+
+Yerel kanıt (gcc ve clang Release): altı sahnenin kare parmak izleri birebir
+aynı; `ws_test_render` 28/28 geçer; sızıntı yok (ASan/LSan).
+
+## Bilinen sınırlamalar
+
+- Bu renderer gölge, yansıma, ortam kapanımı (AO), normal/roughness haritası ve
+  gerçek PBR enerji korunumu içermez. Nihai yüksek kaliteli renderer değildir.
+- Doku yalnızca albedo içindir; filtrelenmiş mipmap yoktur.
+- Gökyüzü tek renk gradyanıdır; bulut/atmosfer saçılımı yoktur.
+- Görsel kalite protokolü (`08` belgesi) ayrıdır; bu dilim estetik iddia etmez.

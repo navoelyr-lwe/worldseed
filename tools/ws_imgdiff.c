@@ -52,6 +52,27 @@ int main(int argc, char **argv)
            diff.mean_abs_error, diff.max_abs_error, diff.psnr_db, diff.ssim,
            (unsigned long long)diff.differing_pixels);
 
+    /* Diagnostic: signed mean shift and a couple of sample pixels, so a
+     * platform-specific difference can be located without the raw frames. */
+    {
+        double sum[3] = {0.0, 0.0, 0.0};
+        size_t count = (size_t)a.width * (size_t)a.height;
+        for (size_t i = 0; i < count; ++i) {
+            for (int c = 0; c < 3; ++c) {
+                sum[c] += (double)a.pixels[i * 4u + (size_t)c] - (double)b.pixels[i * 4u + (size_t)c];
+            }
+        }
+        printf("signed_mean a-b: r=%.3f g=%.3f b=%.3f\n",
+               sum[0] / (double)count, sum[1] / (double)count, sum[2] / (double)count);
+        size_t probes[3] = {0u, count / 2u, count - 1u};
+        for (int p = 0; p < 3; ++p) {
+            size_t i = probes[p];
+            printf("pixel[%zu] a=(%u,%u,%u) b=(%u,%u,%u)\n", i,
+                   a.pixels[i * 4u], a.pixels[i * 4u + 1u], a.pixels[i * 4u + 2u],
+                   b.pixels[i * 4u], b.pixels[i * 4u + 1u], b.pixels[i * 4u + 2u]);
+        }
+    }
+
     int ok = diff.mean_abs_error <= max_mean && diff.ssim >= min_ssim;
     if (!ok) {
         fprintf(stderr, "tolerance exceeded: mean<=%.3f ssim>=%.4f\n", max_mean, min_ssim);

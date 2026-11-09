@@ -23,6 +23,7 @@ add_library(worldseed_core STATIC
   render/ws_scene.c
   render/ws_render.c
   render/ws_image.c
+  render/ws_texture.c
   platform/ws_dynlib.c
   platform/ws_opencl_probe.c
   platform/ws_clock.c)

@@ -13,6 +13,7 @@
 #include "render/ws_mesh.h"
 #include "render/ws_render.h"
 #include "render/ws_scene.h"
+#include "render/ws_texture.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -226,7 +227,7 @@ static int fixture_build(render_fixture *fx)
     if (ws_scene_init(&fx->scene, fx->objects, 4u) != WS_OK) {
         return 0;
     }
-    ws_material mat = {{0.7, 0.6, 0.4}, 0.8, 0.0};
+    ws_material mat = ws_material_make(0.7, 0.6, 0.4, 0.8, 0.0, 0.0);
     ws_mat4 model = ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(0.0, 0.0, 0.0)),
                                      ws_mat4_rotation_y(ws_deg_to_rad(30.0)));
     if (ws_scene_add_object(&fx->scene, &fx->cube, model, mat) != WS_OK) {
@@ -310,8 +311,8 @@ static int test_render_depth_occlusion(void)
     ws_scene_object objects[2];
     ws_scene scene;
     WS_CHECK(ws_scene_init(&scene, objects, 2u) == WS_OK);
-    ws_material near_mat = {{1.0, 0.0, 0.0}, 1.0, 0.0};
-    ws_material far_mat = {{0.0, 0.0, 1.0}, 1.0, 0.0};
+    ws_material near_mat = ws_material_make(1.0, 0.0, 0.0, 1.0, 0.0, 0.0);
+    ws_material far_mat = ws_material_make(0.0, 0.0, 1.0, 1.0, 0.0, 0.0);
     /* Quads face +Y; camera looks down at them from above. Near is lower y? No:
      * with a +Y up camera, a smaller distance to camera means smaller y here. */
     ws_mat4 far_t = ws_mat4_translation(ws_vec3_make(0.0, -0.2, 0.0));
@@ -363,6 +364,30 @@ static int test_ppm_roundtrip(void)
     return 1;
 }
 
+static int test_ppm_crlf_header(void)
+{
+    /* A PPM whose header uses CRLF line endings (as a text-mode checkout on
+     * Windows produces) must parse with the raster starting at the right byte;
+     * a naive tokeniser shifts the image by one byte. */
+    const char *path = "ppm_crlf.ppm";
+    FILE *f = fopen(path, "wb");
+    WS_CHECK(f != NULL);
+    /* 2x1, white then black, CRLF header. */
+    static const uint8_t bytes[] = "P6\r\n2 1\r\n255\r\n\xff\xff\xff\x00\x00\x00";
+    fwrite(bytes, 1u, sizeof(bytes) - 1u, f);
+    fclose(f);
+
+    ws_framebuffer fb;
+    WS_CHECK(ws_framebuffer_read_ppm(&fb, path) == WS_OK);
+    WS_CHECK(fb.width == 2u && fb.height == 1u);
+    WS_CHECK(fb.pixels[0] == 255u && fb.pixels[1] == 255u && fb.pixels[2] == 255u);
+    WS_CHECK(fb.pixels[4] == 0u && fb.pixels[5] == 0u && fb.pixels[6] == 0u);
+
+    remove(path);
+    ws_framebuffer_free(&fb);
+    return 1;
+}
+
 static int test_image_metrics(void)
 {
     ws_framebuffer a;
@@ -393,23 +418,371 @@ static int test_image_metrics(void)
     return 1;
 }
 
+static int test_math_vec4_ops(void)
+{
+    ws_vec4 a = ws_vec4_make(1.0, 2.0, 3.0, 4.0);
+    ws_vec4 b = ws_vec4_make(4.0, 3.0, 2.0, 1.0);
+    ws_vec4 s = ws_vec4_add(a, b);
+    WS_CHECK(APPROX(s.x, 5.0, 1e-12) && APPROX(s.w, 5.0, 1e-12));
+    ws_vec4 d = ws_vec4_sub(a, b);
+    WS_CHECK(APPROX(d.x, -3.0, 1e-12) && APPROX(d.w, 3.0, 1e-12));
+    WS_CHECK(APPROX(ws_vec4_dot(a, b), 20.0, 1e-12));
+    ws_vec4 l = ws_vec4_lerp(a, b, 0.5);
+    WS_CHECK(APPROX(l.x, 2.5, 1e-12) && APPROX(l.w, 2.5, 1e-12));
+    /* Directional transform ignores translation. */
+    ws_mat4 t = ws_mat4_translation(ws_vec3_make(10.0, 20.0, 30.0));
+    ws_vec4 dir = ws_mat4_mul_vec4_dir(t, ws_vec4_make(1.0, 0.0, 0.0, 1.0));
+    WS_CHECK(APPROX(dir.x, 1.0, 1e-12) && APPROX(dir.y, 0.0, 1e-12) && APPROX(dir.w, 0.0, 1e-12));
+    return 1;
+}
+
+static int test_math_normal_matrix(void)
+{
+    /* Non-uniform scale: the normal matrix must keep a plane normal
+     * perpendicular to the transformed surface. */
+    ws_mat4 s = ws_mat4_scale(ws_vec3_make(2.0, 1.0, 1.0));
+    ws_mat3 nm = ws_mat4_normal_matrix(s);
+    /* Surface with normal +X scaled 2x in X: normal direction stays +X. */
+    ws_vec3 n = ws_mat3_mul_vec3(nm, ws_vec3_make(1.0, 0.0, 0.0));
+    n = ws_vec3_normalize(n);
+    WS_CHECK(APPROX(n.x, 1.0, 1e-9));
+    /* A slanted normal (1,1,0) should tilt away from X after X-only scaling. */
+    ws_vec3 sl = ws_vec3_normalize(ws_mat3_mul_vec3(nm, ws_vec3_make(1.0, 1.0, 0.0)));
+    WS_CHECK(sl.y > sl.x);
+    return 1;
+}
+
+static int test_asset_texture_roundtrip(void)
+{
+    ws_texture src;
+    const uint8_t c0[3] = {255u, 0u, 0u};
+    const uint8_t c1[3] = {0u, 0u, 255u};
+    WS_CHECK(ws_texture_make_checker(&src, 8u, 2u, c0, c1) == WS_OK);
+
+    const char *path = "asset_tex_roundtrip.wstex";
+    WS_CHECK(ws_asset_write_texture(path, &src) == WS_OK);
+
+    ws_texture dst;
+    WS_CHECK(ws_asset_load_texture(path, &dst) == WS_OK);
+    WS_CHECK(dst.width == src.width && dst.height == src.height);
+    WS_CHECK(memcmp(src.rgba, dst.rgba, (size_t)src.width * src.height * 4u) == 0);
+
+    ws_texture_free(&dst);
+    ws_texture_free(&src);
+    remove(path);
+    return 1;
+}
+
+static int test_asset_texture_rejects_malformed(void)
+{
+    const char *path = "asset_tex_bad.wstex";
+    FILE *f = fopen(path, "wb");
+    WS_CHECK(f != NULL);
+    fputs("worldseed-texture 1\nsize 2 2\n255 0 0 255\n", f); /* too few pixels */
+    fclose(f);
+    ws_texture tex;
+    WS_CHECK(ws_asset_load_texture(path, &tex) == WS_ERR_PARSE);
+    remove(path);
+
+    f = fopen(path, "wb");
+    WS_CHECK(f != NULL);
+    fputs("worldseed-texture 99\n", f);
+    fclose(f);
+    WS_CHECK(ws_asset_load_texture(path, &tex) == WS_ERR_UNSUPPORTED);
+    remove(path);
+
+    WS_CHECK(ws_asset_load_texture("no_such.wstex", &tex) == WS_ERR_NOT_FOUND);
+    return 1;
+}
+
+static int test_texture_flat_sample(void)
+{
+    ws_texture tex;
+    WS_CHECK(ws_texture_create(&tex, 4u, 4u, 255u, 128u, 0u, 255u) == WS_OK);
+    double c[3];
+    ws_texture_sample(&tex, 0.3, 0.7, c);
+    /* Mid grey: sRGB 128 decodes to ~0.216 linear. */
+    WS_CHECK(APPROX(c[0], 1.0, 1e-9));
+    WS_CHECK(c[1] > 0.2 && c[1] < 0.24);
+    WS_CHECK(APPROX(c[2], 0.0, 1e-9));
+    ws_texture_free(&tex);
+    return 1;
+}
+
+static int test_texture_checker_pattern(void)
+{
+    ws_texture tex;
+    const uint8_t c0[3] = {255u, 255u, 255u};
+    const uint8_t c1[3] = {0u, 0u, 0u};
+    WS_CHECK(ws_texture_make_checker(&tex, 8u, 2u, c0, c1) == WS_OK);
+    /* Cells are 4x4: pixel (0,0) white, (5,0) black, (5,5) white. */
+    WS_CHECK(tex.rgba[0] == 255u);
+    WS_CHECK(tex.rgba[(0u * 8u + 5u) * 4u] == 0u);
+    WS_CHECK(tex.rgba[(5u * 8u + 5u) * 4u] == 255u);
+    ws_texture_free(&tex);
+    return 1;
+}
+
+static int test_texture_bilinear(void)
+{
+    /* Two-pixel texture: black then white along X. Sampling between texels in
+     * the linear domain must land strictly between the two decoded values. */
+    ws_texture tex;
+    WS_CHECK(ws_texture_create(&tex, 2u, 1u, 0u, 0u, 0u, 255u) == WS_OK);
+    ws_texture_set(&tex, 1u, 0u, 255u, 255u, 255u, 255u);
+    double c[3];
+    ws_texture_sample(&tex, 0.5, 0.5, c); /* halfway between the two texels */
+    WS_CHECK(c[0] > 0.0 && c[0] < 1.0);
+    /* Texel centres (u = 0.25 and 0.75) reproduce their colours exactly. */
+    ws_texture_sample(&tex, 0.25, 0.5, c);
+    WS_CHECK(APPROX(c[0], 0.0, 1e-9));
+    ws_texture_sample(&tex, 0.75, 0.5, c);
+    WS_CHECK(APPROX(c[0], 1.0, 1e-9));
+    ws_texture_free(&tex);
+    return 1;
+}
+
+static int test_texture_noise_reproducible(void)
+{
+    ws_texture a;
+    ws_texture b;
+    const uint8_t base[3] = {120u, 100u, 80u};
+    WS_CHECK(ws_texture_make_noise(&a, 16u, 42ULL, base, 0.3) == WS_OK);
+    WS_CHECK(ws_texture_make_noise(&b, 16u, 42ULL, base, 0.3) == WS_OK);
+    WS_CHECK(memcmp(a.rgba, b.rgba, (size_t)16u * 16u * 4u) == 0);
+    ws_texture c;
+    WS_CHECK(ws_texture_make_noise(&c, 16u, 43ULL, base, 0.3) == WS_OK);
+    WS_CHECK(memcmp(a.rgba, c.rgba, (size_t)16u * 16u * 4u) != 0);
+    ws_texture_free(&a);
+    ws_texture_free(&b);
+    ws_texture_free(&c);
+    return 1;
+}
+
+/* Render a single sphere filling the view and return the centre pixel RGB. */
+static int render_centre_sphere(const ws_render_settings *settings, const ws_material *mat,
+                                ws_vec3 light_dir, unsigned char out_rgb[3])
+{
+    ws_vertex verts[17u * 9u];
+    uint32_t idx[16u * 9u * 6u];
+    const uint8_t color[3] = {255u, 255u, 255u};
+    ws_mesh sphere;
+    if (ws_mesh_make_sphere(&sphere, verts, 17u * 9u, idx, 16u * 9u * 6u, 16u, 8u, color) != WS_OK) {
+        return 0;
+    }
+    ws_scene_object objects[1];
+    ws_scene scene;
+    if (ws_scene_init(&scene, objects, 1u) != WS_OK) {
+        return 0;
+    }
+    if (ws_scene_add_object(&scene, &sphere, ws_mat4_scale(ws_vec3_make(2.0, 2.0, 2.0)), *mat) != WS_OK) {
+        return 0;
+    }
+    scene.camera = ws_camera_default();
+    scene.camera.eye = ws_vec3_make(0.0, 0.0, 3.0);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, 0.0);
+    scene.light.direction = ws_vec3_normalize(light_dir);
+    scene.settings = *settings;
+
+    ws_framebuffer fb;
+    if (ws_framebuffer_create(&fb, 96u, 96u) != WS_OK) {
+        return 0;
+    }
+    size_t count = (size_t)fb.width * fb.height;
+    float *depth = malloc(count * sizeof(float));
+    if (depth == NULL) {
+        ws_framebuffer_free(&fb);
+        return 0;
+    }
+    int ok = ws_render_scene(&scene, &fb, depth, 32u, NULL) == WS_OK;
+    if (ok) {
+        size_t centre = ((size_t)48 * fb.width + 48u) * 4u;
+        out_rgb[0] = fb.pixels[centre];
+        out_rgb[1] = fb.pixels[centre + 1u];
+        out_rgb[2] = fb.pixels[centre + 2u];
+    }
+    free(depth);
+    ws_framebuffer_free(&fb);
+    return ok;
+}
+
+static int test_render_specular_highlight(void)
+{
+    /* A glossy sphere lit head-on must be brighter at the centre than a matte
+     * one under identical geometry and light. */
+    ws_render_settings s = ws_render_settings_default();
+    ws_material matte = ws_material_make(0.5, 0.5, 0.5, 1.0, 0.0, 0.0);
+    ws_material glossy = ws_material_make(0.5, 0.5, 0.5, 0.2, 0.0, 0.9);
+    unsigned char m[3];
+    unsigned char g[3];
+    WS_CHECK(render_centre_sphere(&s, &matte, ws_vec3_make(0.0, 0.0, -1.0), m));
+    WS_CHECK(render_centre_sphere(&s, &glossy, ws_vec3_make(0.0, 0.0, -1.0), g));
+    WS_CHECK(g[0] > m[0]);
+    return 1;
+}
+
+static int test_render_sky_gradient(void)
+{
+    /* Empty scene with sky enabled: the top of the frame is bluer (sky_top) and
+     * the bottom is brighter (sky_horizon). */
+    ws_scene_object objects[1];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 1u) == WS_OK);
+    scene.camera = ws_camera_default();
+    scene.camera.eye = ws_vec3_make(0.0, 0.0, 0.0);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, -1.0);
+    scene.settings.sky_enabled = 1;
+
+    ws_framebuffer fb;
+    WS_CHECK(ws_framebuffer_create(&fb, 64u, 64u) == WS_OK);
+    WS_CHECK(ws_render_scene(&scene, &fb, NULL, 32u, NULL) == WS_OK);
+    size_t top = ((size_t)2u * fb.width + 32u) * 4u;
+    size_t bot = ((size_t)61u * fb.width + 32u) * 4u;
+    /* Blue channel dominates at the zenith. */
+    WS_CHECK(fb.pixels[top + 2u] > fb.pixels[top + 0u]);
+    /* Horizon is brighter than the zenith. */
+    WS_CHECK(fb.pixels[bot + 1u] > fb.pixels[top + 1u]);
+    ws_framebuffer_free(&fb);
+    return 1;
+}
+
+static int test_render_fog_attenuates(void)
+{
+    /* Same geometry, with and without fog: fog must pull the far sphere toward
+     * the sky-horizon colour, i.e. change pixels in the lower part of the frame
+     * where a distant object sits. */
+    ws_vertex verts[17u * 9u];
+    uint32_t idx[16u * 9u * 6u];
+    const uint8_t color[3] = {200u, 60u, 60u};
+    ws_mesh sphere;
+    WS_CHECK(ws_mesh_make_sphere(&sphere, verts, 17u * 9u, idx, 16u * 9u * 6u, 16u, 8u, color) == WS_OK);
+
+    ws_scene_object objects[1];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 1u) == WS_OK);
+    ws_mat4 t = ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(0.0, 0.0, -20.0)),
+                                 ws_mat4_scale(ws_vec3_make(4.0, 4.0, 4.0)));
+    WS_CHECK(ws_scene_add_object(&scene, &sphere, t,
+                                 ws_material_make(0.8, 0.2, 0.2, 0.9, 0.0, 0.0)) == WS_OK);
+    scene.camera = ws_camera_default();
+    scene.camera.eye = ws_vec3_make(0.0, 0.0, 0.0);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, -1.0);
+    scene.settings.sky_enabled = 1;
+
+    ws_framebuffer clear_fb;
+    ws_framebuffer fog_fb;
+    WS_CHECK(ws_framebuffer_create(&clear_fb, 64u, 64u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&fog_fb, 64u, 64u) == WS_OK);
+    scene.settings.fog_density = 0.0;
+    WS_CHECK(ws_render_scene(&scene, &clear_fb, NULL, 32u, NULL) == WS_OK);
+    scene.settings.fog_density = 0.15;
+    WS_CHECK(ws_render_scene(&scene, &fog_fb, NULL, 32u, NULL) == WS_OK);
+
+    size_t centre = ((size_t)32u * clear_fb.width + 32u) * 4u;
+    /* The red sphere has little blue; fog pulls the pixel toward the bright
+     * sky-horizon colour, so the blue channel must rise. */
+    WS_CHECK(fog_fb.pixels[centre + 2u] > clear_fb.pixels[centre + 2u]);
+    ws_image_diff diff;
+    WS_CHECK(ws_image_compare(&clear_fb, &fog_fb, &diff) == WS_OK);
+    WS_CHECK(diff.differing_pixels > 0u);
+    ws_framebuffer_free(&clear_fb);
+    ws_framebuffer_free(&fog_fb);
+    return 1;
+}
+
+static int test_render_tonemap_monotonic(void)
+{
+    /* A bright albedo blows out under clamp but keeps a gradient under
+     * Reinhard; Reinhard never exceeds clamp for the same input. */
+    ws_render_settings clamp_s = ws_render_settings_default();
+    ws_render_settings rein_s = ws_render_settings_default();
+    rein_s.tonemap = 1;
+    rein_s.exposure = 4.0;
+    clamp_s.exposure = 4.0;
+    ws_material mat = ws_material_make(0.9, 0.9, 0.9, 1.0, 0.0, 0.0);
+    unsigned char c[3];
+    unsigned char r[3];
+    WS_CHECK(render_centre_sphere(&clamp_s, &mat, ws_vec3_make(0.0, 0.0, -1.0), c));
+    WS_CHECK(render_centre_sphere(&rein_s, &mat, ws_vec3_make(0.0, 0.0, -1.0), r));
+    WS_CHECK(r[0] <= c[0]);
+    WS_CHECK(r[0] > 0u);
+    return 1;
+}
+
+static int test_render_texture_changes_output(void)
+{
+    /* A cube with a black/white checker albedo map must produce a wider spread
+     * of pixel values than a flat-grey cube of the same mean. */
+    ws_vertex verts[24];
+    uint32_t idx[36];
+    const uint8_t color[3] = {180u, 180u, 180u};
+    ws_mesh cube;
+    WS_CHECK(ws_mesh_make_cube(&cube, verts, 24u, idx, 36u, color) == WS_OK);
+    /* Give the cube UVs across its faces so the map has effect. */
+
+    ws_texture checker;
+    const uint8_t c0[3] = {255u, 255u, 255u};
+    const uint8_t c1[3] = {20u, 20u, 20u};
+    WS_CHECK(ws_texture_make_checker(&checker, 32u, 4u, c0, c1) == WS_OK);
+
+    ws_scene_object objects[1];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 1u) == WS_OK);
+    ws_material flat = ws_material_make(0.6, 0.6, 0.6, 0.9, 0.0, 0.0);
+    WS_CHECK(ws_scene_add_object(&scene, &cube, ws_mat4_identity(), flat) == WS_OK);
+    scene.camera = ws_camera_default();
+
+    ws_framebuffer flat_fb;
+    ws_framebuffer tex_fb;
+    WS_CHECK(ws_framebuffer_create(&flat_fb, 64u, 64u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&tex_fb, 64u, 64u) == WS_OK);
+    WS_CHECK(ws_render_scene(&scene, &flat_fb, NULL, 16u, NULL) == WS_OK);
+
+    scene.objects[0].material.albedo_map = &checker;
+    WS_CHECK(ws_render_scene(&scene, &tex_fb, NULL, 16u, NULL) == WS_OK);
+
+    ws_image_diff diff;
+    WS_CHECK(ws_image_compare(&flat_fb, &tex_fb, &diff) == WS_OK);
+    WS_CHECK(diff.differing_pixels > 0u);
+
+    ws_texture_free(&checker);
+    ws_framebuffer_free(&flat_fb);
+    ws_framebuffer_free(&tex_fb);
+    return 1;
+}
+
+
 int main(void)
 {
     static const ws_test_case cases[] = {
         {"math mat4 identity", test_math_mat4_identity},
         {"math mat4 multiply order", test_math_mat4_multiply_order},
         {"math vec3 ops", test_math_vec3_ops},
+        {"math vec4 ops", test_math_vec4_ops},
         {"math perspective mapping", test_math_perspective},
+        {"math normal matrix", test_math_normal_matrix},
         {"mesh cube", test_mesh_cube},
         {"mesh sphere", test_mesh_sphere},
         {"asset roundtrip", test_asset_roundtrip},
         {"asset validation", test_asset_validation},
         {"asset rejects malformed file", test_asset_rejects_malformed_file},
+        {"asset texture roundtrip", test_asset_texture_roundtrip},
+        {"asset texture rejects malformed", test_asset_texture_rejects_malformed},
+        {"texture flat sample", test_texture_flat_sample},
+        {"texture checker pattern", test_texture_checker_pattern},
+        {"texture bilinear interpolation", test_texture_bilinear},
+        {"texture noise reproducible", test_texture_noise_reproducible},
         {"render produces content", test_render_produces_content},
         {"render tile invariance", test_render_tile_invariance},
         {"render determinism", test_render_determinism},
         {"render depth occlusion", test_render_depth_occlusion},
+        {"render specular highlight", test_render_specular_highlight},
+        {"render sky gradient", test_render_sky_gradient},
+        {"render fog attenuates distance", test_render_fog_attenuates},
+        {"render tonemap is monotonic", test_render_tonemap_monotonic},
+        {"render texture map changes output", test_render_texture_changes_output},
         {"ppm roundtrip", test_ppm_roundtrip},
+        {"ppm crlf header", test_ppm_crlf_header},
         {"image metrics", test_image_metrics},
     };
     return ws_test_run("render", cases, (int)(sizeof(cases) / sizeof(cases[0])));

@@ -99,9 +99,9 @@ jobs:
           # Same input must reproduce the same frame digests within a run.
           mkdir -p evidence/golden/repeat
           ./build/tools/ws_golden evidence/golden/repeat 20260101 >/dev/null
-          for s in orbit lowlight spheres; do
-            a=$(grep "^$s," evidence/golden/manifest.csv | cut -d, -f10)
-            b=$(grep "^$s," evidence/golden/repeat/manifest.csv | cut -d, -f10)
+          for s in orbit lowlight spheres materials textured sky; do
+            a=$(grep "^$s," evidence/golden/manifest.csv | cut -d, -f12)
+            b=$(grep "^$s," evidence/golden/repeat/manifest.csv | cut -d, -f12)
             test "$a" = "$b" || { echo "golden scene $s not reproducible"; exit 1; }
           done
 
@@ -109,7 +109,7 @@ jobs:
         run: |
           # Tolerance, not equality: catches missing/misplaced geometry across
           # compilers and platforms while allowing tiny floating-point edges.
-          for s in orbit lowlight spheres; do
+          for s in orbit lowlight spheres materials textured sky; do
             ./build/tools/ws_imgdiff evidence/golden/$s.ppm tests/golden/$s.ppm 3.0 0.99
           done
 
@@ -122,11 +122,15 @@ jobs:
           # match the committed provenance record so it cannot silently drift.
           mkdir -p evidence/assets/repeat
           ./build/tools/ws_assetgen evidence/assets/repeat >/dev/null
-          for a in cube plane sphere; do
-            cmp evidence/assets/$a.wsmesh evidence/assets/repeat/$a.wsmesh \
-              || { echo "asset $a not reproducible"; exit 1; }
-            cmp evidence/assets/$a.wsmesh assets/primitives/$a.wsmesh \
-              || { echo "committed asset $a differs from generator output"; exit 1; }
+          for a in cube plane sphere checker noise; do
+            for ext in wsmesh wstex; do
+              if [ -f evidence/assets/$a.$ext ]; then
+                cmp evidence/assets/$a.$ext evidence/assets/repeat/$a.$ext \
+                  || { echo "asset $a.$ext not reproducible"; exit 1; }
+                cmp evidence/assets/$a.$ext assets/primitives/$a.$ext \
+                  || { echo "committed asset $a.$ext differs from generator output"; exit 1; }
+              fi
+            done
           done
 
       - name: Upload evidence
@@ -172,16 +176,16 @@ jobs:
           # Same input must reproduce the same frame digests within a run.
           New-Item -ItemType Directory -Force -Path evidence/golden/repeat | Out-Null
           & build/tools/${{ matrix.build_type }}/ws_golden.exe evidence/golden/repeat 20260101 | Out-Null
-          foreach ($s in "orbit","lowlight","spheres") {
-            $a = (Select-String -Path evidence/golden/manifest.csv -Pattern "^$s,").Line.Split(",")[9]
-            $b = (Select-String -Path evidence/golden/repeat/manifest.csv -Pattern "^$s,").Line.Split(",")[9]
+          foreach ($s in "orbit","lowlight","spheres","materials","textured","sky") {
+            $a = (Select-String -Path evidence/golden/manifest.csv -Pattern "^$s,").Line.Split(",")[11]
+            $b = (Select-String -Path evidence/golden/repeat/manifest.csv -Pattern "^$s,").Line.Split(",")[11]
             if ($a -ne $b) { Write-Error "golden scene $s not reproducible"; exit 1 }
           }
 
       - name: Golden reference comparison
         shell: pwsh
         run: |
-          foreach ($s in "orbit","lowlight","spheres") {
+          foreach ($s in "orbit","lowlight","spheres","materials","textured","sky") {
             & build/tools/${{ matrix.build_type }}/ws_imgdiff.exe "evidence/golden/$s.ppm" "tests/golden/$s.ppm" 3.0 0.99
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
@@ -193,8 +197,23 @@ jobs:
           & build/tools/${{ matrix.build_type }}/ws_assetgen.exe evidence/assets |
             Tee-Object -FilePath evidence/assets/assetgen.txt
           if (-not (Select-String -Path evidence/assets/assetgen.txt -Pattern "WS_ASSETGEN_OK" -Quiet)) { exit 1 }
+          # Regenerating must reproduce byte-identical assets and match the
+          # committed provenance record so it cannot silently drift.
+          New-Item -ItemType Directory -Force -Path evidence/assets/repeat | Out-Null
+          & build/tools/${{ matrix.build_type }}/ws_assetgen.exe evidence/assets/repeat | Out-Null
+          foreach ($a in "cube","plane","sphere","checker","noise") {
+            foreach ($ext in "wsmesh","wstex") {
+              $gen = "evidence/assets/$a.$ext"
+              if (Test-Path $gen) {
+                if (-not (Test-Path "evidence/assets/repeat/$a.$ext")) { Write-Error "asset $a.$ext missing on repeat"; exit 1 }
+                if ((Get-FileHash $gen).Hash -ne (Get-FileHash "evidence/assets/repeat/$a.$ext").Hash) { Write-Error "asset $a.$ext not reproducible"; exit 1 }
+                if ((Get-FileHash $gen).Hash -ne (Get-FileHash "assets/primitives/$a.$ext").Hash) { Write-Error "committed asset $a.$ext differs"; exit 1 }
+              }
+            }
+          }
 
       - name: Upload evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: evidence-msvc-${{ matrix.build_type }}

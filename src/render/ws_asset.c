@@ -233,3 +233,80 @@ ws_result ws_asset_validate_mesh(const ws_mesh *mesh)
     }
     return WS_OK;
 }
+
+ws_result ws_asset_write_texture(const char *path, const ws_texture *tex)
+{
+    if (path == NULL || tex == NULL || tex->rgba == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (tex->width == 0u || tex->height == 0u) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    FILE *f = fopen(path, "wb");
+    if (f == NULL) {
+        return WS_ERR_IO;
+    }
+    fprintf(f, "worldseed-texture %d\n", WS_ASSET_TEXTURE_VERSION);
+    fprintf(f, "size %u %u\n", tex->width, tex->height);
+    size_t count = (size_t)tex->width * (size_t)tex->height;
+    for (size_t i = 0; i < count; ++i) {
+        const uint8_t *p = &tex->rgba[i * 4u];
+        fprintf(f, "%u %u %u %u\n", (unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3]);
+    }
+    fclose(f);
+    return WS_OK;
+}
+
+ws_result ws_asset_load_texture(const char *path, ws_texture *tex)
+{
+    if (path == NULL || tex == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        return WS_ERR_NOT_FOUND;
+    }
+    char line[WS_ASSET_LINE_MAX];
+    unsigned version = 0u;
+    unsigned width = 0u;
+    unsigned height = 0u;
+    if (fgets(line, sizeof(line), f) == NULL || sscanf(line, "worldseed-texture %u", &version) != 1) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+    if (version != WS_ASSET_TEXTURE_VERSION) {
+        fclose(f);
+        return WS_ERR_UNSUPPORTED;
+    }
+    if (fgets(line, sizeof(line), f) == NULL || sscanf(line, "size %u %u", &width, &height) != 2) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+    if (width == 0u || height == 0u) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+    ws_texture out;
+    if (ws_texture_create(&out, width, height, 0u, 0u, 0u, 255u) != WS_OK) {
+        fclose(f);
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+    size_t count = (size_t)width * (size_t)height;
+    for (size_t i = 0; i < count; ++i) {
+        unsigned r, g, b, a;
+        if (fgets(line, sizeof(line), f) == NULL ||
+            sscanf(line, "%u %u %u %u", &r, &g, &b, &a) != 4 ||
+            r > 255u || g > 255u || b > 255u || a > 255u) {
+            fclose(f);
+            ws_texture_free(&out);
+            return WS_ERR_PARSE;
+        }
+        out.rgba[i * 4u + 0u] = (uint8_t)r;
+        out.rgba[i * 4u + 1u] = (uint8_t)g;
+        out.rgba[i * 4u + 2u] = (uint8_t)b;
+        out.rgba[i * 4u + 3u] = (uint8_t)a;
+    }
+    fclose(f);
+    *tex = out;
+    return WS_OK;
+}

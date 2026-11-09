@@ -39,6 +39,11 @@ typedef struct ws_mat4 {
     double m[16];
 } ws_mat4;
 
+/* Column-major 3x3 matrix: m[col * 3 + row]. */
+typedef struct ws_mat3 {
+    double m[9];
+} ws_mat3;
+
 double ws_clamp_double(double value, double lo, double hi);
 double ws_lerp(double a, double b, double t);
 double ws_deg_to_rad(double degrees);
@@ -62,10 +67,24 @@ ws_vec3 ws_vec3_normalize(ws_vec3 v);
 ws_vec3 ws_vec3_lerp(ws_vec3 a, ws_vec3 b, double t);
 
 ws_vec4 ws_vec4_make(double x, double y, double z, double w);
+ws_vec4 ws_vec4_add(ws_vec4 a, ws_vec4 b);
+ws_vec4 ws_vec4_sub(ws_vec4 a, ws_vec4 b);
+ws_vec4 ws_vec4_scale(ws_vec4 v, double s);
+double ws_vec4_dot(ws_vec4 a, ws_vec4 b);
+ws_vec4 ws_vec4_lerp(ws_vec4 a, ws_vec4 b, double t);
 
 ws_mat4 ws_mat4_identity(void);
 ws_mat4 ws_mat4_multiply(ws_mat4 a, ws_mat4 b);
 ws_vec4 ws_mat4_mul_vec4(ws_mat4 m, ws_vec4 v);
+/* Transform a direction: ignore translation, do not divide by w. */
+ws_vec4 ws_mat4_mul_vec4_dir(ws_mat4 m, ws_vec4 v);
+ws_mat4 ws_mat4_transpose(ws_mat4 m);
+/* Upper-left 3x3 of a matrix. */
+ws_mat3 ws_mat4_to_mat3(ws_mat4 m);
+/* Inverse-transpose of the upper-left 3x3, for transforming normals. Falls
+ * back to the plain 3x3 when the matrix is singular. */
+ws_mat3 ws_mat4_normal_matrix(ws_mat4 m);
+ws_vec3 ws_mat3_mul_vec3(ws_mat3 m, ws_vec3 v);
 ws_mat4 ws_mat4_translation(ws_vec3 t);
 ws_mat4 ws_mat4_scale(ws_vec3 s);
 /* Rotation about a principal axis. Angle in radians. */

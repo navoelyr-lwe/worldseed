@@ -14,6 +14,7 @@ ws_result ws_scene_init(ws_scene *scene, ws_scene_object *storage, uint32_t capa
     scene->object_capacity = capacity;
     scene->camera = ws_camera_default();
     scene->light = ws_light_default();
+    scene->settings = ws_render_settings_default();
     scene->background[0] = 24u;
     scene->background[1] = 28u;
     scene->background[2] = 36u;
@@ -49,6 +50,20 @@ ws_camera ws_camera_default(void)
     return cam;
 }
 
+ws_material ws_material_make(double r, double g, double b,
+                             double roughness, double metallic, double specular)
+{
+    ws_material m;
+    m.albedo[0] = r;
+    m.albedo[1] = g;
+    m.albedo[2] = b;
+    m.roughness = roughness;
+    m.metallic = metallic;
+    m.specular = specular;
+    m.albedo_map = NULL;
+    return m;
+}
+
 ws_light ws_light_default(void)
 {
     ws_light light;
@@ -58,5 +73,28 @@ ws_light ws_light_default(void)
     light.color[1] = 248u;
     light.color[2] = 235u;
     light.ambient = 40u;
+    light.ambient_intensity = 0.25;
+    light.sky_color[0] = 130u;
+    light.sky_color[1] = 160u;
+    light.sky_color[2] = 210u;
+    light.ground_color[0] = 70u;
+    light.ground_color[1] = 64u;
+    light.ground_color[2] = 54u;
+    light.sky_top[0] = 70u;
+    light.sky_top[1] = 120u;
+    light.sky_top[2] = 200u;
+    light.sky_horizon[0] = 190u;
+    light.sky_horizon[1] = 205u;
+    light.sky_horizon[2] = 220u;
     return light;
+}
+
+ws_render_settings ws_render_settings_default(void)
+{
+    ws_render_settings s;
+    s.exposure = 1.0;
+    s.tonemap = 0;
+    s.sky_enabled = 0;
+    s.fog_density = 0.0;
+    return s;
 }

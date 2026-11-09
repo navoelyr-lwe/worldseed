@@ -75,7 +75,7 @@ void ws_framebuffer_set(ws_framebuffer *fb, uint32_t x, uint32_t y,
 
 /* Read the next whitespace-delimited token, skipping '#' comments. Returns 0 on
  * EOF. `buf` is NUL-terminated. */
-static int ppm_token(FILE *f, char *buf, size_t cap)
+static int ppm_token(FILE *f, char *buf, size_t cap, int *delim)
 {
     int c;
     size_t n = 0u;
@@ -102,6 +102,9 @@ static int ppm_token(FILE *f, char *buf, size_t cap)
         c = fgetc(f);
     }
     buf[n] = '\0';
+    if (delim != NULL) {
+        *delim = c;
+    }
     return 1;
 }
 
@@ -119,25 +122,38 @@ ws_result ws_framebuffer_read_ppm(ws_framebuffer *fb, const char *path)
         return WS_ERR_NOT_FOUND;
     }
     char tok[64];
-    if (!ppm_token(f, tok, sizeof(tok)) || strcmp(tok, "P6") != 0) {
+    int delim = 0;
+    if (!ppm_token(f, tok, sizeof(tok), &delim) || strcmp(tok, "P6") != 0) {
         fclose(f);
         return WS_ERR_PARSE;
     }
-    if (!ppm_token(f, tok, sizeof(tok))) {
+    if (!ppm_token(f, tok, sizeof(tok), &delim)) {
         fclose(f);
         return WS_ERR_PARSE;
     }
     long w = strtol(tok, NULL, 10);
-    if (!ppm_token(f, tok, sizeof(tok))) {
+    if (!ppm_token(f, tok, sizeof(tok), &delim)) {
         fclose(f);
         return WS_ERR_PARSE;
     }
     long h = strtol(tok, NULL, 10);
-    if (!ppm_token(f, tok, sizeof(tok)) || strtol(tok, NULL, 10) != 255L) {
+    if (!ppm_token(f, tok, sizeof(tok), &delim) || strtol(tok, NULL, 10) != 255L) {
         fclose(f);
         return WS_ERR_PARSE;
     }
     if (w <= 0 || h <= 0 || w > 65536 || h > 65536) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+    /* Consume the rest of the separator after maxval so pixel bytes start
+     * exactly where the raster begins, even when the file uses CRLF line
+     * endings (e.g. a text-mode checkout on Windows). */
+    if (delim == '\r') {
+        int next = fgetc(f);
+        if (next != '\n' && next != EOF) {
+            ungetc(next, f);
+        }
+    } else if (delim != ' ' && delim != '\t' && delim != '\n' && delim != EOF) {
         fclose(f);
         return WS_ERR_PARSE;
     }
