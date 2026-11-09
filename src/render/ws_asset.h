@@ -17,8 +17,10 @@
 
 #include "../core/ws_result.h"
 #include "ws_mesh.h"
+#include "ws_texture.h"
 
 #define WS_ASSET_MESH_VERSION 1
+#define WS_ASSET_TEXTURE_VERSION 1
 
 /* Counts parsed from a header/records without allocating. Fills the record
  * counts and the detected version. */
@@ -46,5 +48,14 @@ ws_result ws_asset_write_mesh(const char *path, const ws_mesh *mesh);
  * within [0, vertex_count), finite positions/normals, and indices covering no
  * degenerate-only mesh. Returns WS_OK or WS_ERR_INVALID_ARGUMENT. */
 ws_result ws_asset_validate_mesh(const ws_mesh *mesh);
+
+/* Texture assets use a sibling versioned text format:
+ *   worldseed-texture <version>
+ *   size <width> <height>
+ *   <r> <g> <b> <a>   (width*height records, row-major, 0..255)
+ * The reader allocates the pixel buffer, so the caller must call
+ * ws_texture_free on a successfully loaded texture. */
+ws_result ws_asset_write_texture(const char *path, const ws_texture *tex);
+ws_result ws_asset_load_texture(const char *path, ws_texture *tex);
 
 #endif /* WS_RENDER_ASSET_H */

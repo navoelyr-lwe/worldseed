@@ -1,6 +1,19 @@
-/* Worldseed Engine — reference CPU scene renderer. */
+/* Worldseed Engine — reference CPU scene renderer.
+ *
+ * Pipeline: model/view/projection transform, near-plane clipping, perspective
+ * divide, viewport map, tiled scanline rasterisation with perspective-correct
+ * interpolation of world position, world normal and albedo, then per-pixel
+ * shading. Shading is a Lambert diffuse term, a Blinn-Phong specular term and a
+ * hemisphere ambient, optionally followed by exponential distance fog and an
+ * optional gradient sky background. All shading is linear, then exposure and an
+ * optional Reinhard tonemap are applied before sRGB encoding.
+ *
+ * This is the mandatory correctness reference and CPU fallback path; it is not
+ * the final high-quality renderer.
+ */
 #include "ws_render.h"
 
+#include <math.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -8,24 +21,72 @@
 
 typedef struct clip_vertex {
     double x, y, z, w;   /* clip space */
-    double r, g, b;      /* lit colour, 0..255 */
+    double wx, wy, wz;   /* world-space position */
+    double nx, ny, nz;   /* world-space normal (normalised) */
+    double r, g, b;      /* albedo, linear */
 } clip_vertex;
 
 typedef struct screen_vertex {
-    double x, y;         /* pixels */
-    double z;            /* NDC depth in [0, 1], smaller is nearer */
-    double inv_w;        /* 1 / clip w */
-    double r, g, b;      /* lit colour, 0..255 */
+    double x, y;      /* pixels */
+    double z;         /* NDC depth in [0, 1], smaller is nearer */
+    double inv_w;     /* 1 / clip w */
+    double wx, wy, wz;
+    double nx, ny, nz;
+    double r, g, b;
 } screen_vertex;
 
-static double shade_channel(double albedo, double ndotl, double ambient, double light_color)
+/* sRGB transfer function (IEC 61966-2-1). */
+static double srgb_to_linear(double c8)
 {
-    double lit = albedo * (ambient + (1.0 - ambient) * ndotl) * light_color;
-    return lit * 255.0;
+    double c = c8 / 255.0;
+    if (c <= 0.04045) {
+        return c / 12.92;
+    }
+    return pow((c + 0.055) / 1.055, 2.4);
 }
 
-static clip_vertex make_clip_vertex(const ws_scene_object *obj, const ws_light *light,
-                                    ws_mat4 mvp, const ws_vertex *v)
+static double linear_to_srgb(double c)
+{
+    if (c <= 0.0) {
+        return 0.0;
+    }
+    if (c <= 0.0031308) {
+        return c * 12.92;
+    }
+    return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+}
+
+static double encode_display(double linear, const ws_render_settings *s)
+{
+    double v = linear * s->exposure;
+    if (s->tonemap == 1) {
+        v = v / (1.0 + v); /* Reinhard */
+    } else {
+        v = ws_clamp_double(v, 0.0, 1.0);
+    }
+    return linear_to_srgb(v) * 255.0;
+}
+
+static unsigned char to_u8(double v)
+{
+    if (v <= 0.0) {
+        return 0u;
+    }
+    if (v >= 255.0) {
+        return 255u;
+    }
+    return (unsigned char)(v + 0.5);
+}
+
+static void linear3(const uint8_t srgb[3], double out[3])
+{
+    out[0] = srgb_to_linear((double)srgb[0]);
+    out[1] = srgb_to_linear((double)srgb[1]);
+    out[2] = srgb_to_linear((double)srgb[2]);
+}
+
+static clip_vertex make_clip_vertex(const ws_scene_object *obj, ws_mat4 mvp,
+                                    ws_mat3 normal_mat, const ws_vertex *v)
 {
     clip_vertex out;
     ws_vec4 clip = ws_mat4_mul_vec4(mvp, ws_vec4_make(v->position.x, v->position.y, v->position.z, 1.0));
@@ -34,17 +95,28 @@ static clip_vertex make_clip_vertex(const ws_scene_object *obj, const ws_light *
     out.z = clip.z;
     out.w = clip.w;
 
-    double ndotl = -ws_vec3_dot(v->normal, light->direction);
-    if (ndotl < 0.0) {
-        ndotl = 0.0;
+    ws_vec4 world = ws_mat4_mul_vec4(obj->transform,
+                                     ws_vec4_make(v->position.x, v->position.y, v->position.z, 1.0));
+    out.wx = world.x;
+    out.wy = world.y;
+    out.wz = world.z;
+
+    ws_vec3 n = ws_vec3_normalize(ws_mat3_mul_vec3(normal_mat, v->normal));
+    out.nx = n.x;
+    out.ny = n.y;
+    out.nz = n.z;
+
+    if (obj->material.albedo_map != NULL) {
+        double tex[3];
+        ws_texture_sample(obj->material.albedo_map, v->u, v->v, tex);
+        out.r = tex[0];
+        out.g = tex[1];
+        out.b = tex[2];
+    } else {
+        out.r = obj->material.albedo[0];
+        out.g = obj->material.albedo[1];
+        out.b = obj->material.albedo[2];
     }
-    double amb = (double)light->ambient / 255.0;
-    double lr = (double)light->color[0] / 255.0;
-    double lg = (double)light->color[1] / 255.0;
-    double lb = (double)light->color[2] / 255.0;
-    out.r = shade_channel(obj->material.albedo[0], ndotl * light->intensity, amb, lr);
-    out.g = shade_channel(obj->material.albedo[1], ndotl * light->intensity, amb, lg);
-    out.b = shade_channel(obj->material.albedo[2], ndotl * light->intensity, amb, lb);
     return out;
 }
 
@@ -55,6 +127,12 @@ static clip_vertex lerp_clip(clip_vertex a, clip_vertex b, double t)
     out.y = a.y + (b.y - a.y) * t;
     out.z = a.z + (b.z - a.z) * t;
     out.w = a.w + (b.w - a.w) * t;
+    out.wx = a.wx + (b.wx - a.wx) * t;
+    out.wy = a.wy + (b.wy - a.wy) * t;
+    out.wz = a.wz + (b.wz - a.wz) * t;
+    out.nx = a.nx + (b.nx - a.nx) * t;
+    out.ny = a.ny + (b.ny - a.ny) * t;
+    out.nz = a.nz + (b.nz - a.nz) * t;
     out.r = a.r + (b.r - a.r) * t;
     out.g = a.g + (b.g - a.g) * t;
     out.b = a.b + (b.b - a.b) * t;
@@ -84,17 +162,6 @@ static int clip_near(const clip_vertex *in, int n, clip_vertex *out)
     return m;
 }
 
-static unsigned char to_u8(double v)
-{
-    if (v <= 0.0) {
-        return 0u;
-    }
-    if (v >= 255.0) {
-        return 255u;
-    }
-    return (unsigned char)(v + 0.5);
-}
-
 static void to_screen(const clip_vertex *c, int fb_w, int fb_h, screen_vertex *s)
 {
     double inv_w = 1.0 / c->w;
@@ -105,9 +172,9 @@ static void to_screen(const clip_vertex *c, int fb_w, int fb_h, screen_vertex *s
     s->y = (1.0 - (ndc_y * 0.5 + 0.5)) * (double)fb_h;
     s->z = ndc_z * 0.5 + 0.5;
     s->inv_w = inv_w;
-    s->r = c->r;
-    s->g = c->g;
-    s->b = c->b;
+    s->wx = c->wx; s->wy = c->wy; s->wz = c->wz;
+    s->nx = c->nx; s->ny = c->ny; s->nz = c->nz;
+    s->r = c->r; s->g = c->g; s->b = c->b;
 }
 
 static double edge(double ax, double ay, double bx, double by, double px, double py)
@@ -115,7 +182,61 @@ static double edge(double ax, double ay, double bx, double by, double px, double
     return (px - ax) * (by - ay) - (py - ay) * (bx - ax);
 }
 
+static double ndc_to_linear_depth(double ndc_z, double near_z, double far_z)
+{
+    return (2.0 * near_z * far_z) / (far_z + near_z - (ndc_z * 2.0 - 1.0) * (far_z - near_z));
+}
+
+/* Shade one pixel from interpolated surface attributes. Writes linear RGB. */
+static void shade_pixel(const ws_scene *scene, const ws_material *mat,
+                        ws_vec3 world_pos, ws_vec3 normal, const double albedo[3],
+                        double out[3])
+{
+    const ws_light *light = &scene->light;
+    ws_vec3 n = ws_vec3_normalize(normal);
+    if (ws_vec3_length(n) == 0.0) {
+        n = ws_vec3_make(0.0, 1.0, 0.0);
+    }
+    ws_vec3 view = ws_vec3_normalize(ws_vec3_sub(scene->camera.eye, world_pos));
+
+    double lc[3];
+    linear3(light->color, lc);
+    double diffuse = -ws_vec3_dot(n, light->direction);
+    if (diffuse < 0.0) {
+        diffuse = 0.0;
+    }
+    diffuse *= light->intensity;
+
+    double sky[3], ground[3];
+    linear3(light->sky_color, sky);
+    linear3(light->ground_color, ground);
+    double up = 0.5 * (n.y + 1.0);
+    double amb_scale = light->ambient_intensity;
+
+    double mat_diffuse = 1.0 - ws_clamp_double(mat->metallic, 0.0, 1.0);
+
+    double spec = 0.0;
+    if (mat->specular > 0.0) {
+        ws_vec3 h = ws_vec3_normalize(ws_vec3_sub(view, light->direction));
+        double ndoth = ws_vec3_dot(n, h);
+        if (ndoth > 0.0) {
+            double rough = ws_clamp_double(mat->roughness, 0.02, 1.0);
+            double shininess = 2.0 / (rough * rough) - 2.0;
+            spec = pow(ndoth, shininess) * mat->specular * light->intensity;
+        }
+    }
+
+    for (int c = 0; c < 3; ++c) {
+        double amb = ws_lerp(ground[c], sky[c], up) * amb_scale;
+        double base = albedo[c];
+        double diff = base * mat_diffuse * (amb + diffuse * lc[c]);
+        double spec_tint = ws_lerp(1.0, base, ws_clamp_double(mat->metallic, 0.0, 1.0));
+        out[c] = diff + spec * spec_tint * lc[c];
+    }
+}
+
 static void raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *depth,
+                            const ws_scene *scene, const ws_material *mat,
                             unsigned tile, ws_render_stats *stats)
 {
     int w = (int)fb->width;
@@ -150,6 +271,21 @@ static void raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *d
         stats->triangles_drawn += 1u;
     }
 
+    const ws_render_settings *settings = &scene->settings;
+    int use_fog = settings->fog_density > 0.0;
+    double fog_lin[3];
+    if (use_fog) {
+        if (settings->sky_enabled) {
+            linear3(scene->light.sky_horizon, fog_lin);
+        } else {
+            fog_lin[0] = srgb_to_linear((double)scene->background[0]);
+            fog_lin[1] = srgb_to_linear((double)scene->background[1]);
+            fog_lin[2] = srgb_to_linear((double)scene->background[2]);
+        }
+    }
+    double near_z = scene->camera.near_z;
+    double far_z = scene->camera.far_z;
+
     for (int ty = y0; ty <= y1; ty += (int)tile_size) {
         int ty1 = ty + (int)tile_size - 1;
         if (ty1 > y1) { ty1 = y1; }
@@ -172,7 +308,6 @@ static void raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *d
                     double l1 = w1 * inv_area;
                     double l2 = w2 * inv_area;
 
-                    /* Perspective-correct weights. */
                     double iw = l0 * v[0].inv_w + l1 * v[1].inv_w + l2 * v[2].inv_w;
                     if (iw <= 0.0) {
                         continue;
@@ -189,19 +324,74 @@ static void raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *d
                         }
                         depth[idx] = (float)z;
                     }
-                    double r = p0 * v[0].r + p1 * v[1].r + p2 * v[2].r;
-                    double g = p0 * v[0].g + p1 * v[1].g + p2 * v[2].g;
-                    double b = p0 * v[0].b + p1 * v[1].b + p2 * v[2].b;
+
+                    ws_vec3 world = ws_vec3_make(p0 * v[0].wx + p1 * v[1].wx + p2 * v[2].wx,
+                                                 p0 * v[0].wy + p1 * v[1].wy + p2 * v[2].wy,
+                                                 p0 * v[0].wz + p1 * v[1].wz + p2 * v[2].wz);
+                    ws_vec3 normal = ws_vec3_make(p0 * v[0].nx + p1 * v[1].nx + p2 * v[2].nx,
+                                                  p0 * v[0].ny + p1 * v[1].ny + p2 * v[2].ny,
+                                                  p0 * v[0].nz + p1 * v[1].nz + p2 * v[2].nz);
+                    double albedo[3];
+                    albedo[0] = p0 * v[0].r + p1 * v[1].r + p2 * v[2].r;
+                    albedo[1] = p0 * v[0].g + p1 * v[1].g + p2 * v[2].g;
+                    albedo[2] = p0 * v[0].b + p1 * v[1].b + p2 * v[2].b;
+
+                    double rgb[3];
+                    shade_pixel(scene, mat, world, normal, albedo, rgb);
+
+                    if (use_fog) {
+                        double dist = ndc_to_linear_depth(z, near_z, far_z);
+                        double f = 1.0 - exp(-settings->fog_density * dist);
+                        if (f < 0.0) { f = 0.0; }
+                        if (f > 1.0) { f = 1.0; }
+                        for (int c = 0; c < 3; ++c) {
+                            rgb[c] = ws_lerp(rgb[c], fog_lin[c], f);
+                        }
+                    }
+
                     uint8_t *p = &fb->pixels[idx * 4u];
-                    p[0] = to_u8(r);
-                    p[1] = to_u8(g);
-                    p[2] = to_u8(b);
+                    p[0] = to_u8(encode_display(rgb[0], settings));
+                    p[1] = to_u8(encode_display(rgb[1], settings));
+                    p[2] = to_u8(encode_display(rgb[2], settings));
                     p[3] = 255u;
                     if (stats != NULL) {
                         stats->pixels_shaded += 1u;
                     }
                 }
             }
+        }
+    }
+}
+
+/* Fill the framebuffer with a vertical gradient sky based on the camera ray. */
+static void draw_sky(const ws_scene *scene, ws_framebuffer *fb)
+{
+    const ws_camera *cam = &scene->camera;
+    const ws_render_settings *settings = &scene->settings;
+    ws_vec3 forward = ws_vec3_normalize(ws_vec3_sub(cam->target, cam->eye));
+    ws_vec3 right = ws_vec3_normalize(ws_vec3_cross(forward, cam->up));
+    ws_vec3 up = ws_vec3_cross(right, forward);
+    double tan_half = tan(cam->fov_y_radians * 0.5);
+    double aspect = (double)fb->width / (double)fb->height;
+    double top[3], horizon[3];
+    linear3(scene->light.sky_top, top);
+    linear3(scene->light.sky_horizon, horizon);
+
+    for (uint32_t y = 0u; y < fb->height; ++y) {
+        double ndc_y = 1.0 - 2.0 * ((double)y + 0.5) / (double)fb->height;
+        for (uint32_t x = 0u; x < fb->width; ++x) {
+            double ndc_x = 2.0 * ((double)x + 0.5) / (double)fb->width - 1.0;
+            ws_vec3 dir = ws_vec3_make(forward.x + right.x * ndc_x * aspect * tan_half + up.x * ndc_y * tan_half,
+                                       forward.y + right.y * ndc_x * aspect * tan_half + up.y * ndc_y * tan_half,
+                                       forward.z + right.z * ndc_x * aspect * tan_half + up.z * ndc_y * tan_half);
+            dir = ws_vec3_normalize(dir);
+            double t = ws_clamp_double((dir.y + 0.15) / 0.9, 0.0, 1.0);
+            uint8_t *p = &fb->pixels[((size_t)y * fb->width + x) * 4u];
+            for (int c = 0; c < 3; ++c) {
+                double lin = ws_lerp(horizon[c], top[c], t);
+                p[c] = to_u8(encode_display(lin, settings));
+            }
+            p[3] = 255u;
         }
     }
 }
@@ -219,7 +409,11 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
         memset(stats, 0, sizeof(*stats));
     }
 
-    ws_framebuffer_clear(fb, scene->background[0], scene->background[1], scene->background[2], 255u);
+    if (scene->settings.sky_enabled) {
+        draw_sky(scene, fb);
+    } else {
+        ws_framebuffer_clear(fb, scene->background[0], scene->background[1], scene->background[2], 255u);
+    }
     if (depth != NULL) {
         size_t count = (size_t)fb->width * (size_t)fb->height;
         for (size_t i = 0; i < count; ++i) {
@@ -239,6 +433,7 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
             continue;
         }
         ws_mat4 mvp = ws_mat4_multiply(view_proj, obj->transform);
+        ws_mat3 normal_mat = ws_mat4_normal_matrix(obj->transform);
         const ws_mesh *mesh = obj->mesh;
 
         for (uint32_t t = 0u; t + 3u <= mesh->index_count; t += 3u) {
@@ -248,7 +443,7 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
                 if (idx >= mesh->vertex_count) {
                     continue;
                 }
-                poly[k] = make_clip_vertex(obj, &scene->light, mvp, &mesh->vertices[idx]);
+                poly[k] = make_clip_vertex(obj, mvp, normal_mat, &mesh->vertices[idx]);
             }
             if (stats != NULL) {
                 stats->triangles_submitted += 1u;
@@ -269,7 +464,7 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
             }
             for (int k = 1; k + 1 < cn; ++k) {
                 screen_vertex tri[3] = {scr[0], scr[k], scr[k + 1]};
-                raster_triangle(tri, fb, depth, tile, stats);
+                raster_triangle(tri, fb, depth, scene, &obj->material, tile, stats);
             }
         }
     }

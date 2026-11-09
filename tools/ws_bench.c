@@ -139,8 +139,8 @@ static void bench_scene_render(uint32_t width, uint32_t height, int iterations)
     if (ws_scene_init(&scene, objects, 4u) != WS_OK) {
         return;
     }
-    ws_material ground = {{0.30, 0.42, 0.24}, 0.8, 0.0};
-    ws_material body = {{0.72, 0.58, 0.36}, 0.8, 0.0};
+    ws_material ground = ws_material_make(0.30, 0.42, 0.24, 0.8, 0.0, 0.0);
+    ws_material body = ws_material_make(0.72, 0.58, 0.36, 0.8, 0.0, 0.0);
     (void)ws_scene_add_object(&scene, &plane, ws_mat4_translation(ws_vec3_make(0.0, -0.5, 0.0)), ground);
     (void)ws_scene_add_object(&scene, &cube, ws_mat4_identity(), body);
     (void)ws_scene_add_object(&scene, &sphere,

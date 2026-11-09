@@ -116,6 +116,32 @@ ws_vec4 ws_vec4_make(double x, double y, double z, double w)
     return v;
 }
 
+ws_vec4 ws_vec4_add(ws_vec4 a, ws_vec4 b)
+{
+    return ws_vec4_make(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
+}
+
+ws_vec4 ws_vec4_sub(ws_vec4 a, ws_vec4 b)
+{
+    return ws_vec4_make(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w);
+}
+
+ws_vec4 ws_vec4_scale(ws_vec4 v, double s)
+{
+    return ws_vec4_make(v.x * s, v.y * s, v.z * s, v.w * s);
+}
+
+double ws_vec4_dot(ws_vec4 a, ws_vec4 b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
+
+ws_vec4 ws_vec4_lerp(ws_vec4 a, ws_vec4 b, double t)
+{
+    return ws_vec4_make(ws_lerp(a.x, b.x, t), ws_lerp(a.y, b.y, t),
+                        ws_lerp(a.z, b.z, t), ws_lerp(a.w, b.w, t));
+}
+
 ws_mat4 ws_mat4_identity(void)
 {
     ws_mat4 r;
@@ -147,6 +173,67 @@ ws_vec4 ws_mat4_mul_vec4(ws_mat4 m, ws_vec4 v)
                         m.m[1] * v.x + m.m[5] * v.y + m.m[9] * v.z + m.m[13] * v.w,
                         m.m[2] * v.x + m.m[6] * v.y + m.m[10] * v.z + m.m[14] * v.w,
                         m.m[3] * v.x + m.m[7] * v.y + m.m[11] * v.z + m.m[15] * v.w);
+}
+
+ws_vec4 ws_mat4_mul_vec4_dir(ws_mat4 m, ws_vec4 v)
+{
+    return ws_vec4_make(m.m[0] * v.x + m.m[4] * v.y + m.m[8] * v.z,
+                        m.m[1] * v.x + m.m[5] * v.y + m.m[9] * v.z,
+                        m.m[2] * v.x + m.m[6] * v.y + m.m[10] * v.z,
+                        0.0);
+}
+
+ws_mat4 ws_mat4_transpose(ws_mat4 m)
+{
+    ws_mat4 r;
+    for (int c = 0; c < 4; ++c) {
+        for (int row = 0; row < 4; ++row) {
+            r.m[c * 4 + row] = m.m[row * 4 + c];
+        }
+    }
+    return r;
+}
+
+ws_mat3 ws_mat4_to_mat3(ws_mat4 m)
+{
+    ws_mat3 r;
+    for (int c = 0; c < 3; ++c) {
+        for (int row = 0; row < 3; ++row) {
+            r.m[c * 3 + row] = m.m[c * 4 + row];
+        }
+    }
+    return r;
+}
+
+ws_vec3 ws_mat3_mul_vec3(ws_mat3 m, ws_vec3 v)
+{
+    return ws_vec3_make(m.m[0] * v.x + m.m[3] * v.y + m.m[6] * v.z,
+                        m.m[1] * v.x + m.m[4] * v.y + m.m[7] * v.z,
+                        m.m[2] * v.x + m.m[5] * v.y + m.m[8] * v.z);
+}
+
+ws_mat3 ws_mat4_normal_matrix(ws_mat4 m)
+{
+    ws_mat3 a = ws_mat4_to_mat3(m);
+    double det = a.m[0] * (a.m[4] * a.m[8] - a.m[5] * a.m[7])
+               - a.m[3] * (a.m[1] * a.m[8] - a.m[2] * a.m[7])
+               + a.m[6] * (a.m[1] * a.m[5] - a.m[2] * a.m[4]);
+    if (det > -1e-12 && det < 1e-12) {
+        return a;
+    }
+    double inv = 1.0 / det;
+    ws_mat3 cof;
+    cof.m[0] = (a.m[4] * a.m[8] - a.m[5] * a.m[7]) * inv;
+    cof.m[1] = (a.m[2] * a.m[7] - a.m[1] * a.m[8]) * inv;
+    cof.m[2] = (a.m[1] * a.m[5] - a.m[2] * a.m[4]) * inv;
+    cof.m[3] = (a.m[5] * a.m[6] - a.m[3] * a.m[8]) * inv;
+    cof.m[4] = (a.m[0] * a.m[8] - a.m[2] * a.m[6]) * inv;
+    cof.m[5] = (a.m[2] * a.m[3] - a.m[0] * a.m[5]) * inv;
+    cof.m[6] = (a.m[3] * a.m[7] - a.m[4] * a.m[6]) * inv;
+    cof.m[7] = (a.m[1] * a.m[6] - a.m[0] * a.m[7]) * inv;
+    cof.m[8] = (a.m[0] * a.m[4] - a.m[1] * a.m[3]) * inv;
+    /* Normal matrix = transpose(inverse) = cofactor matrix as written above. */
+    return cof;
 }
 
 ws_mat4 ws_mat4_translation(ws_vec3 t)

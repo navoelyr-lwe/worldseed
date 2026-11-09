@@ -10,6 +10,7 @@
 #include "core/ws_hash.h"
 #include "render/ws_asset.h"
 #include "render/ws_mesh.h"
+#include "render/ws_texture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,6 +50,38 @@ static int emit(const char *dir, const char *name, ws_mesh *mesh,
             name, GEN_VERSION, provenance, hex);
     printf("asset %s.wsmesh vertices=%u indices=%u sha256=%s\n",
            name, mesh->vertex_count, mesh->index_count, hex);
+    return 1;
+}
+
+static int emit_texture(const char *dir, const char *name, const ws_texture *tex,
+                        FILE *manifest, const char *provenance)
+{
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s.wstex", dir, name);
+    if (ws_asset_write_texture(path, tex) != WS_OK) {
+        fprintf(stderr, "write %s failed\n", path);
+        return 0;
+    }
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        return 0;
+    }
+    uint8_t buf[8192];
+    ws_sha256 ctx;
+    ws_sha256_init(&ctx);
+    size_t n;
+    while ((n = fread(buf, 1u, sizeof(buf), f)) > 0u) {
+        ws_sha256_update(&ctx, buf, n);
+    }
+    fclose(f);
+    uint8_t digest[WS_SHA256_DIGEST_SIZE];
+    ws_sha256_final(&ctx, digest);
+    char hex[WS_SHA256_DIGEST_SIZE * 2u + 1u];
+    ws_sha256_hex(digest, hex);
+
+    fprintf(manifest, "%s.wstex,tools/ws_assetgen,%s,%s,project-original,%s\n",
+            name, GEN_VERSION, provenance, hex);
+    printf("asset %s.wstex size=%ux%u sha256=%s\n", name, tex->width, tex->height, hex);
     return 1;
 }
 
@@ -96,6 +129,25 @@ int main(int argc, char **argv)
         ok = 0;
     } else {
         ok = emit(dir, "sphere", &sphere, manifest, "procedural uv-sphere") && ok;
+    }
+
+    ws_texture checker;
+    const uint8_t ck0[3] = {210u, 205u, 190u};
+    const uint8_t ck1[3] = {70u, 80u, 70u};
+    if (ws_texture_make_checker(&checker, 64u, 8u, ck0, ck1) != WS_OK) {
+        ok = 0;
+    } else {
+        ok = emit_texture(dir, "checker", &checker, manifest, "procedural checkerboard") && ok;
+        ws_texture_free(&checker);
+    }
+
+    ws_texture noise;
+    const uint8_t nb[3] = {140u, 120u, 95u};
+    if (ws_texture_make_noise(&noise, 64u, 20260101ULL, nb, 0.25) != WS_OK) {
+        ok = 0;
+    } else {
+        ok = emit_texture(dir, "noise", &noise, manifest, "procedural value noise") && ok;
+        ws_texture_free(&noise);
     }
 
     fclose(manifest);
