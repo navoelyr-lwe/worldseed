@@ -1,0 +1,57 @@
+name: GUI (Windows, isolated runner)
+
+# Real Windows GUI tests. These run only on a self-hosted, isolated, secretless
+# Windows runner that is allowlisted for this repository. Fork/external PR code
+# is never executed here: the job is gated on a trusted ref allowlist below.
+#
+# Until a GUI window exists (P11), this workflow builds the Windows x64 target
+# and runs the headless smoke test on the Windows runner so the isolated runner
+# path is exercised end to end. GUI window/input tests are added when the
+# viewer lands.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gui-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-gui:
+    name: windows x64 gui/smoke
+    runs-on: [self-hosted, windows, x64, worldseed-gui]
+    # Trusted-ref allowlist: only the default branch (and manual runs on it)
+    # reach the isolated runner. Never run untrusted fork code here.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (MSVC x64)
+        shell: pwsh
+        run: cmake -S . -B build-gui -A x64 -DCMAKE_BUILD_TYPE=Release -DWS_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build-gui --config Release
+
+      - name: Unit tests
+        shell: pwsh
+        run: ctest --test-dir build-gui -C Release --output-on-failure
+
+      - name: Headless smoke on isolated runner
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path evidence/gui | Out-Null
+          & build-gui/tools/Release/ws_smoke.exe evidence/gui/frame-gui.ppm 20260101 |
+            Tee-Object -FilePath evidence/gui/smoke-gui.txt
+          if (-not (Select-String -Path evidence/gui/smoke-gui.txt -Pattern "WS_SMOKE_OK" -Quiet)) { exit 1 }
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-smoke
+          path: evidence/gui/

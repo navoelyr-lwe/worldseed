@@ -1,0 +1,29 @@
+# Build output
+/build/
+/build-*/
+/out/
+/artifacts/
+*.o
+*.obj
+*.a
+*.lib
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+compile_commands.json
+
+# Test and evidence scratch
+*.ppm
+*.pgm
+*.tmp
+/evidence/tmp/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,94 @@
+name: Release
+
+# Release flow. Publishing authority is delegated to OpenHands by the project
+# owner (see docs/adr/ADR-007-yetki-devri-ve-release.md): when all mandatory
+# gates pass, a release is published without asking again.
+#
+# A release is created only for a version tag on main after CI has passed.
+# Documentation/infrastructure-only changes are not product releases.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to publish (e.g. v0.1.0-preview)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: verify gates
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Plan integrity gate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, sys
+          parts = sorted(Path("docs/plan-bundle").glob("part-*.txt"))
+          payload = base64.b64decode("".join(p.read_text(encoding="ascii").strip() for p in parts), validate=True)
+          expected = "69c49e5d7868fe1d83c2559f5da703a95eb443d18e4a5bd8b29eaa6c5a8f2f5a"
+          if hashlib.sha256(payload).hexdigest() != expected:
+              sys.exit("plan bundle digest mismatch")
+          print("plan integrity ok")
+          PY
+
+  build-windows:
+    name: windows x64 package
+    runs-on: windows-2022
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package (portable folder + zip)
+        shell: pwsh
+        run: |
+          $stage = "stage/worldseed"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item build/tools/Release/ws_smoke.exe $stage/
+          New-Item -ItemType File -Force -Path "$stage/README.txt" |
+            Set-Content -Value "Worldseed Engine preview build. See docs/13-YOL-HARITASI.md."
+          Compress-Archive -Path "$stage/*" -DestinationPath "worldseed-windows-x64.zip" -Force
+          Get-FileHash worldseed-windows-x64.zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash)  worldseed-windows-x64.zip" } |
+            Set-Content -Path worldseed-windows-x64.zip.sha256
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldseed-windows-x64
+          path: |
+            worldseed-windows-x64.zip
+            worldseed-windows-x64.zip.sha256
+
+  publish:
+    name: publish prerelease
+    runs-on: ubuntu-24.04
+    needs: [verify, build-windows]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: worldseed-windows-x64
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            tag="${{ github.event.inputs.version }}"
+          fi
+          gh release create "$tag" \
+            worldseed-windows-x64.zip worldseed-windows-x64.zip.sha256 \
+            --title "$tag" \
+            --prerelease \
+            --notes "Otomatik üretilen preview paketi. Kanıt ve sınırlamalar docs/ ve CI artifact'lerindedir."

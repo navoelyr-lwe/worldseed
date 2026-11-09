@@ -1,0 +1,41 @@
+{
+  "repository": "navoelyr-lwe/worldseed",
+  "product_name": "Worldseed Engine",
+  "document_version": "0.2.0",
+  "status": "repo_bootstrap_plan_ready_for_openhands_audit",
+  "language_policy": "ISO C17 for engine, app, tools, UI and tests; OpenCL C 1.2 is the only allowed GPU kernel language exception",
+  "closed_decisions": [
+    "OpenCL 1.2 API and OpenCL C 1.2 kernels with mandatory CPU C17 fallback",
+    "No third-party engine or runtime libraries",
+    "First ecosystem: 2 km by 2 km temperate mixed woodland-edge mosaic with four connected habitats",
+    "First species: red deer, red fox, European rabbit, wild boar",
+    "Reference cinematic profile: 8-core-class CPU, 32 GB RAM, 12 GB VRAM; native 4K 30 FPS target",
+    "No technical questions to project owner; OpenHands resolves implementation details within fixed decisions",
+    "User-visible accepted milestones ship as prereleases; stable 1.0 only after full product gates"
+  ],
+  "documents": [
+    "00-URUN-SOZLESMESI.md",
+    "01-ILK-RELEASE-VE-KAPSAM.md",
+    "02-BILIMSEL-MODELLEME.md",
+    "03-C17-MIMARI.md",
+    "04-DUNYA-VE-CEVRE.md",
+    "05-FIZIK-MOTORU.md",
+    "06-CANLI-BIYOMEKANIK.md",
+    "07-BIYOLOJI-EKOLOJI.md",
+    "08-CIZICI-VE-VARLIK-HATTI.md",
+    "09-SINEMATIK-YONETMEN.md",
+    "10-SES-KALICILIK-TEKRAR.md",
+    "11-PERFORMANS-DONANIM.md",
+    "12-TEST-KABUL-CI.md",
+    "13-YOL-HARITASI.md",
+    "14-OPENHANDS-CALISMA-KURALLARI.md",
+    "15-RISKLER-KARARLAR.md",
+    "16-ARASTIRMA-KAYNAKLARI.md",
+    "17-KULLANICI-ARAYUZU.md",
+    "18-GUVENLIK-LISANS-PAKET.md",
+    "AGENTS.md",
+    "PLAN-MANIFEST.json",
+    "README.md"
+  ],
+  "old_repository_untouched": "navoelyr-lwe/worldseed-engine"
+}
