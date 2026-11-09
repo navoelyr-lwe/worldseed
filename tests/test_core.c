@@ -155,7 +155,7 @@ static int test_sha256_streaming(void)
 
 static int test_arena_alignment_and_bounds(void)
 {
-    static _Alignas(max_align_t) unsigned char block[256];
+    static WS_ARENA_BLOCK_ALIGN unsigned char block[256];
     ws_arena arena;
     WS_CHECK(ws_arena_init(&arena, block, sizeof(block)) == WS_OK);
     WS_CHECK(ws_arena_used(&arena) == 0u);

@@ -67,7 +67,7 @@ int main(int argc, char **argv)
     const char *frame_path = (argc > 1) ? argv[1] : "smoke_frame.ppm";
     uint64_t seed = (argc > 2) ? strtoull(argv[2], NULL, 10) : 20260101ULL;
 
-    static _Alignas(max_align_t) unsigned char entity_arena[SMOKE_ENTITY_CAPACITY * 128u];
+    static WS_ARENA_BLOCK_ALIGN unsigned char entity_arena[SMOKE_ENTITY_CAPACITY * 128u];
     static ws_event event_storage[SMOKE_EVENT_CAPACITY];
 
     ws_world_config config;

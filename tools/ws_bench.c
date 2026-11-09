@@ -114,7 +114,7 @@ static void bench_raster(uint32_t width, uint32_t height, uint32_t tile, int ite
 
 int main(void)
 {
-    static _Alignas(max_align_t) unsigned char entity_arena[BENCH_ENTITY_CAPACITY * 128u];
+    static WS_ARENA_BLOCK_ALIGN unsigned char entity_arena[BENCH_ENTITY_CAPACITY * 128u];
     static ws_event event_storage[BENCH_EVENT_CAPACITY];
 
     ws_world_config config;

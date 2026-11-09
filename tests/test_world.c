@@ -16,7 +16,7 @@
 #define TEST_EVENT_CAPACITY 32u
 
 typedef struct test_world {
-    _Alignas(max_align_t) unsigned char arena[TEST_ENTITY_CAPACITY * 128u];
+    WS_ARENA_BLOCK_ALIGN unsigned char arena[TEST_ENTITY_CAPACITY * 128u];
     ws_event events[TEST_EVENT_CAPACITY];
     ws_world world;
 } test_world;

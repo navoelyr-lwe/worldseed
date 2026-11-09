@@ -14,6 +14,15 @@
 
 #include "ws_result.h"
 
+/* Alignment attribute for an arena backing block. MSVC needs __declspec; the
+ * other toolchains use C11 _Alignas. 16 covers the natural alignment of every
+ * type the engine stores in an arena. */
+#if defined(_MSC_VER)
+#define WS_ARENA_BLOCK_ALIGN __declspec(align(16))
+#else
+#define WS_ARENA_BLOCK_ALIGN _Alignas(16)
+#endif
+
 typedef struct ws_arena {
     uint8_t *base;
     size_t capacity;
@@ -23,8 +32,8 @@ typedef struct ws_arena {
 
 /* Initialise an arena over a caller-owned block. Does not take ownership.
  * `block` must be aligned to at least the largest alignment that will be
- * requested (typically _Alignof(max_align_t), or 16); allocations are aligned
- * relative to the block base. */
+ * requested; WS_ARENA_BLOCK_ALIGN provides a portable attribute. Allocations
+ * are aligned relative to the block base. */
 ws_result ws_arena_init(ws_arena *arena, void *block, size_t capacity);
 
 /* Allocate `size` bytes aligned to `alignment` (a power of two, or 0 for the

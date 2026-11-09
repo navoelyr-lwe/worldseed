@@ -32,8 +32,8 @@ typedef struct ws_entity_registry {
 } ws_entity_registry;
 
 /* Create a registry with room for `capacity` entities. All storage comes from
- * `arena_block` of `arena_size` bytes, which must be aligned to at least
- * _Alignof(max_align_t). */
+ * `arena_block` of `arena_size` bytes, which must be aligned as described for
+ * ws_arena_init (WS_ARENA_BLOCK_ALIGN). */
 ws_result ws_entity_registry_init(ws_entity_registry *registry,
                                   void *arena_block, size_t arena_size,
                                   uint32_t capacity);
