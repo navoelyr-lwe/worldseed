@@ -159,6 +159,7 @@ static void bench_scene_render(uint32_t width, uint32_t height, int iterations)
         return;
     }
     ws_render_stats stats;
+    memset(&stats, 0, sizeof(stats));
     uint64_t t0 = ws_clock_monotonic_ns();
     for (int i = 0; i < iterations; ++i) {
         (void)ws_render_scene(&scene, &fb, depth, 32u, &stats);

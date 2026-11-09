@@ -97,6 +97,7 @@ jobs:
           ./build/tools/ws_golden evidence/golden 20260101 | tee evidence/golden/golden-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
           grep -q "WS_GOLDEN_OK" evidence/golden/golden-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
           # Same input must reproduce the same frame digests within a run.
+          mkdir -p evidence/golden/repeat
           ./build/tools/ws_golden evidence/golden/repeat 20260101 >/dev/null
           for s in orbit lowlight spheres; do
             a=$(grep "^$s," evidence/golden/manifest.csv | cut -d, -f10)
@@ -119,6 +120,7 @@ jobs:
           grep -q "WS_ASSETGEN_OK" evidence/assets/assetgen.txt
           # Regenerating must reproduce byte-identical assets (determinism) and
           # match the committed provenance record so it cannot silently drift.
+          mkdir -p evidence/assets/repeat
           ./build/tools/ws_assetgen evidence/assets/repeat >/dev/null
           for a in cube plane sphere; do
             cmp evidence/assets/$a.wsmesh evidence/assets/repeat/$a.wsmesh \
