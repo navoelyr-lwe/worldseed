@@ -1,6 +1,6 @@
 # AGENTS.md — Worldseed Engine
 
-Bu depo `navoelyr-lwe/worldseed` için bağlayıcı ajan talimatıdır. README ve proje planı arşivindeki `00`–`18` belgeleri ürün sözleşmesini tanımlar. Öncelik sırası: ürün sözleşmesi → bilimsel model standardı → sabit mimari kararları → alt sistem belgeleri → milestone yol haritası.
+Bu depo `navoelyr-lwe/worldseed` için bağlayıcı ajan talimatıdır. Tam ürün planı `docs/plan-bundle/RESTORE.md` ve geri açılacak `docs/00-URUN-SOZLESMESI.md`…`docs/18-GUVENLIK-LISANS-PAKET.md` belgelerindedir. README başlangıç haritasıdır. Öncelik sırası: ürün sözleşmesi → bilimsel model standardı → sabit mimari kararları → alt sistem belgeleri → milestone yol haritası.
 
 ## Kullanıcı iletişimi
 
@@ -12,6 +12,19 @@ Proje sahibi yazılımcı değildir ve teknik tercihlerle uğraşmak istemez. He
 4. Benden bir şey gerekiyor mu?
 
 Kod/log dökümü yok. Başarısızlıklar gizlenmez. Kullanıcıya normal derleme, test, aygıt bilgisi, ekran görüntüsü veya teknik karar işi verilmez. Kullanıcının rolü ürünün ilerleyen preview/stable release paketlerini görmek ve kullanmaktır.
+
+## İlk görev — bağlayıcı öncelik
+
+1. `docs/plan-bundle/RESTORE.md` içindeki yönergeyle 16 aktarım parçasını birleştir, SHA-256 değerini doğrula ve ürün planı belgelerini kanonik `docs/` yollarına geri aç.
+2. Manifestteki tüm dosya sayısını ve içerik bütünlüğünü doğrula. Root `AGENTS.md` bu dosyanın bağlayıcı ana ajan kuralı olarak kalır; arşivdeki AGENTS yalnızca referans kopyasıdır.
+3. README bağlantılarının gerçek dosyalara gittiğini doğrula.
+4. Planı baştan sona denetle; çelişki, uygulanamaz kabul eşiği, bilimsel kaynak veya eksik güvenlik/performans kriteri varsa kanıta dayalı PR içinde düzelt.
+5. CI, main koruması, PR güvenliği, release akışı ve izole Windows GUI otomasyonunu kur.
+6. OpenCL C 1.2 / CPU fallback, CPU renderer, görsel varlık hattı ve otomatik golden-scene kanıtı için küçük feasibility prototip/planları hazırla.
+7. Tek bir dokümantasyon/altyapı PR'ı aç. İlk görevde büyük ürün özellikleri veya simülasyon sistemleri kodlama.
+8. Bu PR tüm kontrollerden geçip birleştikten sonra P1'e geç; kullanıcıdan teknik onay veya tercih isteme.
+
+Aktarım arşivinin beklenen SHA-256 değeri RESTORE belgesinde sabittir. Özet uyuşmazsa bozuk belgeyi kullanma; nedeni bul ve arşiv içeriğini doğrulamadan ilk görevi tamamlanmış sayma.
 
 ## Teknik kararlar — değişmez
 
@@ -31,7 +44,7 @@ Kullanıcıya teknik tercih sorusu sorma. Sabit belgelerde yer alan kararı uygu
 
 ## Git, CI ve release
 
-- `main` korumalı; doğrudan push yok; kısa ömürlü dal + PR.
+- `main` için branch protection veya eşdeğer ruleset zorunludur; doğrudan push yok; kısa ömürlü dal + PR.
 - En fazla bir ana PR açık.
 - Zorunlu kontrollerden biri fail/skipped/unknown ise merge yok.
 - GitHub-hosted runner'larda PR build/unit/headless test. Self-hosted Windows GUI runner izole, secretsiz, allowlist'li; fork/harici PR kodu çalıştırılmaz.
@@ -39,11 +52,8 @@ Kullanıcıya teknik tercih sorusu sorma. Sabit belgelerde yer alan kararı uygu
 - Her kullanıcıya görünür milestone, Windows x64 paketi, temiz ortam smoke test, GUI/golden-scene ve performans kapıları geçince prerelease olur. Sadece belge/altyapı işleri ürün release'i sayılmaz.
 - `1.0.0` ancak ürün sözleşmesindeki tüm koşullar geçince yayımlanır.
 - Preview/stable release yayınlama yetkisi proje sahibi tarafından OpenHands'e devredilmiştir; ayrıca onay sorulmaz.
+- Branch protection / ruleset ilk görevde kontrol edilmeli; eksikse mevcut GitHub erişimi ve CLI/UI araçlarıyla kurulmalı. Entegrasyon yetkisi yetersizse bunu saklama, yapılmış gibi işaretleme veya kullanıcıyı teknik ayarlara yönlendirme; otomatik erişim sınırını sade dille raporla ve ürün koduna geçmeden önce en azından PR/CI kapılarını uygula.
 
 ## Tamamlandı tanımı
 
 Kod + otomatik test + gerçek çalışma kanıtı + benchmark (ilgiliyse) + doküman + bilinen sınırlama raporu olmadan görev tamamlanmış sayılmaz. GUI testi gerçek Windows penceresini çalıştırmalı. Ekran görüntüsü/video gerçek build ve seed ile ilişkilendirilmeli. Görsel regresyon estetik kaliteyi tek başına ispatlamaz; golden scene kalite protokolü de gerekir. Bilimsel model iddiası model kartı ve D0-D4 kanıt seviyesi olmadan yapılmaz.
-
-## İlk görev
-
-Yalnız plan/repo hazırlık denetimi: bütün proje planı belgelerini doğrula; tutarsızlıkları ve eksik kabul eşiklerini düzelt; OpenCL C 1.2, CPU/GPU renderer, asset pipeline ve golden scene için küçük feasibility planları hazırla; branch protection/CI/runner/release workflow tasarımını kur. Tek dokümantasyon/altyapı PR'ı aç. Bu ilk görevde büyük ürün özellikleri kodlama. Kullanıcıya teknik soru sorma. Bu PR merge edilince P1 kod geliştirmesine otomatik geç.
