@@ -19,7 +19,7 @@ Bu pano `13-YOL-HARITASI.md` aşamalarının durumunu izler. Durum yalnız kanı
 
 ## Açık blokajlar
 
-- Windows GUI self-hosted runner henüz kayıtlı değil (`gui-windows.yml` runner gelince çalışır).
+- Windows GUI self-hosted runner henüz kayıtlı değil; bu nedenle `gui-windows.yml` yalnız manuel (`workflow_dispatch`) tetiklenir. Otomatik tetikleme, runner kaydedilince açılır. Runner yokken hiçbir GUI testi "çalıştı" olarak raporlanmaz.
 - Branch protection yönetici erişimi gerektirir (bkz. `CI-VE-DAL-KORUMASI.md`).
 
 ## Notlar
