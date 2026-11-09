@@ -100,6 +100,10 @@ tamamlanmamıştır ve kartlar bunu belirtir.
   model (oksijen borcu, ısı, yorgunluk) sonraki aşamalardadır.
 - Zemin profili yürüyüş hattı boyunca örneklenir; sahne köprüsü en düz noktayı
   seçer, dik/engebeli arazi kasıtlı olarak kaçınılır.
+- Eğimde duruşta ayak yüksekliği küçük bir sınır çevrimi (≈1 cm, yavaş) yapar:
+  temas çözücüsü ile konum düzeltmesi arasındaki dönüşümlü etkileşimden kaynaklanır.
+  Canlı dengede kalır ve ayak sürekli destek içindedir; sınır çevrimi giderilmesi
+  sonraki dilime (temas izleme/slop ayarı) bırakılmıştır.
 - Anatomik oran ve yürüyüş parametreleri literatür bilgisine dayanır ama D3
   nicel kıyası yapılmamıştır.
 - Görsel kalite protokolü (`08`) ayrıdır; bu aşama estetik iddia etmez.

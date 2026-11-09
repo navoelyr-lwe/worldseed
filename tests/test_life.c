@@ -55,6 +55,25 @@ static int all_finite(const ws_creature *c)
     return 1;
 }
 
+/* Lowest-foot clearance above the ground profile (m). Negative means the foot
+ * is slightly inside the surface. Used to prove the animal is actually resting
+ * on the ground rather than floating. */
+static double min_foot_clearance(const ws_creature *c, ws_profile_fn ground)
+{
+    double mn = 1.0e30;
+    for (uint32_t i = 0; i < c->foot_count; ++i) {
+        const ws_cfoot *f = &c->feet[i];
+        const ws_cbody *b = &c->bodies[f->body];
+        double wx, wy;
+        ws_cbody_point(b, f->lx, f->ly, &wx, &wy);
+        double clr = wy - ground(NULL, wx);
+        if (clr < mn) {
+            mn = clr;
+        }
+    }
+    return mn;
+}
+
 /* Build a standing reference quadruped on the given ground profile. Returns 1
  * on success. */
 static int build_reference(ws_creature *c, ws_quad_storage *st, ws_quad_parts *p,
@@ -125,8 +144,12 @@ static int test_stand_balanced(void)
     WS_CHECK(cy > 0.85 && cy < 1.15);
     WS_CHECK(fabs(c.bodies[p.torso].angle) < 0.15);
     WS_CHECK(ws_creature_kinetic_energy(&c) < 5.0);
-    /* Feet are on the ground, so there is at least one contact. */
-    WS_CHECK(c.contact_count >= 1u);
+    /* Feet rest on the ground: the lowest foot sits at the surface, not
+     * floating. (Checking raw contact_count here is knife-edge, because the
+     * equilibrium clearance sits right at the contact-detection band and can
+     * fall just outside it under a different compiler's rounding.) */
+    double clr = min_foot_clearance(&c, flat_ground);
+    WS_CHECK(clr > -2.0e-3 && clr < 1.0e-3);
     return 1;
 }
 
@@ -209,14 +232,22 @@ static int test_slope_stand(void)
     ws_cjoint j[8];
     ws_cfoot f[4];
     WS_CHECK(build_reference(&c, &st, &p, b, j, f, slope_ground));
+    int supported_steps = 0;
     for (int i = 0; i < 4000; ++i) {
         ws_quadruped_balance(&c, p.torso, BAL_KP, BAL_KD, 0.0);
         WS_CHECK(ws_creature_step(&c) == WS_OK);
+        /* A foot must be within a small band of the surface; a hovering animal
+         * would fail this. Sampled over the run so a single-phase sample cannot
+         * mask a floating stance. */
+        if (min_foot_clearance(&c, slope_ground) < 8.0e-3) {
+            supported_steps++;
+        }
     }
     WS_CHECK(all_finite(&c));
     /* Remains standing on the incline without toppling or sinking. */
     WS_CHECK(fabs(c.bodies[p.torso].angle) < 0.20);
-    WS_CHECK(c.contact_count >= 1u);
+    /* The feet are effectively always in ground support on the incline. */
+    WS_CHECK(supported_steps > 3900);
     double cx, cy;
     ws_creature_center_of_mass(&c, &cx, &cy);
     double gy = slope_ground(NULL, cx);
