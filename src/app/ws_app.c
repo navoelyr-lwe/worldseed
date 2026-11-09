@@ -6,9 +6,9 @@
 #include <string.h>
 
 #include "../core/ws_hash.h"
+#include "../render/ws_catalog.h"
 #include "../render/ws_image.h"
 #include "../render/ws_render.h"
-#include "../render/ws_showcase.h"
 
 #define APP_DEFAULT_WIDTH 960u
 #define APP_DEFAULT_HEIGHT 540u
@@ -47,7 +47,7 @@ ws_result ws_app_parse_options(int argc, char **argv, ws_app_options *opts)
                 return WS_ERR_INVALID_ARGUMENT;
             }
             long v = strtol(argv[++i], NULL, 10);
-            if (v < 0 || (size_t)v >= ws_showcase_scene_count()) {
+            if (v < 0 || (size_t)v >= ws_catalog_count()) {
                 return WS_ERR_INVALID_ARGUMENT;
             }
             opts->scene_index = (int)v;
@@ -78,18 +78,13 @@ ws_result ws_app_parse_options(int argc, char **argv, ws_app_options *opts)
 static ws_result render_into(const ws_app_options *opts, size_t scene_index,
                              ws_framebuffer *fb, float *depth)
 {
-    ws_showcase showcase;
-    ws_result r = ws_showcase_init(&showcase);
+    ws_catalog catalog;
+    ws_result r = ws_catalog_build(&catalog, scene_index, opts->seed);
     if (r != WS_OK) {
         return r;
     }
-    r = ws_showcase_build(&showcase, scene_index, opts->seed);
-    if (r != WS_OK) {
-        ws_showcase_free(&showcase);
-        return r;
-    }
-    r = ws_render_scene(&showcase.scene, fb, depth, 32u, NULL);
-    ws_showcase_free(&showcase);
+    r = ws_render_scene(ws_catalog_scene(&catalog), fb, depth, 32u, NULL);
+    ws_catalog_free(&catalog);
     return r;
 }
 
@@ -122,7 +117,7 @@ static void luminance_stats(const ws_framebuffer *fb, double *mean_out, double *
 static int capture_one(const ws_app_options *opts, size_t scene_index,
                        ws_framebuffer *fb, float *depth)
 {
-    const char *id = ws_showcase_scene_id(scene_index);
+    const char *id = ws_catalog_id(scene_index);
     if (render_into(opts, scene_index, fb, depth) != WS_OK) {
         fprintf(stderr, "render failed for scene %s\n", id);
         return 0;
@@ -142,10 +137,10 @@ static int capture_one(const ws_app_options *opts, size_t scene_index,
 
 static int selftest(const ws_app_options *opts, ws_framebuffer *fb, float *depth)
 {
-    size_t scene_count = ws_showcase_scene_count();
+    size_t scene_count = ws_catalog_count();
     int ok = 1;
     for (size_t i = 0; i < scene_count; ++i) {
-        const char *id = ws_showcase_scene_id(i);
+        const char *id = ws_catalog_id(i);
         if (render_into(opts, i, fb, depth) != WS_OK) {
             fprintf(stderr, "selftest: render failed for %s\n", id);
             ok = 0;
@@ -177,9 +172,9 @@ int ws_app_run(const ws_app_options *opts)
         return 2;
     }
     if (opts->list_scenes) {
-        size_t n = ws_showcase_scene_count();
+        size_t n = ws_catalog_count();
         for (size_t i = 0; i < n; ++i) {
-            printf("%zu %s\n", i, ws_showcase_scene_id(i));
+            printf("%zu %s\n", i, ws_catalog_id(i));
         }
         return 0;
     }
@@ -200,7 +195,7 @@ int ws_app_run(const ws_app_options *opts)
     if (opts->selftest) {
         rc = selftest(opts, &fb, depth) ? 0 : 1;
         if (rc == 0) {
-            printf("APP_SELFTEST_OK scenes=%zu\n", ws_showcase_scene_count());
+            printf("APP_SELFTEST_OK scenes=%zu\n", ws_catalog_count());
         }
     } else if (opts->capture) {
         rc = capture_one(opts, (size_t)opts->scene_index, &fb, depth) ? 0 : 1;
@@ -213,7 +208,7 @@ int ws_app_run(const ws_app_options *opts)
             double max_luma = 0.0;
             luminance_stats(&fb, &mean_luma, &max_luma);
             printf("headless scene=%s size=%ux%u mean_luma=%.2f max_luma=%.2f\n",
-                   ws_showcase_scene_id((size_t)opts->scene_index),
+                   ws_catalog_id((size_t)opts->scene_index),
                    fb.width, fb.height, mean_luma, max_luma);
         }
     } else {

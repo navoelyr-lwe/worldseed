@@ -99,7 +99,7 @@ jobs:
           # Same input must reproduce the same frame digests within a run.
           mkdir -p evidence/golden/repeat
           ./build/tools/ws_golden evidence/golden/repeat 20260101 >/dev/null
-          for s in orbit lowlight spheres materials textured sky; do
+          for s in orbit lowlight spheres materials textured sky terrain_day terrain_dusk terrain_weather; do
             a=$(grep "^$s," evidence/golden/manifest.csv | cut -d, -f12)
             b=$(grep "^$s," evidence/golden/repeat/manifest.csv | cut -d, -f12)
             test "$a" = "$b" || { echo "golden scene $s not reproducible"; exit 1; }
@@ -109,7 +109,7 @@ jobs:
         run: |
           # Tolerance, not equality: catches missing/misplaced geometry across
           # compilers and platforms while allowing tiny floating-point edges.
-          for s in orbit lowlight spheres materials textured sky; do
+          for s in orbit lowlight spheres materials textured sky terrain_day terrain_dusk terrain_weather; do
             ./build/tools/ws_imgdiff evidence/golden/$s.ppm tests/golden/$s.ppm 3.0 0.99
           done
 
@@ -136,18 +136,19 @@ jobs:
       - name: Application capture
         run: |
           # The user-visible preview app renders the same scenes headless and
-          # writes real frame evidence. Its 320x240 output must match the golden
-          # references byte-for-byte, proving the app and the golden harness
-          # share one scene/renderer path.
+          # writes real frame evidence. Its 320x240 output must be byte-identical
+          # to the golden harness output from the same run, proving the app and
+          # the harness share one scene/renderer path (portable across platforms;
+          # the committed reference comparison above uses a tolerance).
           mkdir -p evidence/app
           ./build/src/app/worldseed --selftest --size 640x360 | tee evidence/app/selftest.txt
           grep -q "APP_SELFTEST_OK" evidence/app/selftest.txt
           ./build/src/app/worldseed --list | tee evidence/app/scenes.txt
           i=0
-          for s in orbit lowlight spheres materials textured sky; do
+          for s in orbit lowlight spheres materials textured sky terrain_day terrain_dusk terrain_weather; do
             ./build/src/app/worldseed --capture "evidence/app/$s.ppm" --scene $i --size 320x240
-            cmp "evidence/app/$s.ppm" "tests/golden/$s.ppm" \
-              || { echo "app frame $s differs from golden reference"; exit 1; }
+            cmp "evidence/app/$s.ppm" "evidence/golden/$s.ppm" \
+              || { echo "app frame $s differs from golden harness"; exit 1; }
             i=$((i + 1))
           done
 
@@ -194,7 +195,7 @@ jobs:
           # Same input must reproduce the same frame digests within a run.
           New-Item -ItemType Directory -Force -Path evidence/golden/repeat | Out-Null
           & build/tools/${{ matrix.build_type }}/ws_golden.exe evidence/golden/repeat 20260101 | Out-Null
-          foreach ($s in "orbit","lowlight","spheres","materials","textured","sky") {
+          foreach ($s in "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather") {
             $a = (Select-String -Path evidence/golden/manifest.csv -Pattern "^$s,").Line.Split(",")[11]
             $b = (Select-String -Path evidence/golden/repeat/manifest.csv -Pattern "^$s,").Line.Split(",")[11]
             if ($a -ne $b) { Write-Error "golden scene $s not reproducible"; exit 1 }
@@ -203,7 +204,7 @@ jobs:
       - name: Golden reference comparison
         shell: pwsh
         run: |
-          foreach ($s in "orbit","lowlight","spheres","materials","textured","sky") {
+          foreach ($s in "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather") {
             & build/tools/${{ matrix.build_type }}/ws_imgdiff.exe "evidence/golden/$s.ppm" "tests/golden/$s.ppm" 3.0 0.99
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
@@ -234,20 +235,21 @@ jobs:
         shell: pwsh
         run: |
           # The user-visible preview app renders the same scenes headless and
-          # writes real frame evidence. Its 320x240 output must match the golden
-          # references byte-for-byte (hash compare: Windows has no cmp).
+          # writes real frame evidence. Its 320x240 output must be byte-identical
+          # to the golden harness output from the same run (hash compare: Windows
+          # has no cmp), proving the app and harness share one renderer path.
           New-Item -ItemType Directory -Force -Path evidence/app | Out-Null
           & build/src/app/${{ matrix.build_type }}/worldseed.exe --selftest --size 640x360 |
             Tee-Object -FilePath evidence/app/selftest.txt
           if (-not (Select-String -Path evidence/app/selftest.txt -Pattern "APP_SELFTEST_OK" -Quiet)) { exit 1 }
           & build/src/app/${{ matrix.build_type }}/worldseed.exe --list |
             Tee-Object -FilePath evidence/app/scenes.txt
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather"
           for ($i = 0; $i -lt $scenes.Count; $i++) {
             $s = $scenes[$i]
             & build/src/app/${{ matrix.build_type }}/worldseed.exe --capture "evidence/app/$s.ppm" --scene $i --size 320x240
-            if ((Get-FileHash "evidence/app/$s.ppm").Hash -ne (Get-FileHash "tests/golden/$s.ppm").Hash) {
-              Write-Error "app frame $s differs from golden reference"; exit 1
+            if ((Get-FileHash "evidence/app/$s.ppm").Hash -ne (Get-FileHash "evidence/golden/$s.ppm").Hash) {
+              Write-Error "app frame $s differs from golden harness"; exit 1
             }
           }
 
