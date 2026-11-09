@@ -42,7 +42,7 @@ ws_env_scene_options ws_env_scene_options_default(uint64_t seed)
     o.region_y = 0;
     o.cells = 64u;
     o.cell_size = 8.0;
-    o.scene_kind = 0;
+    o.scene_kind = WS_ENV_SCENE_DAY;
     o.time_of_day_s = 12.0 * 3600.0;
     return o;
 }
@@ -54,6 +54,7 @@ const char *ws_env_scene_kind_id(int scene_kind)
     case 1: return "terrain_dusk";
     case 2: return "terrain_weather";
     case 3: return "terrain_physics";
+    case 4: return "creature_walk";
     default: return "terrain";
     }
 }
@@ -325,12 +326,129 @@ static ws_result run_physics_drop(ws_env_scene *e, double cx, double cz)
     return WS_OK;
 }
 
+/* ---- P5 reference creature scene ------------------------------------------
+ * The articulated red-deer body is driven by the gait controller for a fixed
+ * simulated interval and then rendered mid-stride. The visible picture is the
+ * biomechanics result: link poses, contact state and forward progress all come
+ * from the simulated body, not a scripted animation. */
+
+/* The creature model is planar (sagittal), so its ground is the terrain profile
+ * sampled along the walking line at fixed lateral offset z. */
+typedef struct ws_creature_ground {
+    const ws_env_scene *e;
+    double z;
+} ws_creature_ground;
+
+static double creature_profile_cb(void *ctx, double x)
+{
+    const ws_creature_ground *g = (const ws_creature_ground *)ctx;
+    return ws_terrain_height_bilinear(&g->e->terrain, x, g->z);
+}
+
+/* Run the reference quadruped walking across the terrain for a fixed simulated
+ * interval and keep its final body state on the scene so the renderer can draw
+ * it. Returns the distance walked (metres) through *out_forward. */
+static ws_result run_creature_walk(ws_env_scene *e, double start_x, double start_z,
+                                   double *out_forward)
+{
+    static ws_cjoint joints[8];
+    static ws_cfoot feet[4];
+    ws_quad_storage st;
+    ws_species_profile sp = ws_species_red_deer();
+    ws_creature c;
+    ws_quad_parts parts;
+    ws_creature_ground ground;
+    ground.e = e;
+    ground.z = start_z;
+
+    double ground0 = ws_terrain_height_bilinear(&e->terrain, start_x, start_z);
+    ws_result r = ws_creature_init(&c, 1.0 / 500.0, 9.80665, 30, 0.2,
+                                   e->creature_bodies, 8u, joints, 8u, feet, 4u);
+    if (r != WS_OK) {
+        return r;
+    }
+    ws_creature_set_ground(&c, creature_profile_cb, &ground);
+    r = ws_quadruped_build(&c, &st, &sp, ground0, &parts);
+    if (r != WS_OK) {
+        return r;
+    }
+    /* Shift the assembled body so it starts at the requested spot. */
+    double dx = start_x - e->creature_bodies[parts.torso].px;
+    double dy = ground0 - e->creature_bodies[parts.torso].py;
+    for (uint32_t i = 0; i < c.body_count; ++i) {
+        e->creature_bodies[i].px += dx;
+        e->creature_bodies[i].py += dy;
+    }
+
+    for (int i = 0; i < 1000; ++i) {
+        ws_quadruped_balance(&c, parts.torso, 4000.0, 500.0, 0.0);
+        ws_creature_step(&c);
+    }
+    ws_gait_state gs;
+    ws_gait_state_init(&gs);
+    double x0 = e->creature_bodies[parts.torso].px;
+    int steps = (int)(12.0 / c.dt);
+    for (int i = 0; i < steps; ++i) {
+        ws_quadruped_walk(&c, &parts, &sp, &gs, 0.8);
+        ws_quadruped_balance(&c, parts.torso, 4000.0, 500.0, 0.0);
+        ws_creature_step(&c);
+    }
+    e->creature_body_count = c.body_count;
+    e->creature_parts = parts;
+    e->creature_contact = (int)c.contact_count;
+    *out_forward = e->creature_bodies[parts.torso].px - x0;
+    return WS_OK;
+}
+
+/* Add one creature link as an oriented box. Local x runs along the link. The
+ * link's centre is shifted from the region-local frame to the mesh frame, which
+ * is shared across all links. `z_off` places the left/right leg pairs. */
+static void add_link(ws_env_scene *e, const ws_cbody *b, double z_off,
+                     ws_material m)
+{
+    double sx = b->half_len * 2.0;
+    double sy = b->half_thick * 2.0;
+    double sz = b->half_width * 2.0;
+    ws_mat4 t = ws_mat4_translation(ws_vec3_make(b->px, b->py, e->creature_z + z_off));
+    t = ws_mat4_multiply(t, ws_mat4_rotation_z(b->angle));
+    t = ws_mat4_multiply(t, ws_mat4_scale(ws_vec3_make(sx, sy, sz)));
+    (void)ws_scene_add_object(&e->scene, &e->cube_mesh, t, m);
+}
+
+static void add_creature_objects(ws_env_scene *e)
+{
+    const ws_quad_parts *p = &e->creature_parts;
+    ws_material body = ws_material_make(0.42, 0.26, 0.16, 0.85, 0.0, 0.05);
+    ws_material leg = ws_material_make(0.30, 0.19, 0.12, 0.85, 0.0, 0.05);
+    ws_material head = ws_material_make(0.48, 0.31, 0.19, 0.85, 0.0, 0.05);
+    /* The torso, neck and head lie on the sagittal plane; the legs are drawn
+     * twice, offset left and right, so the body reads as a quadruped even
+     * though the dynamics are planar. */
+    const double leg_z = 0.16;
+    for (uint32_t i = 0; i < e->creature_body_count; ++i) {
+        const ws_cbody *b = &e->creature_bodies[i];
+        ws_material m = body;
+        if ((int)i == p->head) {
+            m = head;
+        }
+        int is_leg = ((int)i == p->front_upper || (int)i == p->front_lower ||
+                      (int)i == p->rear_upper || (int)i == p->rear_lower);
+        if (is_leg) {
+            m = leg;
+            add_link(e, b, -leg_z, m);
+            add_link(e, b, leg_z, m);
+        } else {
+            add_link(e, b, 0.0, m);
+        }
+    }
+}
+
+
 static void sun_and_sky(const ws_environment *env, ws_light *light,
                         double *out_intensity, double *out_ambient)
 {
     double alt = ws_clamp_double(env->sun_altitude, -1.0, 1.0);
     double day = env->daylight;
-
     /* Sun colour warms as it drops toward the horizon. */
     double warm = 1.0 - ws_clamp_double((alt - 0.05) / 0.35, 0.0, 1.0);
     light->color[0] = (uint8_t)(255.0);
@@ -443,6 +561,38 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         }
     }
 
+    /* Creature: walk the reference quadruped across the flattest dry spot, then
+     * frame it where the simulation left it. */
+    double cre_x = e->extent * 0.35;
+    double cre_z = e->extent * 0.5;
+    if (opts->scene_kind == WS_ENV_SCENE_CREATURE) {
+        pick_drop_point(e, &cre_x, &cre_z);
+        /* Build the shared unit-cube mesh used for every link. */
+        size_t vc = ws_mesh_cube_vertex_count();
+        size_t ic = ws_mesh_cube_index_count();
+        e->cube_verts = (ws_vertex *)calloc(vc, sizeof(ws_vertex));
+        e->cube_idx = (uint32_t *)malloc(ic * sizeof(uint32_t));
+        if (e->cube_verts == NULL || e->cube_idx == NULL) {
+            ws_env_scene_free(e);
+            return WS_ERR_OUT_OF_MEMORY;
+        }
+        const uint8_t cube_color[3] = {150u, 120u, 90u};
+        ws_result cr = ws_mesh_make_cube(&e->cube_mesh, e->cube_verts, vc,
+                                         e->cube_idx, ic, cube_color);
+        if (cr != WS_OK) {
+            ws_env_scene_free(e);
+            return cr;
+        }
+        double fwd = 0.0;
+        cr = run_creature_walk(e, cre_x, cre_z, &fwd);
+        if (cr != WS_OK) {
+            ws_env_scene_free(e);
+            return cr;
+        }
+        e->creature_z = cre_z - e->terrain.origin_y;
+        e->creature_forward_m = fwd;
+    }
+
     /* Camera. Default environment scenes use a low, near-ground view from
      * inside the region looking across it with a fixed gentle downward pitch,
      * which is the scale at which terrain relief, water and individual trees are
@@ -465,6 +615,21 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         eye_z = rz - back * 0.6;
         tgt_x = rx;
         tgt_y = ry;
+        tgt_z = rz;
+    } else if (opts->scene_kind == WS_ENV_SCENE_CREATURE) {
+        /* Side-on view of the walking animal: the sagittal gait reads best from
+         * the side, so the camera looks across the direction of travel and is
+         * framed on the middle of the body. */
+        const ws_cbody *torso = &e->creature_bodies[e->creature_parts.torso];
+        double rx = torso->px - e->terrain.origin_x;
+        double rz = cre_z - e->terrain.origin_y;
+        double back = 4.2;
+        double up = 1.6;
+        eye_x = rx + 0.2;
+        eye_y = torso->py + up;
+        eye_z = rz - back;
+        tgt_x = rx + 0.3;
+        tgt_y = torso->py - 0.15;
         tgt_z = rz;
     } else {
         double mid_x = e->extent * 0.5;
@@ -559,6 +724,11 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         (void)ws_scene_add_object(&e->scene, &e->rock_mesh, e->rock_transform, rock);
     }
 
+    /* Reference creature: the articulated body where the gait controller left it. */
+    if (opts->scene_kind == WS_ENV_SCENE_CREATURE) {
+        add_creature_objects(e);
+    }
+
     e->scene.camera = camera;
     e->scene.light = ws_light_default();
     double intensity = 1.0;
@@ -591,6 +761,8 @@ void ws_env_scene_free(ws_env_scene *e)
     free(e->cone_idx);
     free(e->rock_verts);
     free(e->rock_idx);
+    free(e->cube_verts);
+    free(e->cube_idx);
     free(e->objects);
     ws_vegetation_free(&e->veg);
     ws_habitat_free(&e->habitat);

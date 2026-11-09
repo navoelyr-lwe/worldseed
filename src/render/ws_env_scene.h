@@ -17,6 +17,8 @@
 #include <stdint.h>
 
 #include "../core/ws_result.h"
+#include "../life/ws_creature.h"
+#include "../life/ws_quadruped.h"
 #include "../world/ws_environment.h"
 #include "../world/ws_habitat.h"
 #include "../world/ws_hydro.h"
@@ -27,15 +29,19 @@
 #include "ws_texture.h"
 
 #define WS_ENV_MAX_TREES 900u
-#define WS_ENV_MAX_OBJECTS (3u + WS_ENV_MAX_TREES)
+#define WS_ENV_MAX_OBJECTS (3u + WS_ENV_MAX_TREES + 16u)
 
 /* Scene kinds. 0..2 are static environment states; 3 (terrain_physics) drops a
  * rigid body onto the terrain with the P4 solver and renders it where it comes
- * to rest, so the physics result is visible and reproducible. */
+ * to rest, so the physics result is visible and reproducible. 4 (creature_walk)
+ * builds the P5 reference quadruped, drives it with the gait controller for a
+ * fixed simulated interval and renders the articulated body mid-stride, so the
+ * biomechanics result is visible and reproducible. */
 #define WS_ENV_SCENE_DAY 0
 #define WS_ENV_SCENE_DUSK 1
 #define WS_ENV_SCENE_WEATHER 2
 #define WS_ENV_SCENE_PHYSICS 3
+#define WS_ENV_SCENE_CREATURE 4
 
 typedef struct ws_env_scene_options {
     uint64_t seed;
@@ -79,6 +85,19 @@ typedef struct ws_env_scene {
     ws_mesh rock_mesh;
     ws_mat4 rock_transform;
     double rock_rest_y; /* final centre height in metres, for evidence */
+
+    /* Reference creature (scene kind 4): the simulated articulated body, kept so
+     * its final link poses can be rendered. `cube_mesh` is one unit-cube mesh
+     * reused for every link. */
+    ws_cbody creature_bodies[8];
+    uint32_t creature_body_count;
+    ws_quad_parts creature_parts;
+    ws_vertex *cube_verts;
+    uint32_t *cube_idx;
+    ws_mesh cube_mesh;
+    double creature_z;         /* region-local z of the walking line, m */
+    double creature_forward_m; /* distance walked in metres, for evidence */
+    int creature_contact;      /* feet in contact at the rendered instant */
 
     ws_scene_object *objects;
     uint32_t object_capacity;

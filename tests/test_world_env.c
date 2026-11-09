@@ -366,6 +366,32 @@ static int test_env_scene_physics(void)
     return 1;
 }
 
+/* The creature scene must walk the reference quadruped and render it; the same
+ * seed must reproduce the exact body placement and forward progress. */
+static int test_env_scene_creature(void)
+{
+    ws_env_scene_options o = ws_env_scene_options_default(20260101ULL);
+    o.scene_kind = WS_ENV_SCENE_CREATURE;
+    ws_env_scene a;
+    ws_env_scene b;
+    WS_CHECK(ws_env_scene_create(&a, &o) == WS_OK);
+    WS_CHECK(ws_env_scene_create(&b, &o) == WS_OK);
+    /* The animal walked forward and its links are rendered. */
+    WS_CHECK(a.creature_forward_m > 1.0);
+    WS_CHECK(a.creature_body_count >= 7u);
+    WS_CHECK(a.scene.object_count >= a.creature_body_count);
+    /* Deterministic: the same seed lands the body at exactly the same pose. */
+    WS_CHECK(a.creature_forward_m == b.creature_forward_m);
+    const ws_cbody *ta = &a.creature_bodies[a.creature_parts.torso];
+    const ws_cbody *tb = &b.creature_bodies[b.creature_parts.torso];
+    WS_CHECK(ta->px == tb->px);
+    WS_CHECK(ta->py == tb->py);
+    WS_CHECK(ta->angle == tb->angle);
+    ws_env_scene_free(&a);
+    ws_env_scene_free(&b);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -384,6 +410,7 @@ int main(void)
         {"env scene repeatable", test_env_scene_repeatable},
         {"env scene long run stable", test_env_scene_long_run_stable},
         {"env scene physics drop", test_env_scene_physics},
+        {"env scene creature walk", test_env_scene_creature},
         {"catalog builds all scenes", test_catalog_builds_all},
     };
     return ws_test_run("world_env", cases, (int)(sizeof(cases) / sizeof(cases[0])));
