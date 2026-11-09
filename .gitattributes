@@ -1,0 +1,7 @@
+# Committed reference frames and generated assets are binary. Force git to
+# treat them as binary so it never applies line-ending conversion (LF -> CRLF)
+# on checkout, which would corrupt a PPM whose header happens to contain no NUL
+# byte and shift the raster by one byte on Windows.
+tests/golden/*.ppm binary
+assets/primitives/*.wsmesh binary
+assets/primitives/*.wstex binary

@@ -364,6 +364,30 @@ static int test_ppm_roundtrip(void)
     return 1;
 }
 
+static int test_ppm_crlf_header(void)
+{
+    /* A PPM whose header uses CRLF line endings (as a text-mode checkout on
+     * Windows produces) must parse with the raster starting at the right byte;
+     * a naive tokeniser shifts the image by one byte. */
+    const char *path = "ppm_crlf.ppm";
+    FILE *f = fopen(path, "wb");
+    WS_CHECK(f != NULL);
+    /* 2x1, white then black, CRLF header. */
+    static const uint8_t bytes[] = "P6\r\n2 1\r\n255\r\n\xff\xff\xff\x00\x00\x00";
+    fwrite(bytes, 1u, sizeof(bytes) - 1u, f);
+    fclose(f);
+
+    ws_framebuffer fb;
+    WS_CHECK(ws_framebuffer_read_ppm(&fb, path) == WS_OK);
+    WS_CHECK(fb.width == 2u && fb.height == 1u);
+    WS_CHECK(fb.pixels[0] == 255u && fb.pixels[1] == 255u && fb.pixels[2] == 255u);
+    WS_CHECK(fb.pixels[4] == 0u && fb.pixels[5] == 0u && fb.pixels[6] == 0u);
+
+    remove(path);
+    ws_framebuffer_free(&fb);
+    return 1;
+}
+
 static int test_image_metrics(void)
 {
     ws_framebuffer a;
@@ -758,6 +782,7 @@ int main(void)
         {"render tonemap is monotonic", test_render_tonemap_monotonic},
         {"render texture map changes output", test_render_texture_changes_output},
         {"ppm roundtrip", test_ppm_roundtrip},
+        {"ppm crlf header", test_ppm_crlf_header},
         {"image metrics", test_image_metrics},
     };
     return ws_test_run("render", cases, (int)(sizeof(cases) / sizeof(cases[0])));
