@@ -5,7 +5,7 @@ Bu pano `13-YOL-HARITASI.md` aşamalarının durumunu izler. Durum yalnız kanı
 | Aşama | Kapsam | Durum | Kanıt |
 |---|---|---|---|
 | P0 | Ürün ve bilimsel temel | Tamamlanan denetim | `DENETIM-RAPORU.md`, ADR-007…010 |
-| P1 | C17 motor çekirdeği | Devam ediyor | `src/core`, `src/world`, `tests/`, `ci.yml` |
+| P1 | C17 motor çekirdeği | Tamamlandı (altyapı) | `docs/P1-MOTOR-CEKIRDEGI.md`, `src/core`, `src/world`, `tests/`, `ci.yml` |
 | P2 | Render ve içerik temeli | Başlangıç (spike) | `src/render`, `FEASIBILITY-CPU-RENDERER.md` |
 | P3 | İlk doğal çevre | Planlandı | — |
 | P4 | Çevresel fizik | Planlandı | — |
@@ -19,7 +19,7 @@ Bu pano `13-YOL-HARITASI.md` aşamalarının durumunu izler. Durum yalnız kanı
 
 ## Açık blokajlar
 
-- Windows GUI self-hosted runner henüz kayıtlı değil (`gui-windows.yml` runner gelince çalışır).
+- Windows GUI self-hosted runner henüz kayıtlı değil; bu nedenle `gui-windows.yml` yalnız manuel (`workflow_dispatch`) tetiklenir. Otomatik tetikleme, runner kaydedilince açılır. Runner yokken hiçbir GUI testi "çalıştı" olarak raporlanmaz.
 - Branch protection yönetici erişimi gerektirir (bkz. `CI-VE-DAL-KORUMASI.md`).
 
 ## Notlar

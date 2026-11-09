@@ -22,8 +22,11 @@ function(ws_apply_common_flags)
       target_compile_options(ws_common_flags INTERFACE -Werror)
     endif()
     if(WS_ENABLE_SANITIZERS)
+      # -fno-sanitize-recover=all makes any sanitizer finding abort the process
+      # so CI fails instead of silently continuing past undefined behaviour.
       target_compile_options(ws_common_flags INTERFACE
-        -fsanitize=address,undefined -fno-omit-frame-pointer)
+        -fsanitize=address,undefined -fno-sanitize-recover=all
+        -fno-omit-frame-pointer)
       target_link_options(ws_common_flags INTERFACE
         -fsanitize=address,undefined)
     endif()

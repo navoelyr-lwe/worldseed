@@ -8,10 +8,12 @@ name: GUI (Windows, isolated runner)
 # and runs the headless smoke test on the Windows runner so the isolated runner
 # path is exercised end to end. GUI window/input tests are added when the
 # viewer lands.
+# The runner label [self-hosted, windows, x64, worldseed-gui] is not yet
+# registered, so an automatic push trigger would queue indefinitely. Until the
+# isolated runner is provisioned, this workflow is manual-only; this is recorded
+# in docs/MILESTONE-BOARD.md. No GUI test is reported as run without the runner.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: read

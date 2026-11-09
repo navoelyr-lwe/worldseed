@@ -45,8 +45,8 @@ double ws_vec3_length(ws_vec3 v);
 /* Returns 1 if the box is empty or inverted on any axis, else 0. */
 int ws_aabb3_is_empty(ws_aabb3 box);
 
-/* Checked size multiplication: returns 0 on success and writes product,
- * or returns 0 and leaves *out untouched when the multiply overflows. */
+/* Checked size multiplication: returns 1 and writes the product, or returns 0
+ * and leaves *out untouched when the multiply overflows or out is NULL. */
 int ws_mul_size_checked(size_t count, size_t element_size, size_t *out);
 
 #endif /* WS_CORE_MATH_H */

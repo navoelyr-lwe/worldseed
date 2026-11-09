@@ -1,6 +1,6 @@
 /* Worldseed Engine — headless smoke tool.
  *
- * Proves the P1 core builds and runs headless: creates a world, advances it,
+ * Proves the core builds and runs headless: creates a world, advances it,
  * renders a reference tile, probes OpenCL and writes a PPM frame. Emits a small
  * machine-readable summary so CI can capture evidence without a display.
  */
@@ -12,11 +12,15 @@
 #include "render/ws_raster.h"
 #include "world/ws_world.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static int render_reference_frame(const char *out_path, char *digest_hex)
+#define SMOKE_ENTITY_CAPACITY 256u
+#define SMOKE_EVENT_CAPACITY 512u
+
+static int render_reference_frame(const char *out_path, uint64_t seed, char *digest_hex)
 {
     ws_framebuffer fb;
     if (ws_framebuffer_create(&fb, 320u, 240u) != WS_OK) {
@@ -34,10 +38,23 @@ static int render_reference_frame(const char *out_path, char *digest_hex)
         depth[i] = 1.0e30f;
     }
 
-    const float vx[3] = {40.0f, 280.0f, 160.0f};
-    const float vy[3] = {200.0f, 200.0f, 40.0f};
-    const float vz[3] = {0.5f, 0.5f, 0.2f};
-    const unsigned char color[3][3] = {{90u, 160u, 70u}, {70u, 140u, 60u}, {120u, 180u, 90u}};
+    /* Derive the reference triangle from the seed so the frame digest is a
+     * genuine determinism signal: identical seed reproduces the frame, a
+     * different seed yields a different frame. */
+    ws_rng frng;
+    ws_rng_init(&frng, seed, 99ULL);
+    float vx[3];
+    float vy[3];
+    float vz[3];
+    unsigned char color[9];
+    for (int i = 0; i < 3; ++i) {
+        vx[i] = (float)(ws_rng_next_double(&frng) * 300.0);
+        vy[i] = (float)(ws_rng_next_double(&frng) * 220.0);
+        vz[i] = (float)(0.1 + ws_rng_next_double(&frng) * 0.5);
+        for (int c = 0; c < 3; ++c) {
+            color[i * 3 + c] = (unsigned char)(ws_rng_next_u64(&frng) & 0xFFu);
+        }
+    }
 
     ws_raster_tile_stats stats;
     memset(&stats, 0, sizeof(stats));
@@ -63,8 +80,18 @@ int main(int argc, char **argv)
     const char *frame_path = (argc > 1) ? argv[1] : "smoke_frame.ppm";
     uint64_t seed = (argc > 2) ? strtoull(argv[2], NULL, 10) : 20260101ULL;
 
+    static WS_ARENA_BLOCK_ALIGN unsigned char entity_arena[SMOKE_ENTITY_CAPACITY * 128u];
+    static ws_event event_storage[SMOKE_EVENT_CAPACITY];
+
+    ws_world_config config;
+    config.arena_block = entity_arena;
+    config.arena_size = sizeof(entity_arena);
+    config.entity_capacity = SMOKE_ENTITY_CAPACITY;
+    config.event_storage = event_storage;
+    config.event_capacity = SMOKE_EVENT_CAPACITY;
+
     ws_world world;
-    if (ws_world_init(&world, 1ULL, seed) != WS_OK) {
+    if (ws_world_init(&world, &config, 1ULL, seed) != WS_OK) {
         fprintf(stderr, "world init failed\n");
         return 1;
     }
@@ -81,16 +108,17 @@ int main(int argc, char **argv)
     ws_opencl_probe(&cl);
 
     char digest_hex[WS_SHA256_DIGEST_SIZE * 2u + 1u];
-    if (render_reference_frame(frame_path, digest_hex) != 0) {
+    if (render_reference_frame(frame_path, seed, digest_hex) != 0) {
         fprintf(stderr, "render failed\n");
         return 1;
     }
 
-    printf("world uid=%llu seed=%llu tick=%llu time=%.3f\n",
+    printf("world uid=%llu seed=%llu tick=%llu time=%.3f events=%u\n",
            (unsigned long long)world.world_uid,
            (unsigned long long)world.seed,
            (unsigned long long)world.tick,
-           world.time_seconds);
+           world.time_seconds,
+           ws_event_log_count(&world.events));
     printf("rng sample=%.6f\n", sample);
     printf("opencl loaded=%d device_found=%d device=\"%s\" version=\"%s\" units=%u mem=%llu\n",
            cl.runtime_loaded, cl.device_found, cl.device_name, cl.device_version,
