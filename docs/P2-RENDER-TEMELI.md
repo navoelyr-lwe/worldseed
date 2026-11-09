@@ -58,27 +58,70 @@ Altı sahne: `orbit`, `lowlight`, `spheres`, `materials`, `textured`, `sky`.
 
 `scene,seed,width,height,triangles_submitted,triangles_drawn,pixels_shaded,coverage,mean_luma,max_luma,render_ms,sha256`
 
+## Dilim 3 — Uygulama ve kullanıcıya görünür önizleme (bu dilim)
+
+Bu dilim, render temelini kullanıcıya görünür çalışan bir uygulamaya bağlar.
+
+### Paylaşılan sahne modülü
+- `ws_showcase` (`src/render/ws_showcase.h/.c`): altı referans sahneyi ve
+  bunların orijinal varlıklarını (küp/düzlem/küre meshleri, checker/noise
+  dokuları) tek bir kaynakta tanımlar. Golden harness (`ws_golden`) ve Windows
+  uygulaması bu modülü paylaşır; böylece referans karelerle uygulama çıktısı
+  birbirinden kopamaz.
+- `ws_golden` bu modüle taşındı; kare çıktıları taşımadan önce ve sonra
+  byte-özdeş kaldı (regresyon denetimi).
+
+### Windows uygulaması
+- `src/app/worldseed` (hedef adı `worldseed`): `--list`, `--selftest`,
+  `--capture <dosya>`, `--scene N`, `--seed N`, `--size WxH`, `--headless`
+  seçenekleri.
+- Windows'ta gerçek bir Win32 penceresi açılır ve CPU render çıktısı GDI ile
+  sunulur (yalnız pencere/girdi ve hazır piksel tamponu sunumu; GDI render
+  motoru değildir). Pencere yeniden boyutlandığında sahne yeni çözünürlükte
+  yeniden render edilir. Diğer platformlarda ve `--headless`/`--capture`/
+  `--selftest` ile pencere açılmaz; CI gerçek kare kanıtı üretir.
+- `--selftest` altı sahneyi render eder, her karenin sinyal taşıdığını
+  (mean_luma, max_luma) denetler ve `APP_SELFTEST_OK` yazar.
+
+### Uygulama kanıtı
+- CI, uygulamayı headless çalıştırır, `--selftest` geçer ve uygulamanın
+  320×240 `--capture` çıktısı sürümlenmiş golden referansla byte-özdeş olur.
+  Bu, uygulama ile golden harness'ın aynı sahne/renderer yolunu paylaştığını
+  kanıtlar.
+- Release iş akışı her sahneyi 1280×720 yakalar, `tools/ppm2png.ps1` ile PNG'ye
+  çevirir ve pakete (`preview/`) ve release eklerine koyar; bunlar proje
+  sahibinin görebileceği gerçek render kanıtıdır.
+- İzole Windows runner iş akışı (`gui-windows.yml`) gerçek pencereyi açar,
+  masaüstü ekran görüntüsünü (`window.png`) alır ve kanıt olarak yükler. Bu
+  iş akışı yalnız self-hosted izole runner kayıtlı olduğunda çalışır; runner
+  yokken hiçbir GUI testi "çalıştı" olarak raporlanmaz.
+
 ## Otomatik doğrulama
 
 CI (`.github/workflows/ci.yml`) Linux (gcc/clang, Debug/Release) ve Windows
 (MSVC, Debug/Release) üzerinde şunları koşar:
 
-- Tüm birim testleri (`ws_test_render` dahil 28 render/… testi).
+- Tüm birim testleri (`ws_test_render` dahil 31 render testi).
 - Golden scene: `WS_GOLDEN_OK`; aynı girdi tekrarında kare parmak izi değişmez.
 - Golden referans karşılaştırması: üretilen kare sürümlenmiş referansla
   tolerans içinde eşleşir (`ws_imgdiff`).
 - Varlık hattı: mesh ve doku varlıkları yeniden üretilebilir ve commit'lenmiş
   kayıtla byte-özdeş; provenance manifesti (`ASSET-MANIFEST.csv`) kaynak/lisans
   alanlarını taşır.
+- Uygulama kanıtı: `worldseed --selftest` geçer ve uygulamanın 320×240 kareleri
+  golden referansla byte-özdeş.
 - Windows MSVC'de golden kare parmak izi determinizmi ayrıca denetlenir.
 
 Yerel kanıt (gcc ve clang Release): altı sahnenin kare parmak izleri birebir
-aynı; `ws_test_render` 28/28 geçer; sızıntı yok (ASan/LSan).
+aynı; `ws_test_render` 31/31 geçer; sızıntı yok (ASan/LSan).
 
 ## Bilinen sınırlamalar
 
+- Uygulama şimdilik tek bir sabit sahneyi gösteren bir görüntüleyicidir: kamera
+  hareketi, sahne değiştirme, ayarlar ve tam ekran sonraki aşamalardadır.
 - Bu renderer gölge, yansıma, ortam kapanımı (AO), normal/roughness haritası ve
   gerçek PBR enerji korunumu içermez. Nihai yüksek kaliteli renderer değildir.
 - Doku yalnızca albedo içindir; filtrelenmiş mipmap yoktur.
 - Gökyüzü tek renk gradyanıdır; bulut/atmosfer saçılımı yoktur.
+- Sahne değişimi başlangıç argümanıyladır; çalışma sırasında etkileşim yoktur.
 - Görsel kalite protokolü (`08` belgesi) ayrıdır; bu dilim estetik iddia etmez.

@@ -4,10 +4,6 @@ name: GUI (Windows, isolated runner)
 # Windows runner that is allowlisted for this repository. Fork/external PR code
 # is never executed here: the job is gated on a trusted ref allowlist below.
 #
-# Until a GUI window exists (P11), this workflow builds the Windows x64 target
-# and runs the headless smoke test on the Windows runner so the isolated runner
-# path is exercised end to end. GUI window/input tests are added when the
-# viewer lands.
 # The runner label [self-hosted, windows, x64, worldseed-gui] is not yet
 # registered, so an automatic push trigger would queue indefinitely. Until the
 # isolated runner is provisioned, this workflow is manual-only; this is recorded
@@ -52,7 +48,36 @@ jobs:
             Tee-Object -FilePath evidence/gui/smoke-gui.txt
           if (-not (Select-String -Path evidence/gui/smoke-gui.txt -Pattern "WS_SMOKE_OK" -Quiet)) { exit 1 }
 
+      - name: App headless capture on isolated runner
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path evidence/gui/app | Out-Null
+          & build-gui/src/app/Release/worldseed.exe --selftest --size 640x360 |
+            Tee-Object -FilePath evidence/gui/app/selftest.txt
+          if (-not (Select-String -Path evidence/gui/app/selftest.txt -Pattern "APP_SELFTEST_OK" -Quiet)) { exit 1 }
+
+      - name: Real window launch and screenshot
+        shell: pwsh
+        run: |
+          # Launch the actual Win32 window, let it present a frame, capture the
+          # desktop, then close it. This is a real GUI test, not a headless one.
+          New-Item -ItemType Directory -Force -Path evidence/gui/app | Out-Null
+          $exe = "build-gui/src/app/Release/worldseed.exe"
+          $proc = Start-Process -FilePath $exe -ArgumentList "--scene","5","--size","1280x720" -PassThru
+          Start-Sleep -Seconds 5
+          Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+          $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $gfx = [System.Drawing.Graphics]::FromImage($bmp)
+          $gfx.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bmp.Save("evidence/gui/app/window.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $gfx.Dispose(); $bmp.Dispose()
+          if (-not $proc.HasExited) { $proc.CloseMainWindow() | Out-Null; Start-Sleep -Seconds 2 }
+          if (-not $proc.HasExited) { $proc.Kill() }
+          if (-not (Test-Path "evidence/gui/app/window.png")) { Write-Error "no window screenshot produced"; exit 1 }
+
       - name: Upload evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gui-smoke

@@ -53,15 +53,33 @@ jobs:
       - name: Package (portable folder + zip)
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path evidence/preview | Out-Null
+          $exe = "build/src/app/Release/worldseed.exe"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky"
+          for ($i = 0; $i -lt $scenes.Count; $i++) {
+            $s = $scenes[$i]
+            & $exe --capture "evidence/preview/$s.ppm" --scene $i --size 1280x720
+            & tools/ppm2png.ps1 -In "evidence/preview/$s.ppm" -Out "evidence/preview/$s.png"
+          }
+          & $exe --selftest --size 640x360 | Tee-Object -FilePath evidence/preview/selftest.txt
+
           $stage = "stage/worldseed"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item build/tools/Release/ws_smoke.exe $stage/
-          New-Item -ItemType File -Force -Path "$stage/README.txt" |
-            Set-Content -Value "Worldseed Engine preview build. See docs/13-YOL-HARITASI.md."
+          Copy-Item $exe "$stage/worldseed.exe"
+          New-Item -ItemType Directory -Force -Path "$stage/preview" | Out-Null
+          Copy-Item evidence/preview/*.png "$stage/preview/"
+          @(
+            "Worldseed Engine preview (P2 - render temeli).",
+            "Calistirma: worldseed.exe --scene 5 --size 1280x720",
+            "Sahneler: worldseed.exe --list",
+            "Kanit: preview/*.png (CPU referans renderer ciktilari) ve CI artefaktlari.",
+            "Bu bir onizleme surumudur; simulasyon ve etkilesim sonraki asamalardadir."
+          ) | Set-Content -Path "$stage/README.txt"
           Compress-Archive -Path "$stage/*" -DestinationPath "worldseed-windows-x64.zip" -Force
           Get-FileHash worldseed-windows-x64.zip -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash)  worldseed-windows-x64.zip" } |
             Set-Content -Path worldseed-windows-x64.zip.sha256
+
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
@@ -69,6 +87,8 @@ jobs:
           path: |
             worldseed-windows-x64.zip
             worldseed-windows-x64.zip.sha256
+            evidence/preview/*.png
+            evidence/preview/selftest.txt
 
   publish:
     name: publish prerelease
@@ -87,8 +107,25 @@ jobs:
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             tag="${{ github.event.inputs.version }}"
           fi
+          printf '%s\n' \
+            "Worldseed Engine onizleme surumu (P2 - render temeli)." \
+            "" \
+            "Bu paket, kendi C17 CPU referans renderer'imizle uretilen sabit sahneleri gosterir." \
+            "worldseed.exe --list ile sahne listesini, --scene N ile secimi gorursunuz." \
+            "preview/ klasorunde her sahnenin gercek render ciktisi PNG olarak eklenmistir." \
+            "" \
+            "Bu surumde olanlar: sahne/geometri/malzeme/isik/doku boru hatti, CPU referans" \
+            "renderer, golden-scene kaniti ve determinizm testleri." \
+            "Bu surumde henuz olmayanlar: canli simulasyon, fizik, canli modelleri, etkilesim" \
+            "ve sinematik yonetmen (sonraki asamalar)." \
+            "" \
+            "Kanit: bu surumun ekleri (preview/*.png), sha256 dosyasi ve CI artefaktlari." \
+            > notes.md
           gh release create "$tag" \
             worldseed-windows-x64.zip worldseed-windows-x64.zip.sha256 \
+            evidence/preview/orbit.png evidence/preview/lowlight.png \
+            evidence/preview/spheres.png evidence/preview/materials.png \
+            evidence/preview/textured.png evidence/preview/sky.png \
             --title "$tag" \
             --prerelease \
-            --notes "Otomatik üretilen preview paketi. Kanıt ve sınırlamalar docs/ ve CI artifact'lerindedir."
+            --notes-file notes.md

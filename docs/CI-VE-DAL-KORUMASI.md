@@ -47,6 +47,20 @@ JSON
 - Ağ erişimi en aza indirilir; fork/harici PR kodu asla çalıştırılmaz.
 - Runner yoksa GUI işi "çalıştı" sayılmaz; gerçek pencere testi runner kaydıyla başlar.
 
+## GUI testinin kapsamı (P2)
+
+`gui-windows.yml` runner kayıtlı olduğunda şunları yapar:
+
+1. Windows x64 Release derlemesi ve tüm birim testleri.
+2. `ws_smoke` ile penceresiz smoke testi (`WS_SMOKE_OK`).
+3. `worldseed.exe --selftest` ile altı sahnenin render doğrulaması (`APP_SELFTEST_OK`).
+4. Gerçek Win32 penceresini açar, 5 saniye bekler, masaüstü ekran görüntüsünü
+   `evidence/gui/app/window.png` olarak kaydeder ve pencereyi kapatır.
+
+Bu, gerçek pencereyi çalıştıran ve gerçek görüntü üreten bir GUI testidir; yalnız
+headless çalıştırma değildir. Runner kayıtlı değilken iş akışı manueldir ve hiçbir
+GUI testi "çalıştı" olarak raporlanmaz.
+
 ## Erişim sınırı özeti
 
 - Çalışan: dal oluşturma, push, PR açma, PR birleştirme.

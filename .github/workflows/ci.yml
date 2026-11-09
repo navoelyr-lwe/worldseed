@@ -133,6 +133,24 @@ jobs:
             done
           done
 
+      - name: Application capture
+        run: |
+          # The user-visible preview app renders the same scenes headless and
+          # writes real frame evidence. Its 320x240 output must match the golden
+          # references byte-for-byte, proving the app and the golden harness
+          # share one scene/renderer path.
+          mkdir -p evidence/app
+          ./build/src/app/worldseed --selftest --size 640x360 | tee evidence/app/selftest.txt
+          grep -q "APP_SELFTEST_OK" evidence/app/selftest.txt
+          ./build/src/app/worldseed --list | tee evidence/app/scenes.txt
+          i=0
+          for s in orbit lowlight spheres materials textured sky; do
+            ./build/src/app/worldseed --capture "evidence/app/$s.ppm" --scene $i --size 320x240
+            cmp "evidence/app/$s.ppm" "tests/golden/$s.ppm" \
+              || { echo "app frame $s differs from golden reference"; exit 1; }
+            i=$((i + 1))
+          done
+
       - name: Upload evidence
         uses: actions/upload-artifact@v4
         with:
@@ -209,6 +227,27 @@ jobs:
                 if ((Get-FileHash $gen).Hash -ne (Get-FileHash "evidence/assets/repeat/$a.$ext").Hash) { Write-Error "asset $a.$ext not reproducible"; exit 1 }
                 if ((Get-FileHash $gen).Hash -ne (Get-FileHash "assets/primitives/$a.$ext").Hash) { Write-Error "committed asset $a.$ext differs"; exit 1 }
               }
+            }
+          }
+
+      - name: Application capture
+        shell: pwsh
+        run: |
+          # The user-visible preview app renders the same scenes headless and
+          # writes real frame evidence. Its 320x240 output must match the golden
+          # references byte-for-byte (hash compare: Windows has no cmp).
+          New-Item -ItemType Directory -Force -Path evidence/app | Out-Null
+          & build/src/app/${{ matrix.build_type }}/worldseed.exe --selftest --size 640x360 |
+            Tee-Object -FilePath evidence/app/selftest.txt
+          if (-not (Select-String -Path evidence/app/selftest.txt -Pattern "APP_SELFTEST_OK" -Quiet)) { exit 1 }
+          & build/src/app/${{ matrix.build_type }}/worldseed.exe --list |
+            Tee-Object -FilePath evidence/app/scenes.txt
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky"
+          for ($i = 0; $i -lt $scenes.Count; $i++) {
+            $s = $scenes[$i]
+            & build/src/app/${{ matrix.build_type }}/worldseed.exe --capture "evidence/app/$s.ppm" --scene $i --size 320x240
+            if ((Get-FileHash "evidence/app/$s.ppm").Hash -ne (Get-FileHash "tests/golden/$s.ppm").Hash) {
+              Write-Error "app frame $s differs from golden reference"; exit 1
             }
           }
 
