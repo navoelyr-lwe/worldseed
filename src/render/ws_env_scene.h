@@ -27,7 +27,15 @@
 #include "ws_texture.h"
 
 #define WS_ENV_MAX_TREES 900u
-#define WS_ENV_MAX_OBJECTS (2u + WS_ENV_MAX_TREES)
+#define WS_ENV_MAX_OBJECTS (3u + WS_ENV_MAX_TREES)
+
+/* Scene kinds. 0..2 are static environment states; 3 (terrain_physics) drops a
+ * rigid body onto the terrain with the P4 solver and renders it where it comes
+ * to rest, so the physics result is visible and reproducible. */
+#define WS_ENV_SCENE_DAY 0
+#define WS_ENV_SCENE_DUSK 1
+#define WS_ENV_SCENE_WEATHER 2
+#define WS_ENV_SCENE_PHYSICS 3
 
 typedef struct ws_env_scene_options {
     uint64_t seed;
@@ -35,7 +43,7 @@ typedef struct ws_env_scene_options {
     int64_t region_y;
     uint32_t cells;        /* region cells per edge */
     double cell_size;      /* metres per cell */
-    int scene_kind;        /* 0 = day, 1 = dusk, 2 = weather */
+    int scene_kind;        /* ws_env_scene_kind constant */
     double time_of_day_s;  /* seconds since local midnight */
 } ws_env_scene_options;
 
@@ -63,6 +71,14 @@ typedef struct ws_env_scene {
     ws_vertex *cone_verts;
     uint32_t *cone_idx;
     ws_mesh cone_mesh;
+
+    /* Physics prop (scene kind 3): a sphere dropped onto the terrain and left
+     * where the P4 solver brings it to rest. */
+    ws_vertex *rock_verts;
+    uint32_t *rock_idx;
+    ws_mesh rock_mesh;
+    ws_mat4 rock_transform;
+    double rock_rest_y; /* final centre height in metres, for evidence */
 
     ws_scene_object *objects;
     uint32_t object_capacity;

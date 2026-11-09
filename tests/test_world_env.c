@@ -344,6 +344,28 @@ static int test_catalog_builds_all(void)
     return 1;
 }
 
+/* The physics scene must drop a body and render it at rest; the same seed must
+ * reproduce the exact resting height. */
+static int test_env_scene_physics(void)
+{
+    ws_env_scene_options o = ws_env_scene_options_default(20260101ULL);
+    o.scene_kind = WS_ENV_SCENE_PHYSICS;
+    ws_env_scene a;
+    ws_env_scene b;
+    WS_CHECK(ws_env_scene_create(&a, &o) == WS_OK);
+    WS_CHECK(ws_env_scene_create(&b, &o) == WS_OK);
+    /* Rock rests above the terrain, not sunk into it, and is rendered. */
+    WS_CHECK(a.rock_rest_y > a.terrain.config.water_level);
+    WS_CHECK(a.scene.object_count >= 1u);
+    /* Deterministic: the same seed lands the rock at exactly the same height. */
+    WS_CHECK(a.rock_rest_y == b.rock_rest_y);
+    WS_CHECK(a.rock_transform.m[12] == b.rock_transform.m[12]);
+    WS_CHECK(a.rock_transform.m[14] == b.rock_transform.m[14]);
+    ws_env_scene_free(&a);
+    ws_env_scene_free(&b);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -361,6 +383,7 @@ int main(void)
         {"env scene builds", test_env_scene_builds},
         {"env scene repeatable", test_env_scene_repeatable},
         {"env scene long run stable", test_env_scene_long_run_stable},
+        {"env scene physics drop", test_env_scene_physics},
         {"catalog builds all scenes", test_catalog_builds_all},
     };
     return ws_test_run("world_env", cases, (int)(sizeof(cases) / sizeof(cases[0])));

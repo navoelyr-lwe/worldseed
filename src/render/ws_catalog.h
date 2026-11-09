@@ -21,7 +21,7 @@
 #include "ws_scene.h"
 #include "ws_showcase.h"
 
-#define WS_CATALOG_MAX_ENV 3u
+#define WS_CATALOG_MAX_ENV 4u
 
 typedef struct ws_catalog {
     int is_env;            /* 1 when the current scene is procedural */
