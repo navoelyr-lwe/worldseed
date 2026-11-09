@@ -99,7 +99,7 @@ jobs:
           # Same input must reproduce the same frame digests within a run.
           mkdir -p evidence/golden/repeat
           ./build/tools/ws_golden evidence/golden/repeat 20260101 >/dev/null
-          for s in orbit lowlight spheres materials textured sky terrain_day terrain_dusk terrain_weather terrain_physics creature_walk; do
+          for s in orbit lowlight spheres materials textured sky terrain_day terrain_dusk terrain_weather terrain_physics creature_walk organism_forage; do
             a=$(grep "^$s," evidence/golden/manifest.csv | cut -d, -f12)
             b=$(grep "^$s," evidence/golden/repeat/manifest.csv | cut -d, -f12)
             test "$a" = "$b" || { echo "golden scene $s not reproducible"; exit 1; }
@@ -120,6 +120,10 @@ jobs:
           # lighting), so it is gated with a documented looser tolerance that
           # still fails on a missing or grossly misplaced creature.
           ./build/tools/ws_imgdiff evidence/golden/creature_walk.ppm tests/golden/creature_walk.ppm 3.0 0.80
+          # organism_forage also runs the dynamic articulated simulation (settle,
+          # then a heading-dependent rotation), so it carries the same cross-
+          # compiler sub-pixel divergence and is gated the same way.
+          ./build/tools/ws_imgdiff evidence/golden/organism_forage.ppm tests/golden/organism_forage.ppm 3.0 0.80
 
       - name: Asset pipeline
         run: |
@@ -153,7 +157,7 @@ jobs:
           grep -q "APP_SELFTEST_OK" evidence/app/selftest.txt
           ./build/src/app/worldseed --list | tee evidence/app/scenes.txt
           i=0
-          for s in orbit lowlight spheres materials textured sky terrain_day terrain_dusk terrain_weather terrain_physics creature_walk; do
+          for s in orbit lowlight spheres materials textured sky terrain_day terrain_dusk terrain_weather terrain_physics creature_walk organism_forage; do
             ./build/src/app/worldseed --capture "evidence/app/$s.ppm" --scene $i --size 320x240
             cmp "evidence/app/$s.ppm" "evidence/golden/$s.ppm" \
               || { echo "app frame $s differs from golden harness"; exit 1; }
@@ -203,7 +207,7 @@ jobs:
           # Same input must reproduce the same frame digests within a run.
           New-Item -ItemType Directory -Force -Path evidence/golden/repeat | Out-Null
           & build/tools/${{ matrix.build_type }}/ws_golden.exe evidence/golden/repeat 20260101 | Out-Null
-          foreach ($s in "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk") {
+          foreach ($s in "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage") {
             $a = (Select-String -Path evidence/golden/manifest.csv -Pattern "^$s,").Line.Split(",")[11]
             $b = (Select-String -Path evidence/golden/repeat/manifest.csv -Pattern "^$s,").Line.Split(",")[11]
             if ($a -ne $b) { Write-Error "golden scene $s not reproducible"; exit 1 }
@@ -221,6 +225,10 @@ jobs:
           # differences between the MSVC CRT and glibc amplify into a sub-pixel
           # pose shift, so it is gated with a documented looser tolerance.
           & build/tools/${{ matrix.build_type }}/ws_imgdiff.exe "evidence/golden/creature_walk.ppm" "tests/golden/creature_walk.ppm" 3.0 0.80
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          # organism_forage also runs the dynamic articulated simulation, so it is
+          # gated the same way.
+          & build/tools/${{ matrix.build_type }}/ws_imgdiff.exe "evidence/golden/organism_forage.ppm" "tests/golden/organism_forage.ppm" 3.0 0.80
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Asset pipeline
@@ -258,7 +266,7 @@ jobs:
           if (-not (Select-String -Path evidence/app/selftest.txt -Pattern "APP_SELFTEST_OK" -Quiet)) { exit 1 }
           & build/src/app/${{ matrix.build_type }}/worldseed.exe --list |
             Tee-Object -FilePath evidence/app/scenes.txt
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage"
           for ($i = 0; $i -lt $scenes.Count; $i++) {
             $s = $scenes[$i]
             & build/src/app/${{ matrix.build_type }}/worldseed.exe --capture "evidence/app/$s.ppm" --scene $i --size 320x240

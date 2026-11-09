@@ -392,6 +392,39 @@ static int test_env_scene_creature(void)
     return 1;
 }
 
+/* The behaviour scene must run the organism agent, place the resource from the
+ * decision, pose the animal at its chosen spot and render it; the same seed
+ * must reproduce the exact decision and pose. */
+static int test_env_scene_organism(void)
+{
+    ws_env_scene_options o = ws_env_scene_options_default(20260101ULL);
+    o.scene_kind = WS_ENV_SCENE_ORGANISM;
+    ws_env_scene a;
+    ws_env_scene b;
+    WS_CHECK(ws_env_scene_create(&a, &o) == WS_OK);
+    WS_CHECK(ws_env_scene_create(&b, &o) == WS_OK);
+    /* The animal acted on a resource: it chose a behaviour, moved, and a food
+     * or water marker was placed. */
+    WS_CHECK(a.organism_behavior >= 0);
+    WS_CHECK(a.organism_dist_m > 0.5);
+    WS_CHECK(a.resource_kind == WS_SENSE_FOOD || a.resource_kind == WS_SENSE_WATER);
+    WS_CHECK(a.organism_food_found > 0u || a.organism_water_found > 0u);
+    WS_CHECK(a.creature_body_count >= 7u);
+    WS_CHECK(a.scene.object_count >= a.creature_body_count);
+    /* Deterministic: the same seed reproduces the same decision and pose. */
+    WS_CHECK(a.organism_behavior == b.organism_behavior);
+    WS_CHECK(a.organism_dist_m == b.organism_dist_m);
+    WS_CHECK(a.resource_x == b.resource_x);
+    WS_CHECK(a.resource_z == b.resource_z);
+    const ws_cbody *ta = &a.creature_bodies[a.creature_parts.torso];
+    const ws_cbody *tb = &b.creature_bodies[b.creature_parts.torso];
+    WS_CHECK(ta->px == tb->px);
+    WS_CHECK(ta->py == tb->py);
+    ws_env_scene_free(&a);
+    ws_env_scene_free(&b);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -411,6 +444,7 @@ int main(void)
         {"env scene long run stable", test_env_scene_long_run_stable},
         {"env scene physics drop", test_env_scene_physics},
         {"env scene creature walk", test_env_scene_creature},
+        {"env scene organism forage", test_env_scene_organism},
         {"catalog builds all scenes", test_catalog_builds_all},
     };
     return ws_test_run("world_env", cases, (int)(sizeof(cases) / sizeof(cases[0])));
