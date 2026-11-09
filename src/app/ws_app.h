@@ -39,10 +39,6 @@ ws_result ws_app_parse_options(int argc, char **argv, ws_app_options *opts);
 ws_result ws_app_render_scene(const ws_app_options *opts, ws_framebuffer *fb,
                               float *depth);
 
-/* Render every scene and check each frame carries signal. Prints one line per
- * scene and a final result line. Returns WS_OK when all scenes pass. */
-ws_result ws_app_selftest(const ws_app_options *opts);
-
 /* Run the application. Opens a window unless headless. Returns a process exit
  * code (0 on success). */
 int ws_app_run(const ws_app_options *opts);

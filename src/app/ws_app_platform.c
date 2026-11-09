@@ -12,6 +12,8 @@
 #if defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
+#define UNICODE
+#define _UNICODE
 #include <windows.h>
 
 #include "../render/ws_framebuffer.h"
@@ -133,7 +135,7 @@ int ws_app_present_win32(const ws_app_options *opts)
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = ws_app_wndproc;
     wc.hInstance = inst;
-    wc.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    wc.hCursor = LoadCursorW(NULL, (LPCWSTR)IDC_ARROW);
     wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wc.lpszClassName = class_name;
     if (RegisterClassExW(&wc) == 0) {
