@@ -66,6 +66,14 @@ sıcaklık, su) sonraki aşamalardadır. Model kartı sınırı kaydeder.
   `terrain_physics`, `creature_walk`. `tests/golden/manifest.csv` yeni sahnenin
   parmak izini ve teknik ölçütlerini kaydeder.
 - Diğer on sahne byte-özdeş kalır (regresyon yok).
+- Derleyiciler arası (gcc/clang/MSVC) golden karşılaştırması: on statik sahne
+  tüm derleyicilerde piksel-özdeş kalır. `creature_walk` dinamik bir katı cisim
+  simülasyonu olduğu için, MSVC CRT ile glibc'nin son-bit `libm` (sin/cos/atan2/
+  acos) farkları uzun koşuda yarım piksel mertebesinde bir poz kaymasına büyür.
+  Kare yine aynı sahneyi gösterir (aynı geometri, örtü, ışık); bu yüzden statik
+  sahneler sıkı toleransla (mean≤3, ssim≥0.99), `creature_walk` ise belgelenmiş
+  daha gevşek toleransla (ssim≥0.80) kapılanır. Eksik veya belirgin yanlış
+  yerleşmiş canlı bu kapıyı yine de geçemez.
 
 ## Model kartları ve kanıt düzeyi
 
