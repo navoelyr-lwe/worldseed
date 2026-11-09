@@ -1,0 +1,146 @@
+name: CI
+
+# PR and push verification on GitHub-hosted runners only.
+# Real Windows GUI tests run in the separate, isolated gui-windows workflow.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-matrix:
+    name: linux ${{ matrix.compiler }} ${{ matrix.build_type }} ${{ matrix.sanitizers }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            build_type: Debug
+            sanitizers: on
+          - compiler: gcc
+            cc: gcc
+            build_type: Release
+            sanitizers: off
+          - compiler: clang
+            cc: clang
+            build_type: Debug
+            sanitizers: on
+          - compiler: clang
+            cc: clang
+            build_type: Release
+            sanitizers: off
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DWS_ENABLE_SANITIZERS=${{ matrix.sanitizers }} \
+            -DWS_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Headless smoke
+        run: |
+          mkdir -p evidence/smoke
+          ./build/tools/ws_smoke evidence/smoke/frame-${{ matrix.compiler }}-${{ matrix.build_type }}.ppm 20260101 \
+            | tee evidence/smoke/smoke-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
+          grep -q "WS_SMOKE_OK" evidence/smoke/smoke-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ matrix.compiler }}-${{ matrix.build_type }}-${{ matrix.sanitizers }}
+          path: evidence/smoke/
+
+  windows-msvc:
+    name: windows msvc ${{ matrix.build_type }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DWS_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }}
+
+      - name: Unit tests
+        run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure
+
+      - name: Headless smoke
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path evidence/smoke | Out-Null
+          & build/tools/${{ matrix.build_type }}/ws_smoke.exe evidence/smoke/frame-msvc-${{ matrix.build_type }}.ppm 20260101 |
+            Tee-Object -FilePath evidence/smoke/smoke-msvc-${{ matrix.build_type }}.txt
+          if (-not (Select-String -Path evidence/smoke/smoke-msvc-${{ matrix.build_type }}.txt -Pattern "WS_SMOKE_OK" -Quiet)) { exit 1 }
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-msvc-${{ matrix.build_type }}
+          path: evidence/smoke/
+
+  plan-integrity:
+    name: plan integrity
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify plan bundle SHA-256
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, sys
+          parts = sorted(Path("docs/plan-bundle").glob("part-*.txt"))
+          if len(parts) != 16:
+              sys.exit(f"expected 16 parts, found {len(parts)}")
+          payload = base64.b64decode("".join(p.read_text(encoding="ascii").strip() for p in parts), validate=True)
+          expected = "69c49e5d7868fe1d83c2559f5da703a95eb443d18e4a5bd8b29eaa6c5a8f2f5a"
+          actual = hashlib.sha256(payload).hexdigest()
+          if actual != expected:
+              sys.exit(f"plan bundle digest mismatch: {actual}")
+          print("plan bundle digest verified:", actual)
+          PY
+
+  docs-links:
+    name: docs links
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify README doc links resolve
+        run: |
+          python3 - <<'PY'
+          import re, sys
+          from pathlib import Path
+          text = Path("README.md").read_text(encoding="utf-8")
+          missing = [m for m in re.findall(r"`(docs/[A-Za-z0-9._/-]+)`", text) if not Path(m).exists()]
+          if missing:
+              sys.exit("missing linked docs: " + ", ".join(sorted(set(missing))))
+          print("all README doc links resolve")
+          PY

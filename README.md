@@ -3,7 +3,7 @@
 **GitHub deposu:** `navoelyr-lwe/worldseed`  
 **Ürün adı:** Worldseed Engine  
 **Belge sürümü:** 0.2.0  
-**Durum:** Yeni depo ve bağlayıcı başlangıç kararları oluşturuldu. Tam plan arşivi `docs/plan-bundle/` altında aktarım parçaları hâlinde saklanıyor; ilk OpenHands görevi bunu geri açıp kanonik `docs/` belgelerini yerleştirmek ve planı denetlemek. Henüz ürün kodu yoktur.  
+**Durum:** Tam plan arşivi `docs/plan-bundle/` üzerinden SHA-256 doğrulamasıyla geri açıldı (22 dosya) ve kanonik `docs/` belgeleri yerleştirildi. Plan denetimi yapıldı; çelişkiler ve eksik kabul eşikleri düzeltildi. C17/OpenCL/CPU renderer/varlık/golden-scene için feasibility planları ve prototipleri hazırlandı. CI, dal koruması ve izole Windows GUI runner düzeni kuruldu. İlk görev bir doküman/altyapı PR'ıdır; ürün release'i değildir.  
 **Ana dil:** ISO C17; GPU compute için sabitlenmiş tek istisna OpenCL C 1.2 kernel dili.
 
 > **Ürün ilkesi:** Dünya yaşar. Canlılar kendi fiziksel ve biyolojik kurallarıyla davranır. Sinematik gözlemci olayları yaratmaz; gerçekten yaşananları bulur ve gösterir.
@@ -36,6 +36,23 @@ Tam ürün planı 22 dosyadır. İçerik `docs/plan-bundle/RESTORE.md` yönerges
 | `docs/PLAN-README.md` | Plan paketinin içindekiler ve belge önceliği |
 | `docs/PLAN-MANIFEST.json` | Plan dosyalarının manifesti |
 | `docs/PLAN-AGENTS-REFERENCE.md` | Plan paketindeki ajan yönergelerinin referans kopyası |
+
+## Denetim, altyapı ve karar kayıtları
+
+| Dosya | Konu |
+|---|---|
+| `docs/DENETIM-RAPORU.md` | Plan denetimi, çelişkiler ve yapılan düzeltmeler |
+| `docs/CI-VE-DAL-KORUMASI.md` | CI, dal koruması ve izole Windows GUI runner düzeni |
+| `docs/MILESTONE-BOARD.md` | Aşama durumları ve açık blokajlar |
+| `docs/adr/README.md` | Mimari karar kayıtları dizini |
+| `docs/adr/ADR-007-yetki-devri-ve-release.md` | Yetki devri ve release yayımlama |
+| `docs/adr/ADR-008-varlik-ve-icerik-uretimi.md` | Varlık ve içerik üretimi (özgün C17 hattı) |
+| `docs/adr/ADR-009-ci-dal-korumasi-ve-runner.md` | CI, dal koruması ve izole GUI runner politikası |
+| `docs/adr/ADR-010-kaynak-kodu-lisansi.md` | Kaynak kodu lisansı ve içerik menşei kaydı |
+| `docs/feasibility/FEASIBILITY-CPU-RENDERER.md` | C17 tiled CPU renderer fizibilitesi |
+| `docs/feasibility/FEASIBILITY-OPENCL.md` | OpenCL 1.2 / OpenCL C 1.2 ve CPU fallback fizibilitesi |
+| `docs/feasibility/FEASIBILITY-ASSET-PIPELINE.md` | Kendi C17 varlık üretim hattı planı |
+| `docs/feasibility/FEASIBILITY-GOLDEN-SCENE.md` | Otomatik golden-scene kanıt planı |
 
 ## Yeni ve bağımsız depo
 
