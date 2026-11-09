@@ -49,9 +49,11 @@ ws_result ws_vegetation_create(ws_vegetation *veg, const ws_terrain *terrain,
     }
     memset(veg, 0, sizeof(*veg));
     size_t cell_count = (size_t)terrain->cells * (size_t)terrain->cells;
-    /* Worst case: every cell can hold one plant of each kind. */
+    /* Worst case: every cell can hold one plant of each kind.
+     * calloc so struct padding is deterministic: callers compare/hash the
+     * plant array as raw bytes (same reason vertices are zeroed). */
     size_t capacity = cell_count * (size_t)WS_PLANT_KIND_COUNT;
-    veg->plants = (ws_plant *)malloc(capacity * sizeof(ws_plant));
+    veg->plants = (ws_plant *)calloc(capacity, sizeof(ws_plant));
     if (veg->plants == NULL) {
         return WS_ERR_OUT_OF_MEMORY;
     }
