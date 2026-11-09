@@ -55,7 +55,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path evidence/preview | Out-Null
           $exe = "build/src/app/Release/worldseed.exe"
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk"
           for ($i = 0; $i -lt $scenes.Count; $i++) {
             $s = $scenes[$i]
             & $exe --capture "evidence/preview/$s.ppm" --scene $i --size 1280x720
@@ -69,8 +69,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$stage/preview" | Out-Null
           Copy-Item evidence/preview/*.png "$stage/preview/"
           @(
-            "Worldseed Engine preview (P4 - cevresel fizik).",
-            "Calistirma: worldseed.exe --scene 9 --size 1280x720",
+            "Worldseed Engine preview (P5 - referans canli biyomekanigi).",
+            "Calistirma: worldseed.exe --scene 10 --size 1280x720",
             "Sahneler: worldseed.exe --list",
             "Kanit: preview/*.png (CPU referans renderer ciktilari) ve CI artefaktlari.",
             "Bu bir onizleme surumudur; simulasyon ve etkilesim sonraki asamalardadir."
@@ -108,7 +108,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P4 - cevresel fizik)." \
+            "Worldseed Engine onizleme surumu (P5 - referans canli biyomekanigi)." \
             "" \
             "Bu paket, kendi C17 CPU referans renderer'imizle uretilen sabit sahneleri gosterir." \
             "worldseed.exe --list ile sahne listesini, --scene N ile secimi gorursunuz." \
@@ -117,8 +117,10 @@ jobs:
             "Bu surumde olanlar: sahne/geometri/malzeme/isik/doku boru hatti, CPU referans" \
             "renderer, prosedurel arazi/su/habitat/bitki/atmosfer, kendi C17 fizik cekirdegi" \
             "(yercekimi, temas, surtunme, restitusyon, ruzgar, kaldirma), terrain_physics" \
-            "golden sahnesi, golden-scene kaniti ve determinizm testleri." \
-            "Bu surumde henuz olmayanlar: canli simulasyon, canli modelleri, etkilesim" \
+            "golden sahnesi ve P5 referans canli biyomekanigi (artikule beden, kapali-cevrim" \
+            "yuruyus kontrolcusu, creature_walk golden sahnesi), golden-scene kaniti ve" \
+            "determinizm testleri." \
+            "Bu surumde henuz olmayanlar: tam ekosistem simulasyonu, diger turler, etkilesim" \
             "ve sinematik yonetmen (sonraki asamalar)." \
             "" \
             "Kanit: bu surumun ekleri (preview/*.png), sha256 dosyasi ve CI artefaktlari." \
@@ -130,6 +132,7 @@ jobs:
             evidence/preview/textured.png evidence/preview/sky.png \
             evidence/preview/terrain_day.png evidence/preview/terrain_dusk.png \
             evidence/preview/terrain_weather.png evidence/preview/terrain_physics.png \
+            evidence/preview/creature_walk.png \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md
