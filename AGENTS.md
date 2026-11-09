@@ -33,7 +33,7 @@ Aktarım arşivinin beklenen SHA-256 değeri RESTORE belgesinde sabittir. Özet 
 - C++, CUDA, GLSL, HLSL, SPIR-V shader source, Vulkan/OpenGL/Direct3D renderer pipeline, üçüncü taraf oyun/render/fizik/AI/audio runtime yasaktır.
 - Kendi C17 tiled CPU renderer zorunlu referans/fallback; OpenCL compute GPU backend isteğe bağlı hızlandırma. GPU yoksa CPU fallback.
 - Windows Win32/GDI yalnız pencere/girdi ve hazır piksel tamponu sunumu içindir; GDI render motoru değildir.
-- Varlıklar veri dosyalarıdır. Özgün, kamu malı/CC0 veya ticari kullanım izni net ve kaynak/lisansı kayıtlı içerik kullanılabilir. Harici executable, script, plugin, library veya engine kullanılamaz.
+- İlk release'e giren mesh, doku, materyal, rig, animasyon ve ses içerikleri de dışarıdan hazır paket olarak alınmaz; kendi C17 içerik/varlık hattımızla özgün olarak üretilir veya proje içinde tanımlanır. Harici hazır model/texture/animation/audio asset paketi kullanılmaz. Bilimsel parametre ve ölçüm verileri kaynak gösterilerek model kartlarında referans alınabilir; bunlar runtime varlık paketi değildir. Harici executable, script, plugin, library, engine veya içerik paketi bağımlılığı eklenmez.
 - İlk ekosistem 2×2 km ılıman karma orman/orman-çayır; habitatlar orman, çayır/açıklık, tatlı su kenarı ve kayalık/yamaç.
 - İlk türler kızıl geyik, kızıl tilki, Avrupa tavşanı, yaban domuzu. Dört türün tamamı fiziksel beden ve türe özgü hareket kontrol modeli kullanır. Kuş uçuşu sonraki sürüme bırakılır.
 - Donanım profilleri, GPU kararı, asset ilkesi ve uzak alan modeli proje planındaki sabit kararlar belgesindedir.
@@ -51,7 +51,7 @@ Kullanıcıya teknik tercih sorusu sorma. Sabit belgelerde yer alan kararı uygu
 - OpenHands kendi PR'ını tüm zorunlu test/kanıt kapıları geçince merge edebilir.
 - Her kullanıcıya görünür milestone, Windows x64 paketi, temiz ortam smoke test, GUI/golden-scene ve performans kapıları geçince prerelease olur. Sadece belge/altyapı işleri ürün release'i sayılmaz.
 - `1.0.0` ancak ürün sözleşmesindeki tüm koşullar geçince yayımlanır.
-- Preview/stable release yayınlama yetkisi proje sahibi tarafından OpenHands'e devredilmiştir; ayrıca onay sorulmaz.
+- Preview/stable release yayınlama yetkisi proje sahibi tarafından OpenHands'e devredilmiştir; tüm yayın kapıları geçince her release ayrıca izin sorulmadan yayımlanır. Belgelerdeki eski/çelişkili 'proje sahibi onayı gerekir' ifadeleri bu yetki devriyle geçersizdir; ilk dokümantasyon PR'ında düzeltilir.
 - Branch protection / ruleset ilk görevde kontrol edilmeli; eksikse mevcut GitHub erişimi ve CLI/UI araçlarıyla kurulmalı. Entegrasyon yetkisi yetersizse bunu saklama, yapılmış gibi işaretleme veya kullanıcıyı teknik ayarlara yönlendirme; otomatik erişim sınırını sade dille raporla ve ürün koduna geçmeden önce en azından PR/CI kapılarını uygula.
 
 ## Tamamlandı tanımı
