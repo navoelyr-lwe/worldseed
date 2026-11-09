@@ -1,21 +1,34 @@
-/* Worldseed Engine — world context (minimal P1 foundation). */
+/* Worldseed Engine — world context (P1 engine core). */
 #include "ws_world.h"
 
 #include <stddef.h>
 
 #define WS_RNG_STREAM_WORLD 1u
 
-ws_result ws_world_init(ws_world *world, uint64_t world_uid, uint64_t seed)
+ws_result ws_world_init(ws_world *world, const ws_world_config *config,
+                        uint64_t world_uid, uint64_t seed)
 {
-    if (world == NULL) {
+    if (world == NULL || config == NULL) {
         return WS_ERR_NULL_POINTER;
     }
+    ws_result r = ws_entity_registry_init(&world->entities, config->arena_block,
+                                          config->arena_size, config->entity_capacity);
+    if (r != WS_OK) {
+        return r;
+    }
+    r = ws_event_log_init(&world->events, config->event_storage, config->event_capacity);
+    if (r != WS_OK) {
+        return r;
+    }
+
     world->world_uid = world_uid;
     world->seed = seed;
     world->schema_version = WS_WORLD_SCHEMA_VERSION;
     world->tick = 0U;
     world->time_seconds = 0.0;
     ws_rng_init(&world->rng_world, seed, WS_RNG_STREAM_WORLD);
+
+    (void)ws_event_log_push(&world->events, WS_EVENT_WORLD_CREATED, 0U, NULL, 0u);
     return WS_OK;
 }
 

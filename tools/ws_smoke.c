@@ -1,6 +1,6 @@
 /* Worldseed Engine — headless smoke tool.
  *
- * Proves the P1 core builds and runs headless: creates a world, advances it,
+ * Proves the core builds and runs headless: creates a world, advances it,
  * renders a reference tile, probes OpenCL and writes a PPM frame. Emits a small
  * machine-readable summary so CI can capture evidence without a display.
  */
@@ -12,9 +12,13 @@
 #include "render/ws_raster.h"
 #include "world/ws_world.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define SMOKE_ENTITY_CAPACITY 256u
+#define SMOKE_EVENT_CAPACITY 512u
 
 static int render_reference_frame(const char *out_path, char *digest_hex)
 {
@@ -63,8 +67,18 @@ int main(int argc, char **argv)
     const char *frame_path = (argc > 1) ? argv[1] : "smoke_frame.ppm";
     uint64_t seed = (argc > 2) ? strtoull(argv[2], NULL, 10) : 20260101ULL;
 
+    static _Alignas(max_align_t) unsigned char entity_arena[SMOKE_ENTITY_CAPACITY * 128u];
+    static ws_event event_storage[SMOKE_EVENT_CAPACITY];
+
+    ws_world_config config;
+    config.arena_block = entity_arena;
+    config.arena_size = sizeof(entity_arena);
+    config.entity_capacity = SMOKE_ENTITY_CAPACITY;
+    config.event_storage = event_storage;
+    config.event_capacity = SMOKE_EVENT_CAPACITY;
+
     ws_world world;
-    if (ws_world_init(&world, 1ULL, seed) != WS_OK) {
+    if (ws_world_init(&world, &config, 1ULL, seed) != WS_OK) {
         fprintf(stderr, "world init failed\n");
         return 1;
     }
@@ -86,11 +100,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("world uid=%llu seed=%llu tick=%llu time=%.3f\n",
+    printf("world uid=%llu seed=%llu tick=%llu time=%.3f events=%u\n",
            (unsigned long long)world.world_uid,
            (unsigned long long)world.seed,
            (unsigned long long)world.tick,
-           world.time_seconds);
+           world.time_seconds,
+           ws_event_log_count(&world.events));
     printf("rng sample=%.6f\n", sample);
     printf("opencl loaded=%d device_found=%d device=\"%s\" version=\"%s\" units=%u mem=%llu\n",
            cl.runtime_loaded, cl.device_found, cl.device_name, cl.device_version,

@@ -2,8 +2,8 @@
 
 **GitHub deposu:** `navoelyr-lwe/worldseed`  
 **Ürün adı:** Worldseed Engine  
-**Belge sürümü:** 0.2.0  
-**Durum:** Tam plan arşivi `docs/plan-bundle/` üzerinden SHA-256 doğrulamasıyla geri açıldı (22 dosya) ve kanonik `docs/` belgeleri yerleştirildi. Plan denetimi yapıldı; çelişkiler ve eksik kabul eşikleri düzeltildi. C17/OpenCL/CPU renderer/varlık/golden-scene için feasibility planları ve prototipleri hazırlandı. CI, dal koruması ve izole Windows GUI runner düzeni kuruldu. İlk görev bir doküman/altyapı PR'ıdır; ürün release'i değildir.  
+**Belge sürümü:** 0.3.0  
+**Durum:** Tam plan arşivi `docs/plan-bundle/` üzerinden SHA-256 doğrulamasıyla geri açıldı (22 dosya) ve kanonik `docs/` belgeleri yerleştirildi. Plan denetimi yapıldı; çelişkiler ve eksik kabul eşikleri düzeltildi. C17/OpenCL/CPU renderer/varlık/golden-scene için feasibility planları ve prototipleri hazırlandı. CI, dal koruması ve izole Windows GUI runner düzeni kuruldu. P1 C17 motor çekirdeği tamamlandı (arena/slot map/RNG/serialization/world context/event stream/snapshot + headless smoke ve benchmark); kanıtlar `docs/P1-MOTOR-CEKIRDEGI.md` içindedir. Bu çalışma hâlâ kullanıcıya görünür bir ürün release'i değildir.  
 **Ana dil:** ISO C17; GPU compute için sabitlenmiş tek istisna OpenCL C 1.2 kernel dili.
 
 > **Ürün ilkesi:** Dünya yaşar. Canlılar kendi fiziksel ve biyolojik kurallarıyla davranır. Sinematik gözlemci olayları yaratmaz; gerçekten yaşananları bulur ve gösterir.
@@ -42,6 +42,7 @@ Tam ürün planı 22 dosyadır. İçerik `docs/plan-bundle/RESTORE.md` yönerges
 | Dosya | Konu |
 |---|---|
 | `docs/DENETIM-RAPORU.md` | Plan denetimi, çelişkiler ve yapılan düzeltmeler |
+| `docs/P1-MOTOR-CEKIRDEGI.md` | P1 C17 motor çekirdeği durumu, modüller ve kanıtlar |
 | `docs/CI-VE-DAL-KORUMASI.md` | CI, dal koruması ve izole Windows GUI runner düzeni |
 | `docs/MILESTONE-BOARD.md` | Aşama durumları ve açık blokajlar |
 | `docs/adr/README.md` | Mimari karar kayıtları dizini |

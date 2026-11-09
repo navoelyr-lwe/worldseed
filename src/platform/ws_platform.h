@@ -6,6 +6,7 @@
 #ifndef WS_PLATFORM_PLATFORM_H
 #define WS_PLATFORM_PLATFORM_H
 
+#include "ws_clock.h"
 #include "ws_dynlib.h"
 #include "ws_opencl_probe.h"
 

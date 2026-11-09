@@ -68,6 +68,27 @@ jobs:
             | tee evidence/smoke/smoke-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
           grep -q "WS_SMOKE_OK" evidence/smoke/smoke-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
 
+      - name: Determinism across seeds
+        run: |
+          # The same seed must produce a byte-identical frame; different seeds
+          # must still produce a valid frame. Evidence: per-seed digests.
+          for seed in 1 2 20260101; do
+            ./build/tools/ws_smoke evidence/smoke/seed-$seed.ppm $seed \
+              | tee evidence/smoke/seed-$seed.txt
+          done
+          a=$(grep -o 'sha256=[0-9a-f]*' evidence/smoke/seed-20260101.txt | cut -d= -f2)
+          ./build/tools/ws_smoke evidence/smoke/repeat.ppm 20260101 >/dev/null
+          b=$(sha256sum evidence/smoke/repeat.ppm | cut -d' ' -f1)
+          ./build/tools/ws_smoke evidence/smoke/repeat2.ppm 20260101 >/dev/null
+          c=$(sha256sum evidence/smoke/repeat2.ppm | cut -d' ' -f1)
+          test "$b" = "$c" || { echo "frame not reproducible"; exit 1; }
+          test -n "$a" || { echo "missing frame digest"; exit 1; }
+
+      - name: Benchmark
+        run: |
+          ./build/tools/ws_bench | tee evidence/smoke/bench-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
+          grep -q "WS_BENCH_OK" evidence/smoke/bench-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
+
       - name: Upload evidence
         uses: actions/upload-artifact@v4
         with:
