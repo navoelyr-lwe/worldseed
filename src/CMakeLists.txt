@@ -22,6 +22,8 @@ add_library(worldseed_core STATIC
   world/ws_habitat.c
   world/ws_environment.c
   world/ws_vegetation.c
+  physics/ws_physics.c
+  physics/ws_wind.c
   render/ws_framebuffer.c
   render/ws_raster.c
   render/ws_mesh.c

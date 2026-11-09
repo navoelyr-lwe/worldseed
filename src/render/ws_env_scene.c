@@ -7,6 +7,7 @@
 
 #include "../core/ws_math.h"
 #include "../core/ws_noise.h"
+#include "../physics/ws_physics.h"
 
 /* Per-surface sRGB colours used by the terrain texture. */
 static void surface_color(uint8_t surface, uint8_t out[3])
@@ -52,6 +53,7 @@ const char *ws_env_scene_kind_id(int scene_kind)
     case 0: return "terrain_day";
     case 1: return "terrain_dusk";
     case 2: return "terrain_weather";
+    case 3: return "terrain_physics";
     default: return "terrain";
     }
 }
@@ -217,6 +219,112 @@ static ws_result build_cone_mesh(ws_env_scene *e)
                              segments, color);
 }
 
+/* Terrain height callback for the physics solver: world (x, z) -> height. */
+static double terrain_height_cb(void *ctx, double x, double y)
+{
+    const ws_env_scene *e = (const ws_env_scene *)ctx;
+    return ws_terrain_height_bilinear(&e->terrain, x, y);
+}
+
+/* Choose a drop point: the flattest dry interior spot, so the rock settles
+ * quickly and visibly instead of rolling down a slope or sinking in water. */
+static void pick_drop_point(const ws_env_scene *e, double *out_x, double *out_z)
+{
+    double bx = e->extent * 0.5;
+    double bz = e->extent * 0.5;
+    double best = 1.0e30;
+    const int n = 20;
+    for (int i = 2; i < n - 1; ++i) {
+        for (int j = 2; j < n - 1; ++j) {
+            double x = e->extent * (double)i / (double)n;
+            double z = e->extent * (double)j / (double)n;
+            double h = ws_terrain_height_bilinear(&e->terrain, x, z);
+            if (h < e->terrain.config.water_level + 1.5) {
+                continue;
+            }
+            double hx = ws_terrain_height_bilinear(&e->terrain, x + 3.0, z) - h;
+            double hz = ws_terrain_height_bilinear(&e->terrain, x, z + 3.0) - h;
+            double slope = hx * hx + hz * hz;
+            if (slope < best) {
+                best = slope;
+                bx = x;
+                bz = z;
+            }
+        }
+    }
+    *out_x = bx;
+    *out_z = bz;
+}
+
+/* Drop a rigid sphere onto the terrain with the P4 solver and record where it
+ * comes to rest. The body is simulated headless; only its final transform is
+ * rendered, so the picture is a physics result and not a scripted animation.
+ * The simulation runs for a fixed wall-clock budget and then the body must be
+ * at rest, otherwise the scene is reported as failed rather than shown wrong. */
+static ws_result run_physics_drop(ws_env_scene *e, double cx, double cz)
+{
+    unsigned segments = 12u;
+    unsigned rings = 8u;
+    size_t vcount = ws_mesh_sphere_vertex_count(segments, rings);
+    size_t icount = ws_mesh_sphere_index_count(segments, rings);
+    e->rock_verts = (ws_vertex *)calloc(vcount, sizeof(ws_vertex));
+    e->rock_idx = (uint32_t *)malloc(icount * sizeof(uint32_t));
+    if (e->rock_verts == NULL || e->rock_idx == NULL) {
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+    const uint8_t rock_color[3] = {116u, 112u, 104u};
+    ws_result r = ws_mesh_make_sphere(&e->rock_mesh, e->rock_verts, vcount,
+                                      e->rock_idx, icount, segments, rings, rock_color);
+    if (r != WS_OK) {
+        return r;
+    }
+
+    const double radius = 1.2; /* m */
+
+    ws_physics_config cfg = ws_physics_config_default();
+    cfg.dt = 1.0 / 200.0;
+    cfg.solver_iterations = 8;
+    cfg.water_level = e->terrain.config.water_level;
+    ws_body storage[1];
+    ws_physics_world world;
+    r = ws_physics_world_init(&world, &cfg, storage, 1u);
+    if (r != WS_OK) {
+        return r;
+    }
+    ws_physics_world_set_terrain(&world, terrain_height_cb, e);
+
+    double drop_y = ws_terrain_height_bilinear(&e->terrain, cx, cz) + radius + 25.0;
+    ws_body body;
+    memset(&body, 0, sizeof(body));
+    body.mass = 60.0;
+    body.radius = radius;
+    body.restitution = 0.15;
+    body.friction = 0.7;
+    body.position = ws_vec3_make(cx, drop_y, cz);
+    r = ws_physics_world_add(&world, &body);
+    if (r != WS_OK) {
+        return r;
+    }
+
+    /* 6 s budget: enough to fall 25 m and settle for this contact model. */
+    r = ws_physics_advance(&world, 1200);
+    if (r != WS_OK) {
+        return r;
+    }
+    const ws_body *b = &world.bodies[0];
+    if (!b->grounded || ws_vec3_length(b->velocity) > 0.1) {
+        return WS_ERR_INVALID_STATE; /* not at rest: refuse to fake a result */
+    }
+    e->rock_rest_y = b->position.y;
+    /* Sphere mesh is unit diameter (radius 0.5), so scale by 2 * radius. */
+    e->rock_transform = ws_mat4_translation(ws_vec3_make(
+        b->position.x - e->terrain.origin_x, b->position.y,
+        b->position.z - e->terrain.origin_y));
+    e->rock_transform = ws_mat4_multiply(
+        e->rock_transform, ws_mat4_scale(ws_vec3_make(radius * 2.0, radius * 2.0, radius * 2.0)));
+    return WS_OK;
+}
+
 static void sun_and_sky(const ws_environment *env, ws_light *light,
                         double *out_intensity, double *out_ambient)
 {
@@ -250,7 +358,7 @@ static void sun_and_sky(const ws_environment *env, ws_light *light,
  * produced by the environment model rather than by hard-coded numbers. */
 static double pick_time_of_day(const ws_env_config *cfg, int scene_kind)
 {
-    if (scene_kind == 0) {
+    if (scene_kind == WS_ENV_SCENE_DAY || scene_kind == WS_ENV_SCENE_PHYSICS) {
         return 12.0 * 3600.0;
     }
     ws_environment probe;
@@ -261,7 +369,7 @@ static double pick_time_of_day(const ws_env_config *cfg, int scene_kind)
         double t = (double)m * 60.0;
         ws_environment_update(&probe, t, 0.0);
         double score;
-        if (scene_kind == 1) {
+        if (scene_kind == WS_ENV_SCENE_DUSK) {
             /* Dusk: sun low but still up. */
             score = -fabs(probe.sun_altitude - 0.10);
         } else {
@@ -312,13 +420,72 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
 
     ws_env_config ecfg = ws_env_config_default(opts->seed);
     double tod = opts->time_of_day_s;
-    if (opts->scene_kind != 0 && tod == 12.0 * 3600.0) {
+    if ((opts->scene_kind == WS_ENV_SCENE_DUSK ||
+         opts->scene_kind == WS_ENV_SCENE_WEATHER) && tod == 12.0 * 3600.0) {
         tod = pick_time_of_day(&ecfg, opts->scene_kind);
     }
     ws_environment_init(&e->env, &ecfg);
     ws_environment_update(&e->env, tod, tcfg.base_height);
 
     e->extent = (double)opts->cells * opts->cell_size;
+
+    /* Physics prop first: drop the rock on the flattest dry spot, then aim the
+     * camera at where it actually came to rest, so the visible picture is the
+     * solver's result and not a scripted pose. */
+    double drop_x = e->extent * 0.5;
+    double drop_z = e->extent * 0.5;
+    if (opts->scene_kind == WS_ENV_SCENE_PHYSICS) {
+        pick_drop_point(e, &drop_x, &drop_z);
+        ws_result pr = run_physics_drop(e, drop_x, drop_z);
+        if (pr != WS_OK) {
+            ws_env_scene_free(e);
+            return pr;
+        }
+    }
+
+    /* Camera. Default environment scenes use a low, near-ground view from
+     * inside the region looking across it with a fixed gentle downward pitch,
+     * which is the scale at which terrain relief, water and individual trees are
+     * visible. The physics scene instead frames the resting rock from a close,
+     * slightly elevated angle so the contact with the ground is legible. */
+    double eye_x;
+    double eye_y;
+    double eye_z;
+    double tgt_x;
+    double tgt_y;
+    double tgt_z;
+    if (opts->scene_kind == WS_ENV_SCENE_PHYSICS) {
+        double rx = drop_x - e->terrain.origin_x;
+        double rz = drop_z - e->terrain.origin_y;
+        double ry = e->rock_rest_y;
+        double back = 12.0;
+        double up = 4.0;
+        eye_x = rx - back;
+        eye_y = ry + up;
+        eye_z = rz - back * 0.6;
+        tgt_x = rx;
+        tgt_y = ry;
+        tgt_z = rz;
+    } else {
+        double mid_x = e->extent * 0.5;
+        eye_x = mid_x - e->extent * 0.08;
+        eye_z = e->extent * 0.06;
+        eye_y = ws_terrain_height_bilinear(&e->terrain, eye_x, eye_z) + 4.0;
+        double fwd_x = 0.16;
+        double fwd_z = 0.99;
+        double flen = sqrt(fwd_x * fwd_x + fwd_z * fwd_z);
+        fwd_x /= flen;
+        fwd_z /= flen;
+        double look = e->extent * 0.9;
+        double pitch = -5.0 * (3.14159265358979323846 / 180.0);
+        tgt_x = eye_x + fwd_x * look;
+        tgt_y = eye_y + look * tan(pitch);
+        tgt_z = eye_z + fwd_z * look;
+    }
+    ws_camera camera = ws_camera_default();
+    camera.eye = ws_vec3_make(eye_x, eye_y, eye_z);
+    camera.target = ws_vec3_make(tgt_x, tgt_y, tgt_z);
+    camera.far_z = e->extent * 8.0;
 
     if (build_terrain_mesh(e) != WS_OK || build_water_mesh(e) != WS_OK ||
         build_cone_mesh(e) != WS_OK) {
@@ -386,32 +553,13 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
     }
     e->tree_count = trees;
 
-    /* Camera and lighting from the environment state. A low, near-ground view
-     * from inside the region, looking across it with a fixed gentle downward
-     * pitch. This is the scale at which terrain relief, the water surface and
-     * individual trees are visible, and it is where the later cinematic
-     * observer will sit. The eye stays inside the mesh so the ground fills the
-     * lower frame instead of showing past the region edge. */
-    double cx = e->extent * 0.5;
-    double eye_x = cx - e->extent * 0.08;
-    double eye_z = e->extent * 0.06;
-    double eye_y = ws_terrain_height_bilinear(&e->terrain, eye_x, eye_z) + 4.0;
-    /* Fixed look direction and pitch so the horizon height on screen is stable
-     * across seeds and scene kinds. */
-    double fwd_x = 0.16;
-    double fwd_z = 0.99;
-    double flen = sqrt(fwd_x * fwd_x + fwd_z * fwd_z);
-    fwd_x /= flen;
-    fwd_z /= flen;
-    double look = e->extent * 0.9;
-    double pitch = -5.0 * (3.14159265358979323846 / 180.0);
-    e->scene.camera = ws_camera_default();
-    e->scene.camera.eye = ws_vec3_make(eye_x, eye_y, eye_z);
-    e->scene.camera.target = ws_vec3_make(eye_x + fwd_x * look,
-                                          eye_y + look * tan(pitch),
-                                          eye_z + fwd_z * look);
-    e->scene.camera.far_z = e->extent * 8.0;
+    /* Physics prop: the rock where the solver left it. */
+    if (opts->scene_kind == WS_ENV_SCENE_PHYSICS) {
+        ws_material rock = ws_material_make(0.62, 0.60, 0.56, 0.9, 0.0, 0.05);
+        (void)ws_scene_add_object(&e->scene, &e->rock_mesh, e->rock_transform, rock);
+    }
 
+    e->scene.camera = camera;
     e->scene.light = ws_light_default();
     double intensity = 1.0;
     double ambient = 0.4;
@@ -441,6 +589,8 @@ void ws_env_scene_free(ws_env_scene *e)
     free(e->water_idx);
     free(e->cone_verts);
     free(e->cone_idx);
+    free(e->rock_verts);
+    free(e->rock_idx);
     free(e->objects);
     ws_vegetation_free(&e->veg);
     ws_habitat_free(&e->habitat);

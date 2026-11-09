@@ -15,8 +15,12 @@ target_link_libraries(ws_test_render PRIVATE worldseed_core)
 add_executable(ws_test_world_env test_world_env.c)
 target_link_libraries(ws_test_world_env PRIVATE worldseed_core)
 
+add_executable(ws_test_physics test_physics.c)
+target_link_libraries(ws_test_physics PRIVATE worldseed_core)
+
 add_test(NAME core COMMAND ws_test_core)
 add_test(NAME world_render COMMAND ws_test_world)
 add_test(NAME fuzz COMMAND ws_test_fuzz)
 add_test(NAME render COMMAND ws_test_render)
 add_test(NAME world_env COMMAND ws_test_world_env)
+add_test(NAME physics COMMAND ws_test_physics)
