@@ -2,14 +2,16 @@ name: GUI (Windows, isolated runner)
 
 # Real Windows GUI tests. These run only on a self-hosted, isolated, secretless
 # Windows runner that is allowlisted for this repository. Fork/external PR code
-# is never executed here: the job is gated on a trusted ref allowlist below.
+# is never executed here: the job is gated on a trusted-ref allowlist below
+# (same-repo PRs and the default branch only).
 #
-# The runner label [self-hosted, windows, x64, worldseed-gui] is not yet
-# registered, so an automatic push trigger would queue indefinitely. Until the
-# isolated runner is provisioned, this workflow is manual-only; this is recorded
-# in docs/MILESTONE-BOARD.md. No GUI test is reported as run without the runner.
+# Runner label set: [self-hosted, windows, x64, worldseed-gui].
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -22,9 +24,12 @@ jobs:
   windows-gui:
     name: windows x64 gui/smoke
     runs-on: [self-hosted, windows, x64, worldseed-gui]
-    # Trusted-ref allowlist: only the default branch (and manual runs on it)
-    # reach the isolated runner. Never run untrusted fork code here.
-    if: github.ref == 'refs/heads/main'
+    # Trusted-ref allowlist: the default branch, and PRs whose head is a branch
+    # of this same repository (never a fork). Untrusted fork code never reaches
+    # the isolated runner.
+    if: >
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
 
@@ -61,9 +66,10 @@ jobs:
         run: |
           # Launch the actual Win32 window, let it present a frame, capture the
           # desktop, then close it. This is a real GUI test, not a headless one.
+          # Scene 10 is the P5 reference creature (simulated gait result).
           New-Item -ItemType Directory -Force -Path evidence/gui/app | Out-Null
           $exe = "build-gui/src/app/Release/worldseed.exe"
-          $proc = Start-Process -FilePath $exe -ArgumentList "--scene","5","--size","1280x720" -PassThru
+          $proc = Start-Process -FilePath $exe -ArgumentList "--scene","10","--size","1280x720" -PassThru
           Start-Sleep -Seconds 5
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
           $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
