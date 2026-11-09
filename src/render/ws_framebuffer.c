@@ -73,6 +73,98 @@ void ws_framebuffer_set(ws_framebuffer *fb, uint32_t x, uint32_t y,
     p[3] = a;
 }
 
+/* Read the next whitespace-delimited token, skipping '#' comments. Returns 0 on
+ * EOF. `buf` is NUL-terminated. */
+static int ppm_token(FILE *f, char *buf, size_t cap)
+{
+    int c;
+    size_t n = 0u;
+    for (;;) {
+        c = fgetc(f);
+        if (c == EOF) {
+            return 0;
+        }
+        if (c == '#') {
+            while (c != EOF && c != '\n') {
+                c = fgetc(f);
+            }
+            continue;
+        }
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            continue;
+        }
+        break;
+    }
+    while (c != EOF && c != ' ' && c != '\t' && c != '\r' && c != '\n') {
+        if (n + 1u < cap) {
+            buf[n++] = (char)c;
+        }
+        c = fgetc(f);
+    }
+    buf[n] = '\0';
+    return 1;
+}
+
+ws_result ws_framebuffer_read_ppm(ws_framebuffer *fb, const char *path)
+{
+    if (fb == NULL || path == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    fb->width = 0U;
+    fb->height = 0U;
+    fb->pixels = NULL;
+
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        return WS_ERR_NOT_FOUND;
+    }
+    char tok[64];
+    if (!ppm_token(f, tok, sizeof(tok)) || strcmp(tok, "P6") != 0) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+    if (!ppm_token(f, tok, sizeof(tok))) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+    long w = strtol(tok, NULL, 10);
+    if (!ppm_token(f, tok, sizeof(tok))) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+    long h = strtol(tok, NULL, 10);
+    if (!ppm_token(f, tok, sizeof(tok)) || strtol(tok, NULL, 10) != 255L) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+    if (w <= 0 || h <= 0 || w > 65536 || h > 65536) {
+        fclose(f);
+        return WS_ERR_PARSE;
+    }
+
+    ws_result res = ws_framebuffer_create(fb, (uint32_t)w, (uint32_t)h);
+    if (res != WS_OK) {
+        fclose(f);
+        return res;
+    }
+    size_t count = (size_t)w * (size_t)h;
+    for (size_t i = 0; i < count; ++i) {
+        uint8_t rgb[3];
+        if (fread(rgb, 1u, 3u, f) != 3u) {
+            fclose(f);
+            ws_framebuffer_free(fb);
+            return WS_ERR_PARSE;
+        }
+        uint8_t *p = &fb->pixels[i * 4u];
+        p[0] = rgb[0];
+        p[1] = rgb[1];
+        p[2] = rgb[2];
+        p[3] = 255u;
+    }
+    fclose(f);
+    return WS_OK;
+}
+
 ws_result ws_framebuffer_write_ppm(const ws_framebuffer *fb, const char *path)
 {
     if (fb == NULL || path == NULL || fb->pixels == NULL) {

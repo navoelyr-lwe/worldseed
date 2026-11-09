@@ -91,11 +91,49 @@ jobs:
           ./build/tools/ws_bench | tee evidence/smoke/bench-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
           grep -q "WS_BENCH_OK" evidence/smoke/bench-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
 
+      - name: Golden scenes
+        run: |
+          mkdir -p evidence/golden
+          ./build/tools/ws_golden evidence/golden 20260101 | tee evidence/golden/golden-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
+          grep -q "WS_GOLDEN_OK" evidence/golden/golden-${{ matrix.compiler }}-${{ matrix.build_type }}.txt
+          # Same input must reproduce the same frame digests within a run.
+          mkdir -p evidence/golden/repeat
+          ./build/tools/ws_golden evidence/golden/repeat 20260101 >/dev/null
+          for s in orbit lowlight spheres; do
+            a=$(grep "^$s," evidence/golden/manifest.csv | cut -d, -f10)
+            b=$(grep "^$s," evidence/golden/repeat/manifest.csv | cut -d, -f10)
+            test "$a" = "$b" || { echo "golden scene $s not reproducible"; exit 1; }
+          done
+
+      - name: Golden reference comparison
+        run: |
+          # Tolerance, not equality: catches missing/misplaced geometry across
+          # compilers and platforms while allowing tiny floating-point edges.
+          for s in orbit lowlight spheres; do
+            ./build/tools/ws_imgdiff evidence/golden/$s.ppm tests/golden/$s.ppm 3.0 0.99
+          done
+
+      - name: Asset pipeline
+        run: |
+          mkdir -p evidence/assets
+          ./build/tools/ws_assetgen evidence/assets | tee evidence/assets/assetgen.txt
+          grep -q "WS_ASSETGEN_OK" evidence/assets/assetgen.txt
+          # Regenerating must reproduce byte-identical assets (determinism) and
+          # match the committed provenance record so it cannot silently drift.
+          mkdir -p evidence/assets/repeat
+          ./build/tools/ws_assetgen evidence/assets/repeat >/dev/null
+          for a in cube plane sphere; do
+            cmp evidence/assets/$a.wsmesh evidence/assets/repeat/$a.wsmesh \
+              || { echo "asset $a not reproducible"; exit 1; }
+            cmp evidence/assets/$a.wsmesh assets/primitives/$a.wsmesh \
+              || { echo "committed asset $a differs from generator output"; exit 1; }
+          done
+
       - name: Upload evidence
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-${{ matrix.compiler }}-${{ matrix.build_type }}-${{ matrix.sanitizers }}
-          path: evidence/smoke/
+          name: evidence-${{ matrix.compiler }}-${{ matrix.build_type }}-${{ matrix.sanitizers }}
+          path: evidence/
 
   windows-msvc:
     name: windows msvc ${{ matrix.build_type }}
@@ -124,11 +162,43 @@ jobs:
             Tee-Object -FilePath evidence/smoke/smoke-msvc-${{ matrix.build_type }}.txt
           if (-not (Select-String -Path evidence/smoke/smoke-msvc-${{ matrix.build_type }}.txt -Pattern "WS_SMOKE_OK" -Quiet)) { exit 1 }
 
+      - name: Golden scenes
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path evidence/golden | Out-Null
+          & build/tools/${{ matrix.build_type }}/ws_golden.exe evidence/golden 20260101 |
+            Tee-Object -FilePath evidence/golden/golden-msvc-${{ matrix.build_type }}.txt
+          if (-not (Select-String -Path evidence/golden/golden-msvc-${{ matrix.build_type }}.txt -Pattern "WS_GOLDEN_OK" -Quiet)) { exit 1 }
+          # Same input must reproduce the same frame digests within a run.
+          New-Item -ItemType Directory -Force -Path evidence/golden/repeat | Out-Null
+          & build/tools/${{ matrix.build_type }}/ws_golden.exe evidence/golden/repeat 20260101 | Out-Null
+          foreach ($s in "orbit","lowlight","spheres") {
+            $a = (Select-String -Path evidence/golden/manifest.csv -Pattern "^$s,").Line.Split(",")[9]
+            $b = (Select-String -Path evidence/golden/repeat/manifest.csv -Pattern "^$s,").Line.Split(",")[9]
+            if ($a -ne $b) { Write-Error "golden scene $s not reproducible"; exit 1 }
+          }
+
+      - name: Golden reference comparison
+        shell: pwsh
+        run: |
+          foreach ($s in "orbit","lowlight","spheres") {
+            & build/tools/${{ matrix.build_type }}/ws_imgdiff.exe "evidence/golden/$s.ppm" "tests/golden/$s.ppm" 3.0 0.99
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+
+      - name: Asset pipeline
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path evidence/assets | Out-Null
+          & build/tools/${{ matrix.build_type }}/ws_assetgen.exe evidence/assets |
+            Tee-Object -FilePath evidence/assets/assetgen.txt
+          if (-not (Select-String -Path evidence/assets/assetgen.txt -Pattern "WS_ASSETGEN_OK" -Quiet)) { exit 1 }
+
       - name: Upload evidence
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-msvc-${{ matrix.build_type }}
-          path: evidence/smoke/
+          name: evidence-msvc-${{ matrix.build_type }}
+          path: evidence/
 
   plan-integrity:
     name: plan integrity

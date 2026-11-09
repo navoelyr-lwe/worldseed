@@ -24,6 +24,11 @@ compile_commands.json
 *.tmp
 /evidence/tmp/
 
+# Versioned golden-scene reference frames and generated primitive assets are
+# committed on purpose (visual-regression baseline and provenance record).
+!tests/golden/*.ppm
+!assets/primitives/*.wsmesh
+
 # OS
 .DS_Store
 Thumbs.db

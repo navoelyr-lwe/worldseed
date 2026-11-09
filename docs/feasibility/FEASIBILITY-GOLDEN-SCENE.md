@@ -35,3 +35,7 @@ Sabit, sürümlü test sahnelerini otomatik üretip görsel regresyonu ve teknik
 - Bu spike yalnız deterministik kare üretimini ve parmak izini kanıtlar.
 - Gerçek golden scene seti (orman, çayır, su, yakın plan, yağmur/sis, gece) P2/P3'te eklenir.
 - SSIM/PSNR araçları kendi C17 araçlarımızla yazılır; harici kütüphane eklenmez.
+
+## P2 uygulaması
+
+`ws_golden` aracı sürümlü sahne setini (orbit, lowlight, spheres) PPM olarak üretip manifeste kare SHA-256, üçgen sayısı ve kapsam yazar; `ws_imgdiff` kendi C17 metriklerimizle (ortalama fark, PSNR, SSIM) referans kareye karşı tolerans kapısını uygular. Detay `docs/P2-RENDER-TEMELI.md` içindedir. Bu belge tarihsel fizibilite kaydıdır.

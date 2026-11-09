@@ -18,6 +18,11 @@ add_library(worldseed_core STATIC
   world/ws_snapshot.c
   render/ws_framebuffer.c
   render/ws_raster.c
+  render/ws_mesh.c
+  render/ws_asset.c
+  render/ws_scene.c
+  render/ws_render.c
+  render/ws_image.c
   platform/ws_dynlib.c
   platform/ws_opencl_probe.c
   platform/ws_clock.c)

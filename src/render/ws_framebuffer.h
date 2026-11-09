@@ -31,4 +31,8 @@ void ws_framebuffer_set(ws_framebuffer *fb, uint32_t x, uint32_t y,
  * PPM keeps the prototype dependency-free and human-inspectable. */
 ws_result ws_framebuffer_write_ppm(const ws_framebuffer *fb, const char *path);
 
+/* Read a binary PPM (P6, maxval 255) into a freshly allocated framebuffer.
+ * The caller owns the buffer and must call ws_framebuffer_free. */
+ws_result ws_framebuffer_read_ppm(ws_framebuffer *fb, const char *path);
+
 #endif /* WS_RENDER_FRAMEBUFFER_H */
