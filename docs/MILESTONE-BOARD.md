@@ -6,7 +6,7 @@ Bu pano `13-YOL-HARITASI.md` aşamalarının durumunu izler. Durum yalnız kanı
 |---|---|---|---|
 | P0 | Ürün ve bilimsel temel | Tamamlanan denetim | `DENETIM-RAPORU.md`, ADR-007…010 |
 | P1 | C17 motor çekirdeği | Tamamlandı (altyapı) | `docs/P1-MOTOR-CEKIRDEGI.md`, `src/core`, `src/world`, `tests/`, `ci.yml` |
-| P2 | Render ve içerik temeli | Sürüyor (sahne renderer, malzeme/ışık/doku, golden scene) | `docs/P2-RENDER-TEMELI.md`, `src/render`, `tests/test_render.c`, `tests/golden/` |
+| P2 | Render ve içerik temeli | Kullanıcıya görünür önizleme (sahne renderer, malzeme/ışık/doku, golden scene, Windows uygulaması) | `docs/P2-RENDER-TEMELI.md`, `src/render`, `src/app`, `tests/test_render.c`, `tests/golden/`, `v0.1.0-preview` |
 | P3 | İlk doğal çevre | Planlandı | — |
 | P4 | Çevresel fizik | Planlandı | — |
 | P5 | Referans canlı biyomekaniği | Planlandı | — |
@@ -26,3 +26,4 @@ Bu pano `13-YOL-HARITASI.md` aşamalarının durumunu izler. Durum yalnız kanı
 
 - İlk görev yalnız doküman/altyapı PR'ıdır; ürün release'i değildir.
 - Kullanıcıya görünür ilk Windows paketi P2'den itibaren prerelease olarak yayımlanır.
+- P2 ilk kullanıcıya görünür sürümü `v0.1.0-preview` olarak yayımlandı: `worldseed.exe` sabit referans sahnelerini CPU referans renderer'ıyla çizer; paket her sahnenin gerçek render çıktısını `preview/*.png` olarak içerir. Canlı simülasyon, fizik ve etkileşim henüz yoktur.

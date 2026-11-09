@@ -21,6 +21,7 @@ add_library(worldseed_core STATIC
   render/ws_mesh.c
   render/ws_asset.c
   render/ws_scene.c
+  render/ws_showcase.c
   render/ws_render.c
   render/ws_image.c
   render/ws_texture.c

@@ -13,6 +13,7 @@
 #include "render/ws_mesh.h"
 #include "render/ws_render.h"
 #include "render/ws_scene.h"
+#include "render/ws_showcase.h"
 #include "render/ws_texture.h"
 
 #include <math.h>
@@ -385,6 +386,47 @@ static int test_ppm_crlf_header(void)
 
     remove(path);
     ws_framebuffer_free(&fb);
+    return 1;
+}
+
+static int test_showcase_scenes(void)
+{
+    WS_CHECK(ws_showcase_scene_count() == 6u);
+    ws_showcase s;
+    WS_CHECK(ws_showcase_init(&s) == WS_OK);
+    for (size_t i = 0; i < ws_showcase_scene_count(); ++i) {
+        WS_CHECK(ws_showcase_scene_id(i) != NULL);
+        WS_CHECK(ws_showcase_build(&s, i, 20260101ULL) == WS_OK);
+        WS_CHECK(s.scene.object_count > 0u);
+    }
+    WS_CHECK(ws_showcase_build(&s, ws_showcase_scene_count(), 0ULL) == WS_ERR_INVALID_ARGUMENT);
+    ws_showcase_free(&s);
+    return 1;
+}
+
+/* A showcase scene must render byte-identically regardless of the seed, so the
+ * golden references are stable. */
+static int test_showcase_deterministic(void)
+{
+    ws_framebuffer a;
+    ws_framebuffer b;
+    WS_CHECK(ws_framebuffer_create(&a, 64u, 48u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&b, 64u, 48u) == WS_OK);
+    float *depth = malloc(64u * 48u * sizeof(float));
+    WS_CHECK(depth != NULL);
+
+    ws_showcase s;
+    WS_CHECK(ws_showcase_init(&s) == WS_OK);
+    WS_CHECK(ws_showcase_build(&s, 3u, 1ULL) == WS_OK);
+    WS_CHECK(ws_render_scene(&s.scene, &a, depth, 16u, NULL) == WS_OK);
+    WS_CHECK(ws_showcase_build(&s, 3u, 999ULL) == WS_OK);
+    WS_CHECK(ws_render_scene(&s.scene, &b, depth, 16u, NULL) == WS_OK);
+    WS_CHECK(memcmp(a.pixels, b.pixels, (size_t)a.width * a.height * 4u) == 0);
+
+    free(depth);
+    ws_showcase_free(&s);
+    ws_framebuffer_free(&a);
+    ws_framebuffer_free(&b);
     return 1;
 }
 
@@ -783,6 +825,8 @@ int main(void)
         {"render texture map changes output", test_render_texture_changes_output},
         {"ppm roundtrip", test_ppm_roundtrip},
         {"ppm crlf header", test_ppm_crlf_header},
+        {"showcase scenes", test_showcase_scenes},
+        {"showcase deterministic", test_showcase_deterministic},
         {"image metrics", test_image_metrics},
     };
     return ws_test_run("render", cases, (int)(sizeof(cases) / sizeof(cases[0])));

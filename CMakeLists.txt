@@ -31,6 +31,7 @@ endif()
 ws_apply_common_flags()
 
 add_subdirectory(src)
+add_subdirectory(src/app)
 if(WS_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)

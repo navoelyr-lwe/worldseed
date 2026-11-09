@@ -3,7 +3,7 @@
 **GitHub deposu:** `navoelyr-lwe/worldseed`  
 **Ürün adı:** Worldseed Engine  
 **Belge sürümü:** 0.4.0  
-**Durum:** Tam plan arşivi `docs/plan-bundle/` üzerinden SHA-256 doğrulamasıyla geri açıldı (22 dosya) ve kanonik `docs/` belgeleri yerleştirildi. Plan denetimi yapıldı; çelişkiler ve eksik kabul eşikleri düzeltildi. C17/OpenCL/CPU renderer/varlık/golden-scene için feasibility planları ve prototipleri hazırlandı. CI, dal koruması ve izole Windows GUI runner düzeni kuruldu. P1 C17 motor çekirdeği tamamlandı (arena/slot map/RNG/serialization/world context/event stream/snapshot + headless smoke ve benchmark); kanıtlar `docs/P1-MOTOR-CEKIRDEGI.md` içindedir. P2 render temeli başladı: matematik (mat4), prosedürel mesh, sürümlü mesh varlık formatı + doğrulayıcı, sahne sözleşmesi, referans CPU sahne renderer'ı (Lambert aydınlatma, karo tabanlı tarama, perspektif-doğru interpolasyon), görüntü metrikleri ve otomatik golden-scene kanıtı; kanıtlar `docs/P2-RENDER-TEMELI.md` içindedir. Bu çalışma hâlâ kullanıcıya görünür bir ürün release'i değildir.  
+**Durum:** Tam plan arşivi `docs/plan-bundle/` üzerinden SHA-256 doğrulamasıyla geri açıldı (22 dosya) ve kanonik `docs/` belgeleri yerleştirildi. Plan denetimi yapıldı; çelişkiler ve eksik kabul eşikleri düzeltildi. C17/OpenCL/CPU renderer/varlık/golden-scene için feasibility planları ve prototipleri hazırlandı. CI, dal koruması ve izole Windows GUI runner düzeni kuruldu. P1 C17 motor çekirdeği tamamlandı (arena/slot map/RNG/serialization/world context/event stream/snapshot + headless smoke ve benchmark); kanıtlar `docs/P1-MOTOR-CEKIRDEGI.md` içindedir. P2 render temeli kullanıcıya görünür ilk önizlemeye ulaştı: matematik (mat4/mat3), prosedürel mesh, sürümlü mesh/doku varlık formatları + doğrulayıcı, sahne sözleşmesi, referans CPU sahne renderer'ı (Lambert + Blinn-Phong, yarım-küre ambient, gradyan gökyüzü, sis, ton eşleme), görüntü metrikleri, otomatik golden-scene kanıtı ve `worldseed.exe` Windows uygulaması (Win32/GDI penceresinde CPU render sunumu); kanıtlar `docs/P2-RENDER-TEMELI.md` içindedir ve ilk Windows x64 önizlemesi `v0.1.0-preview` olarak yayımlandı. Bu önizleme hâlâ canlı simülasyon içermez; fizik, canlı modelleri ve etkileşim sonraki aşamalardadır.  
 **Ana dil:** ISO C17; GPU compute için sabitlenmiş tek istisna OpenCL C 1.2 kernel dili.
 
 > **Ürün ilkesi:** Dünya yaşar. Canlılar kendi fiziksel ve biyolojik kurallarıyla davranır. Sinematik gözlemci olayları yaratmaz; gerçekten yaşananları bulur ve gösterir.
@@ -60,6 +60,20 @@ Tam ürün planı 22 dosyadır. İçerik `docs/plan-bundle/RESTORE.md` yönerges
 ## Yeni ve bağımsız depo
 
 Bu depo yeni ve bağımsız projedir. Eski `worldseed-engine` deposu değiştirilmez ve eski prototip kodu otomatik taşınmaz. Eski prototip yalnızca fikir/deneyim referansıdır; yeni mimari ve kod bu plan üzerinden kurulur.
+
+## Uygulama ve kullanım (P2 önizlemesi)
+
+`src/app` altındaki uygulama (Windows'ta `worldseed.exe`) sabit referans sahnelerini
+CPU referans renderer'ıyla çizer. Windows'ta gerçek bir Win32 penceresi açılıp
+kare GDI ile sunulur; diğer platformlarda ve CI'da penceresiz çalışır.
+
+- `worldseed --list` — sahne listesini yazar.
+- `worldseed --scene 5 --size 1280x720` — pencereyi açıp seçilen sahneyi gösterir.
+- `worldseed --selftest` — tüm sahneleri render eder ve doğrular (`APP_SELFTEST_OK`).
+- `worldseed --capture cikti.ppm --scene 0 --size 320x240` — kareyi PPM olarak yazar.
+- `worldseed --headless --scene 0` — pencere açmadan render eder.
+
+Bu önizleme canlı simülasyon içermez; yalnızca render temelini gösterir.
 
 ## Öncelik sırası
 
