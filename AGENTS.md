@@ -18,7 +18,7 @@ Kod/log dökümü yok. Başarısızlıklar gizlenmez. Kullanıcıya normal derle
 1. `docs/plan-bundle/RESTORE.md` içindeki yönergeyle 16 aktarım parçasını birleştir, SHA-256 değerini doğrula ve ürün planı belgelerini kanonik `docs/` yollarına geri aç.
 2. Manifestteki tüm dosya sayısını ve içerik bütünlüğünü doğrula. Root `AGENTS.md` bu dosyanın bağlayıcı ana ajan kuralı olarak kalır; arşivdeki AGENTS yalnızca referans kopyasıdır.
 3. README bağlantılarının gerçek dosyalara gittiğini doğrula.
-4. Planı baştan sona denetle; çelişki, uygulanamaz kabul eşiği, bilimsel kaynak veya eksik güvenlik/performans kriteri varsa kanıta dayalı PR içinde düzelt.
+4. Planı baştan sona denetle; özellikle `18-GUVENLIK-LISANS-PAKET.md` içindeki 'proje sahibi onayı gerekir' ifadesini yetki devriyle tutarlı hâle getir ve hazır dış asset kullanımına izin veren ifadeleri root `AGENTS.md`'deki kendi C17 varlık üretim ilkesiyle uyumlu kıl. Diğer çelişki, uygulanamaz kabul eşiği, bilimsel kaynak veya eksik güvenlik/performans kriterini de kanıta dayalı PR içinde düzelt.
 5. CI, main koruması, PR güvenliği, release akışı ve izole Windows GUI otomasyonunu kur.
 6. OpenCL C 1.2 / CPU fallback, CPU renderer, görsel varlık hattı ve otomatik golden-scene kanıtı için küçük feasibility prototip/planları hazırla.
 7. Tek bir dokümantasyon/altyapı PR'ı aç. İlk görevde büyük ürün özellikleri veya simülasyon sistemleri kodlama.
