@@ -76,13 +76,15 @@ jobs:
             ./build/tools/ws_smoke evidence/smoke/seed-$seed.ppm $seed \
               | tee evidence/smoke/seed-$seed.txt
           done
-          a=$(grep -o 'sha256=[0-9a-f]*' evidence/smoke/seed-20260101.txt | cut -d= -f2)
+          d1=$(grep -o 'sha256=[0-9a-f]*' evidence/smoke/seed-1.txt | cut -d= -f2)
+          d2=$(grep -o 'sha256=[0-9a-f]*' evidence/smoke/seed-2.txt | cut -d= -f2)
+          test -n "$d1" || { echo "missing frame digest"; exit 1; }
+          test "$d1" != "$d2" || { echo "distinct seeds produced identical frames"; exit 1; }
           ./build/tools/ws_smoke evidence/smoke/repeat.ppm 20260101 >/dev/null
           b=$(sha256sum evidence/smoke/repeat.ppm | cut -d' ' -f1)
           ./build/tools/ws_smoke evidence/smoke/repeat2.ppm 20260101 >/dev/null
           c=$(sha256sum evidence/smoke/repeat2.ppm | cut -d' ' -f1)
           test "$b" = "$c" || { echo "frame not reproducible"; exit 1; }
-          test -n "$a" || { echo "missing frame digest"; exit 1; }
 
       - name: Benchmark
         run: |

@@ -314,7 +314,7 @@ static int test_raster_draws_expected_pixels(void)
     const float vx[3] = {0.0f, 63.0f, 31.0f};
     const float vy[3] = {63.0f, 63.0f, 0.0f};
     const float vz[3] = {0.1f, 0.1f, 0.1f};
-    const unsigned char color[3][3] = {{255u, 0u, 0u}, {0u, 255u, 0u}, {0u, 0u, 255u}};
+    const unsigned char color[9] = {255u, 0u, 0u, 0u, 255u, 0u, 0u, 0u, 255u};
 
     ws_raster_tile_stats stats;
     memset(&stats, 0, sizeof(stats));
@@ -348,8 +348,8 @@ static int test_raster_depth_rejects_farther(void)
 
     const float vx[3] = {0.0f, 31.0f, 15.0f};
     const float vy[3] = {31.0f, 31.0f, 0.0f};
-    const unsigned char near_color[3][3] = {{255u, 255u, 255u}, {255u, 255u, 255u}, {255u, 255u, 255u}};
-    const unsigned char far_color[3][3] = {{1u, 1u, 1u}, {1u, 1u, 1u}, {1u, 1u, 1u}};
+    const unsigned char near_color[9] = {255u, 255u, 255u, 255u, 255u, 255u, 255u, 255u, 255u};
+    const unsigned char far_color[9] = {1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u, 1u};
     const float near_z[3] = {0.1f, 0.1f, 0.1f};
     const float far_z[3] = {0.9f, 0.9f, 0.9f};
 
@@ -369,7 +369,7 @@ static int test_raster_determinism(void)
     const float vx[3] = {2.0f, 30.0f, 16.0f};
     const float vy[3] = {28.0f, 28.0f, 2.0f};
     const float vz[3] = {0.3f, 0.3f, 0.3f};
-    const unsigned char color[3][3] = {{200u, 100u, 50u}, {50u, 200u, 100u}, {100u, 50u, 200u}};
+    const unsigned char color[9] = {200u, 100u, 50u, 50u, 200u, 100u, 100u, 50u, 200u};
 
     ws_framebuffer a;
     ws_framebuffer b;

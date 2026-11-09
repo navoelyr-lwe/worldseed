@@ -92,7 +92,7 @@ static void bench_raster(uint32_t width, uint32_t height, uint32_t tile, int ite
     const float vx[3] = {0.0f, (float)(width - 1u), (float)(width / 2u)};
     const float vy[3] = {(float)(height - 1u), (float)(height - 1u), 0.0f};
     const float vz[3] = {0.3f, 0.3f, 0.3f};
-    const unsigned char color[3][3] = {{200u, 120u, 60u}, {60u, 200u, 120u}, {120u, 60u, 200u}};
+    const unsigned char color[9] = {200u, 120u, 60u, 60u, 200u, 120u, 120u, 60u, 200u};
 
     uint64_t t0 = ws_clock_monotonic_ns();
     for (int i = 0; i < iterations; ++i) {

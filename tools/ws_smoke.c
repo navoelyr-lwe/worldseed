@@ -20,7 +20,7 @@
 #define SMOKE_ENTITY_CAPACITY 256u
 #define SMOKE_EVENT_CAPACITY 512u
 
-static int render_reference_frame(const char *out_path, char *digest_hex)
+static int render_reference_frame(const char *out_path, uint64_t seed, char *digest_hex)
 {
     ws_framebuffer fb;
     if (ws_framebuffer_create(&fb, 320u, 240u) != WS_OK) {
@@ -38,10 +38,23 @@ static int render_reference_frame(const char *out_path, char *digest_hex)
         depth[i] = 1.0e30f;
     }
 
-    const float vx[3] = {40.0f, 280.0f, 160.0f};
-    const float vy[3] = {200.0f, 200.0f, 40.0f};
-    const float vz[3] = {0.5f, 0.5f, 0.2f};
-    const unsigned char color[3][3] = {{90u, 160u, 70u}, {70u, 140u, 60u}, {120u, 180u, 90u}};
+    /* Derive the reference triangle from the seed so the frame digest is a
+     * genuine determinism signal: identical seed reproduces the frame, a
+     * different seed yields a different frame. */
+    ws_rng frng;
+    ws_rng_init(&frng, seed, 99ULL);
+    float vx[3];
+    float vy[3];
+    float vz[3];
+    unsigned char color[9];
+    for (int i = 0; i < 3; ++i) {
+        vx[i] = (float)(ws_rng_next_double(&frng) * 300.0);
+        vy[i] = (float)(ws_rng_next_double(&frng) * 220.0);
+        vz[i] = (float)(0.1 + ws_rng_next_double(&frng) * 0.5);
+        for (int c = 0; c < 3; ++c) {
+            color[i * 3 + c] = (unsigned char)(ws_rng_next_u64(&frng) & 0xFFu);
+        }
+    }
 
     ws_raster_tile_stats stats;
     memset(&stats, 0, sizeof(stats));
@@ -95,7 +108,7 @@ int main(int argc, char **argv)
     ws_opencl_probe(&cl);
 
     char digest_hex[WS_SHA256_DIGEST_SIZE * 2u + 1u];
-    if (render_reference_frame(frame_path, digest_hex) != 0) {
+    if (render_reference_frame(frame_path, seed, digest_hex) != 0) {
         fprintf(stderr, "render failed\n");
         return 1;
     }

@@ -26,7 +26,7 @@ static unsigned char ws_to_u8(float v)
 
 void ws_raster_triangle(ws_framebuffer *fb, float *depth,
                         const float vx[3], const float vy[3], const float vz[3],
-                        const unsigned char color[3][3],
+                        const unsigned char *color,
                         unsigned tile, ws_raster_tile_stats *stats)
 {
     if (fb == NULL || fb->pixels == NULL) {
@@ -95,9 +95,9 @@ void ws_raster_triangle(ws_framebuffer *fb, float *depth,
                         }
                         depth[idx] = z;
                     }
-                    float r = b0 * (float)color[0][0] + b1 * (float)color[1][0] + b2 * (float)color[2][0];
-                    float g = b0 * (float)color[0][1] + b1 * (float)color[1][1] + b2 * (float)color[2][1];
-                    float b = b0 * (float)color[0][2] + b1 * (float)color[1][2] + b2 * (float)color[2][2];
+                    float r = b0 * (float)color[0] + b1 * (float)color[3] + b2 * (float)color[6];
+                    float g = b0 * (float)color[1] + b1 * (float)color[4] + b2 * (float)color[7];
+                    float b = b0 * (float)color[2] + b1 * (float)color[5] + b2 * (float)color[8];
                     uint8_t *p = &fb->pixels[idx * 4u];
                     p[0] = ws_to_u8(r);
                     p[1] = ws_to_u8(g);
