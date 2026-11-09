@@ -14,6 +14,7 @@
  */
 #include "core/ws_hash.h"
 #include "platform/ws_clock.h"
+#include "render/ws_catalog.h"
 #include "render/ws_framebuffer.h"
 #include "render/ws_image.h"
 #include "render/ws_render.h"
@@ -81,30 +82,25 @@ int main(int argc, char **argv)
     }
 
     int failed = 0;
-    size_t scene_count = ws_showcase_scene_count();
+    size_t scene_count = ws_catalog_count();
     for (size_t i = 0; i < scene_count; ++i) {
-        const char *id = ws_showcase_scene_id(i);
-        ws_showcase showcase;
-        if (ws_showcase_init(&showcase) != WS_OK) {
-            fprintf(stderr, "showcase init failed for scene %s\n", id);
+        const char *id = ws_catalog_id(i);
+        ws_catalog catalog;
+        if (ws_catalog_build(&catalog, i, seed) != WS_OK) {
+            fprintf(stderr, "catalog build failed for scene %s\n", id);
             failed = 1;
             continue;
         }
-        if (ws_showcase_build(&showcase, i, seed) != WS_OK) {
-            fprintf(stderr, "scene build failed for %s\n", id);
-            failed = 1;
-            ws_showcase_free(&showcase);
-            continue;
-        }
+        const ws_scene *scene = ws_catalog_scene(&catalog);
 
         ws_render_stats stats;
         uint64_t t0 = ws_clock_monotonic_ns();
-        ws_result res = ws_render_scene(&showcase.scene, &fb, depth, 32u, &stats);
+        ws_result res = ws_render_scene(scene, &fb, depth, 32u, &stats);
         uint64_t t1 = ws_clock_monotonic_ns();
         if (res != WS_OK) {
             fprintf(stderr, "render failed for %s: %s\n", id, ws_result_name(res));
             failed = 1;
-            ws_showcase_free(&showcase);
+            ws_catalog_free(&catalog);
             continue;
         }
 
@@ -113,7 +109,7 @@ int main(int argc, char **argv)
         if (ws_framebuffer_write_ppm(&fb, frame_path) != WS_OK) {
             fprintf(stderr, "ppm write failed for %s\n", id);
             failed = 1;
-            ws_showcase_free(&showcase);
+            ws_catalog_free(&catalog);
             continue;
         }
 
@@ -122,7 +118,7 @@ int main(int argc, char **argv)
         hash_hex(fb.pixels, bytes, digest);
 
         double coverage = 0.0;
-        (void)ws_image_coverage(&fb, showcase.scene.background, 8, &coverage);
+        (void)ws_image_coverage(&fb, scene->background, 8, &coverage);
         double mean_luma = 0.0;
         double max_luma = 0.0;
         luminance_stats(&fb, &mean_luma, &max_luma);
@@ -141,7 +137,7 @@ int main(int argc, char **argv)
         /* Coverage measures deviation from the clear colour; it is only a
          * meaningful sanity gate when a flat background is used. Sky scenes
          * fill the frame on purpose, so they are checked differently. */
-        if (!showcase.scene.settings.sky_enabled) {
+        if (!scene->settings.sky_enabled) {
             if (coverage <= 0.02 || coverage >= 0.98) {
                 fprintf(stderr, "scene %s coverage out of range: %.4f\n", id, coverage);
                 failed = 1;
@@ -159,7 +155,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "scene %s has no bright pixels (max_luma=%.3f)\n", id, max_luma);
             failed = 1;
         }
-        ws_showcase_free(&showcase);
+        ws_catalog_free(&catalog);
     }
 
     free(depth);

@@ -55,7 +55,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path evidence/preview | Out-Null
           $exe = "build/src/app/Release/worldseed.exe"
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather"
           for ($i = 0; $i -lt $scenes.Count; $i++) {
             $s = $scenes[$i]
             & $exe --capture "evidence/preview/$s.ppm" --scene $i --size 1280x720
@@ -69,7 +69,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$stage/preview" | Out-Null
           Copy-Item evidence/preview/*.png "$stage/preview/"
           @(
-            "Worldseed Engine preview (P2 - render temeli).",
+            "Worldseed Engine preview (P3 - ilk dogal cevre).",
             "Calistirma: worldseed.exe --scene 5 --size 1280x720",
             "Sahneler: worldseed.exe --list",
             "Kanit: preview/*.png (CPU referans renderer ciktilari) ve CI artefaktlari.",
@@ -126,6 +126,8 @@ jobs:
             evidence/preview/orbit.png evidence/preview/lowlight.png \
             evidence/preview/spheres.png evidence/preview/materials.png \
             evidence/preview/textured.png evidence/preview/sky.png \
+            evidence/preview/terrain_day.png evidence/preview/terrain_dusk.png \
+            evidence/preview/terrain_weather.png \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md

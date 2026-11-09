@@ -37,6 +37,8 @@ size_t ws_mesh_plane_vertex_count(void);
 size_t ws_mesh_plane_index_count(void);
 size_t ws_mesh_sphere_vertex_count(unsigned segments, unsigned rings);
 size_t ws_mesh_sphere_index_count(unsigned segments, unsigned rings);
+size_t ws_mesh_cone_vertex_count(unsigned segments);
+size_t ws_mesh_cone_index_count(unsigned segments);
 
 /* Generate geometry into caller-owned arrays. `mesh` is filled to point at
  * `vertices`/`indices`; the caller keeps ownership. Returns WS_OK or an error
@@ -50,6 +52,12 @@ ws_result ws_mesh_make_plane(ws_mesh *mesh, ws_vertex *vertices, size_t vertex_c
 ws_result ws_mesh_make_sphere(ws_mesh *mesh, ws_vertex *vertices, size_t vertex_cap,
                               uint32_t *indices, size_t index_cap,
                               unsigned segments, unsigned rings, const uint8_t color[3]);
+
+/* Cone with its base at y = 0 and apex at y = 1, radius 0.5 at the base. Used
+ * for simple conifer silhouettes. */
+ws_result ws_mesh_make_cone(ws_mesh *mesh, ws_vertex *vertices, size_t vertex_cap,
+                            uint32_t *indices, size_t index_cap,
+                            unsigned segments, const uint8_t color[3]);
 
 /* Axis-aligned bounds of a mesh in local space. */
 ws_aabb3 ws_mesh_bounds(const ws_mesh *mesh);

@@ -6,6 +6,7 @@ add_library(worldseed_core STATIC
   core/ws_result.c
   core/ws_math.c
   core/ws_rng.c
+  core/ws_noise.c
   core/ws_handle.c
   core/ws_hash.c
   core/ws_arena.c
@@ -16,12 +17,19 @@ add_library(worldseed_core STATIC
   world/ws_entity.c
   world/ws_event.c
   world/ws_snapshot.c
+  world/ws_terrain.c
+  world/ws_hydro.c
+  world/ws_habitat.c
+  world/ws_environment.c
+  world/ws_vegetation.c
   render/ws_framebuffer.c
   render/ws_raster.c
   render/ws_mesh.c
   render/ws_asset.c
   render/ws_scene.c
   render/ws_showcase.c
+  render/ws_env_scene.c
+  render/ws_catalog.c
   render/ws_render.c
   render/ws_image.c
   render/ws_texture.c
