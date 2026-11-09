@@ -62,14 +62,15 @@ Bu plan, **bilimsel temelli ve kendi içinde tutarlı, çok ölçekli bir dijita
 - ISO C17: motor, UI, araçlar, testler ve ürün mantığı.
 - OpenCL C 1.2: tek izinli GPU kernel dili; OpenCL 1.2 uyumlu compute API.
 - Kendi C17 CPU renderer zorunlu referans/fallback; OpenCL compute GPU backend isteğe bağlı hızlandırma.
-- Üçüncü taraf oyun/render/fizik/AI/audio runtime yok.
+- Üçüncü taraf oyun/render/fizik/AI/audio runtime veya hazır mesh/texture/rig/animation/audio asset paketi yok; ilk release içerikleri kendi C17 varlık üretim hattımızla hazırlanır.
 - C++, CUDA, GLSL, HLSL, SPIR-V, Vulkan/OpenGL/Direct3D render pipeline kullanılmaz.
 - Win32/GDI yalnızca pencere ve tamamlanmış piksel tamponunun sunumu içindir.
 - Dört ilk tür: kızıl geyik, kızıl tilki, Avrupa tavşanı, yaban domuzu.
 - İlk ekosistem: yaklaşık 2×2 km ılıman karma orman/orman-çayır mozaiği, dört bağlantılı habitat.
 - Referans sinematik profil: 8 çekirdek sınıfı CPU, 32 GB RAM, 12 GB VRAM; native 4K/30 FPS hedefi. Temel profil: 1080p/30 FPS hedefi.
 - Teknik sorular kullanıcıya yöneltilmez; OpenHands sabit kararları uygular.
-- Her kullanıcıya görünür milestone testlerden sonra prerelease; tüm V1 şartları geçince 1.0.0 stable.
+- OpenHands tüm zorunlu yayın kapıları geçince milestone prerelease ve V1 tamamlandığında 1.0.0 stable yayımlar; her release için ayrıca kullanıcı onayı istenmez.
+- Tüm ilk release varlıkları kendi C17 içerik hattımızla üretilir; yalnızca kaynak/lisansı belgelenmiş bilimsel ölçüm ve parametre verileri referans alınabilir.
 
 ## İlk OpenHands görevi
 
