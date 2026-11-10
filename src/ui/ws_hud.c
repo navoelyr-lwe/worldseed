@@ -430,6 +430,7 @@ static const char *HELP_LINES[] = {
     "Worldseed Engine - live world observer",
     "",
     "  Space      pause / resume",
+    "  .          single step (one world tick)",
     "  + / -      speed up / down (0.5x .. 4x)",
     "  V          cycle view (auto / free / follow / map)",
     "  N / P      select next / previous animal",

@@ -81,7 +81,8 @@ typedef enum ws_session_command {
     WS_CMD_REPLAY_SEEK = 20,  /* arg = normalized position 0..1, oldest..newest */
     WS_CMD_REPLAY_LIVE = 21,  /* leave replay and jump to the newest state */
     WS_CMD_REPLAY_STEP_BACK = 22,    /* show one older recorded sample */
-    WS_CMD_REPLAY_STEP_FORWARD = 23  /* show one newer recorded sample */
+    WS_CMD_REPLAY_STEP_FORWARD = 23, /* show one newer recorded sample */
+    WS_CMD_STEP_ONCE = 24            /* advance exactly one fixed world tick */
 } ws_session_command;
 
 typedef struct ws_session_config {

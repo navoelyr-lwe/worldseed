@@ -94,11 +94,22 @@ Replay etkinken dünya ilerlemez. HUD, kayıt zamanı, canlı zaman ve imleç ko
 gösteren bir replay paneli çizer; gözlemci salt okunurdur (aynı tohum ve tick
 sayısında özet bit-özdeş kalır).
 
+### Tek adım (zaman kontrolü) — `src/ui/ws_session.{h,c}`, `src/ui/ws_hud.c`
+
+`docs/17` "Zaman kontrolleri" maddesinin tek adım kısmının uygulaması. `WS_CMD_STEP_ONCE`
+komutu dünyayı tam olarak bir sabit tick ilerletir (`world_tick`) ve durakdayken de
+çalışır; birikmiş kare zamanı sıfırlanır ki sonraki normal adım çift ilerlemesin.
+Tek adım dünyayı durakdan çıkarmaz. Replay etkinken aynı tuş "sonraki kayıtlı örnek"
+anlamına gelir; böylece tek tuş hem canlı hem replay zaman çizelgesinde ileri adımlar.
+Tek adımla ilerletilen dünya, aynı tick sayısını normal kare zamanıyla ilerleten
+referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eşdeğerliği).
+
 ## Kontroller (kullanıcıya görünür)
 
 | Tuş | İşlev |
 |---|---|
 | `Space` | Duraklat / devam |
+| `.` | Tek adım (bir dünya tick'i; replay'de sonraki örnek) |
 | `+` / `-` | Hız artır / azalt (0.5× .. 4×) |
 | `V` | Görünüm döngüsü (auto / free / follow / map) |
 | `N` / `P` | Sonraki / önceki canlıyı seç |
@@ -132,21 +143,25 @@ sayısında özet bit-özdeş kalır).
   320×180'de `avg_ms=29.54 fps=33.8`, 640×360'ta `avg_ms=105.98 fps=9.4` verir —
   çözünürlük ölçeklemesi doğrusaldır ve pencere modunda otomatik ölçek devrededir.
 
-- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: sekiz adım
+- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on bir adım
   (auto gündüz, serbest genel görünüm, geyik takibi, harita, alacakaranlık, tilki
-  takibi, gece+istatistik, kaydet→ilerlet→yükle). Her adım gerçek PPM karesi + SHA-256
+  takibi, gece+istatistik, kaydet→ilerlet→yükle, gölgeler kapalı, gölgeler açık, tek
+  adım). Her adım gerçek PPM karesi + SHA-256
   ve manifest yazar. Bu makinede (1280×720):
 
   ```
-  tour step=00 auto_day     sha256=aa624970...  coverage=1.0000
-  tour step=02 follow_deer  sha256=b3cca294...
-  tour step=06 auto_night   sha256=5f5142ea...
+  tour step=00 auto_day     sha256=e31c82ce...  coverage=1.0000
+  tour step=02 follow_deer  sha256=da72f291...
+  tour step=06 auto_night   sha256=e02eb50c...
   tour save_load saved=1 loaded=1 roundtrip=1
-  LIVE_TOUR_OK steps=8
+  tour single_step paused=1 from=580 to=585 ok=1
+  LIVE_TOUR_OK steps=11
   ```
 
   `roundtrip=1`, checkpoint kaydedildikten sonra dünyanın ilerletilip geri
-  yüklendiğinde SHA-256 özetinin birebir aynı olduğunu kanıtlar.
+  yüklendiğinde SHA-256 özetinin birebir aynı olduğunu kanıtlar. `single_step ok=1`,
+  durakdayken beş tek adımın dünyayı tam beş tick ilerlettiğini ve duraklamayı
+  bozmadığını kanıtlar (`manifest` içinde `single_step_verified=1`).
 
 - **Replay kanıtı** — `worldseed.exe --live-replay <dizin> --size WxH`: dünya
   bir süre ilerletilir, replay'e girilir, en eski örnek, adımlanmış örnek ve en
@@ -187,9 +202,9 @@ sayısında özet bit-özdeş kalır).
   içerir; `worldseed.exe --version` ile sürüm bildirir; `tools/ws_manifest` ile
   `MANIFEST.txt` üretilir; sürüm notu P11 canlı uygulamasını ve kalan sınırlamaları
   açıklar.
-- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.14.0-preview`
-  olarak hizalandı (kalıcı ayarlar dilimi); `worldseed.exe --version` aynı dizeyi
-  yazdırır.
+- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.15.0-preview`
+  olarak hizalandı (tek adım zaman kontrolü dilimi); `worldseed.exe --version` aynı
+  dizeyi yazdırır.
 
 ## Bilinen sınırlamalar
 

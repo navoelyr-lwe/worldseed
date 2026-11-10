@@ -518,6 +518,42 @@ static int test_replay_is_observation_only(void)
     return 1;
 }
 
+static int test_step_once(void)
+{
+    /* Time control (docs/17): single step advances exactly one fixed world tick
+     * and works even while paused. It drives the real world tick, so the digest
+     * must match a reference run fed exactly that many ticks of wall time. */
+    ws_session *s = make(77ULL);
+    ws_session *ref = make(77ULL);
+    WS_CHECK(s != NULL && ref != NULL);
+    run_seconds(s, 2.0);
+    run_seconds(ref, 2.0);
+
+    /* Pause, then step three times: the world advances one tick per step and
+     * never more (no wall time is fed). */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_PAUSE, 0.0);
+    WS_CHECK(ws_session_paused(s) == 1);
+    uint64_t t0 = ws_session_tick(s);
+    for (int i = 0; i < 3; ++i) {
+        (void)ws_session_apply_command(s, WS_CMD_STEP_ONCE, 0.0);
+    }
+    WS_CHECK(ws_session_tick(s) == t0 + 3u);
+    WS_CHECK(ws_session_paused(s) == 1); /* stepping does not resume */
+
+    /* The stepped world equals a reference that advanced the same number of
+     * ticks by ordinary wall-time stepping (fixed-timestep equivalence). */
+    run_seconds(ref, 0.15); /* 3 ticks at 1/20 s */
+    char ds[WS_SESSION_DIGEST_HEX];
+    char dr[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, ds) == WS_OK);
+    WS_CHECK(ws_session_digest(ref, dr) == WS_OK);
+    WS_CHECK(strcmp(ds, dr) == 0);
+
+    ws_session_destroy(s);
+    ws_session_destroy(ref);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -537,6 +573,7 @@ int main(void)
         {"session_settings_apply_readonly", test_settings_apply_and_readonly},
         {"session_replay_enter_seek_exit", test_replay_enter_seek_exit},
         {"session_replay_observation_only", test_replay_is_observation_only},
+        {"session_step_once", test_step_once},
     };
     return ws_test_run("session", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }
