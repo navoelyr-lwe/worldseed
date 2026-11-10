@@ -17,3 +17,9 @@ target_link_libraries(ws_assetgen PRIVATE worldseed_core)
 
 add_executable(ws_audio ws_audio.c)
 target_link_libraries(ws_audio PRIVATE worldseed_core)
+
+add_executable(ws_gpu_check ws_gpu_check.c)
+target_link_libraries(ws_gpu_check PRIVATE worldseed_core)
+
+add_executable(ws_perf ws_perf.c)
+target_link_libraries(ws_perf PRIVATE worldseed_core)

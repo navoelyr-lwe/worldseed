@@ -78,6 +78,17 @@ süreklilik testleri geçer; ses olay-tabanlı ve deterministiktir.
 
 **Kabul:** aynı sahnede CPU/GPU semantic comparison; hata toleransları; GPU device loss recovery; 4K performance ölçümü.
 
+**Durum:** Tamamlandı. Kanıt: `docs/P10-GPU-VE-PERFORMANS.md`, `docs/gpu/`
+(`MODEL-KARTI-GPU-RASTER.md`, `MODEL-KARTI-ZAMANLAYICI.md`),
+`src/gpu/ws_opencl.*`, `kernels/ws_raster.cl`, `src/platform/ws_threads.*`,
+`ws_hardware.*`, `src/core/ws_sched.*`, `tools/ws_gpu_check.c`, `tools/ws_perf.c`,
+`tests/test_gpu.c` (4 test). Kabul ölçütleri: aynı yönde CPU ve OpenCL C 1.2 kernel
+tolerans içinde eşleşir (`diff_pixels=1/49152`, `max_channel_delta=1`); device-loss
+sonrası backend kullanılamaz olur, GPU çağrısı temiz hata verir ve CPU görüntüsü
+bit-özdeş kalır; GPU cihazı yokluğu CPU fallback'tir; zamanlayıcı seri/paralel sonucu
+bit-özdeş tutar; 4K ve ölçekleme ölçümü `tools/ws_perf` ile alınır. GPU yalnız gerçek
+kazanç olduğunda kullanılır (ADR-001).
+
 Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız OpenCL 1.2 cihaz keşfi, OpenCL C 1.2 kernel derleme, pixel-buffer sunumu, CPU karşılaştırması ve fallback davranışını kanıtlar; başka API/dil seçimi yapmaz.
 
 ## P11 — Ürünleştirme ve ilk release

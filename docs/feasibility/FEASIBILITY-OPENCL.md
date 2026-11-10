@@ -28,9 +28,26 @@ OpenCL 1.2 API ve OpenCL C 1.2 kernel yolunun, sistem sürücüsü üzerinden ç
 
 - Bu spike kernel derleme/çalıştırma içermez; yalnız yetenek keşfi yapar.
 - Gerçek GPU'da OpenCL C 1.2 kernel derleme ve CPU/GPU semantik karşılaştırması P10 görevidir.
+
+## P10 sonucu (tamamlandı)
+
+P10 bu spike'ı tamamladı:
+
+- `kernels/ws_raster.cl` OpenCL C 1.2 kernel'i derleme zamanında gömülür ve
+  `-cl-std=CL1.2` ile derlenir (`src/gpu/ws_opencl.*`).
+- CPU referans rasterleyicisi (`src/render/ws_raster.c`) ve kernel aynı deterministik
+  yığın üzerinde koşar; semantik karşılaştırma tolerans içinde geçer
+  (`tools/ws_gpu_check`: `diff_pixels=1/49152`, `max_channel_delta=1`).
+- Device-loss kurtarma ve CPU fallback doğrulanır (`device_loss_recovered=1`).
+- CI `opencl-cpu` işi pocl CPU ICD ile gerçek kernel derleme/çalıştırma kanıtı üretir.
+- Kanıtlar: `docs/P10-GPU-VE-PERFORMANS.md`, `docs/gpu/MODEL-KARTI-GPU-RASTER.md`.
+
+Gerçek GPU donanımı bu ortamda yoktur; hızlanma iddiası yalnız referans donanımda
+ölçümle yapılır. Detay `docs/P10-GPU-VE-PERFORMANS.md` "Bilinen sınırlamalar".
+
 - Kernel kaynakları `.cl` olarak ayrı tutulur ve yalnız OpenCL C 1.2 alt kümesini kullanır.
-- GPU sonucu otoritatif simülasyonu etkilemez (ADR-006); GPU öncelikle render/görsel compute'u hızlandırır.
+- GPU sonucu otoritatif simülasyonu etkilemez (ADR-001); GPU öncelikle render/görsel compute'u hızlandırır.
 
 ## Karar
 
-OpenCL 1.2 keşif yolu ve CPU fallback uygulanabilir ve bağımlılık eklemez. GPU kernel geliştirmesi P10'a bırakılır; bu spike yeni bir GPU dili/API seçmez.
+OpenCL 1.2 keşif yolu ve CPU fallback uygulanabilir ve bağımlılık eklemez. GPU kernel geliştirmesi P10'da tamamlandı (bkz. yukarıdaki "P10 sonucu"); bu yol yeni bir GPU dili/API seçmez.
