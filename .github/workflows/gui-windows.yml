@@ -115,7 +115,7 @@ jobs:
           & build-gui/src/app/Release/worldseed.exe --live-tour evidence/gui/live/tour --size 640x360 |
             Tee-Object -FilePath evidence/gui/live/tour.txt
           if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "LIVE_TOUR_OK" -Quiet)) { exit 1 }
-          if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "save_load_roundtrip=1" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }
 
       - name: Upload evidence
         if: always()

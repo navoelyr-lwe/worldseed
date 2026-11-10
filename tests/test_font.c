@@ -14,7 +14,8 @@
 static int test_glyph_data_wellformed(void)
 {
     /* 95 glyphs for ASCII 32..126, each exactly 7 rows x 5 columns. */
-    WS_CHECK(WS_FONT_LAST - WS_FONT_FIRST + 1u == 95u);
+    unsigned glyph_count = WS_FONT_LAST - WS_FONT_FIRST + 1u;
+    WS_CHECK(glyph_count == 95u);
     for (unsigned i = 0; i < 95u; ++i) {
         const char *g = WS_FONT_GLYPHS[i];
         WS_CHECK(g != NULL);
