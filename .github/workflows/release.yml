@@ -134,7 +134,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P12 - render performansi, canli yonlu golgeler)." \
+            "Worldseed Engine onizleme surumu (P11 - kalici ayarlar ve ayar paneli)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
@@ -153,7 +153,14 @@ jobs:
             "  worldseed.exe --live               pencere modunda canli dunya" \
             "  worldseed.exe --live --fullscreen  tam ekran canli dunya" \
             "  Tuslar: Space duraklat, +/- hiz, V kip (auto/free/follow/map), N/P canli sec," \
-            "  G istatistik, T yonlu golge, H yardim, [ ] saat, S/L kaydet/yukle, ok/WASD serbest kamera, Esc cikis." \
+            "  G istatistik, O ayarlar, T yonlu golge, H yardim, [ ] saat, S/L kaydet/yukle, ok/WASD serbest kamera, Esc cikis." \
+            "" \
+            "Kalici ayarlar (bu surumun ana yeniligi): seciminiz worldseed.cfg dosyasina" \
+            "yazilir ve sonraki acilista geri yuklenir - cozunurluk, ic render olcegi," \
+            "baslangic gorunumu/saati, golge ve tam ekran. Pencerede O tusu ayar panelini" \
+            "acar. Acik komut satiri bayragi dosyayi gecersiz kilar; kanit kosulari" \
+            "(headless/tur) ayar dosyasini okumaz/yazmaz, boylece olcumler sabit kalir." \
+            "Ayar uygulamak yalnizca gozlemciyi degistirir, dunyayi degistirmez." \
             "" \
             "Kanit (penceresiz, her makinede calisir):" \
             "  worldseed.exe --live-headless 3 --size 1280x720  kare zamanlamasi + dunya ozeti" \
@@ -175,12 +182,14 @@ jobs:
             "near/mid/far, kamera disi ilerleme, checkpoint, journal, deterministik replay);" \
             "olay-tabanli sinematik yonetmen ve prosedurel ses manzarasi; GPU icin OpenCL C 1.2" \
             "kernel + CPU fallback ve deterministik cok cekirdekli zamanlayici. GPU yalniz" \
-            "gercek kazanc oldugunda kullanilir (ADR-001). P12 CPU render hizlandirmasi ve" \
-            "yonlu golge eslemesini ekler; golgeler opt-in, mevcut sahneler etkilenmez." \
+            "gercek kazanc oldugunda kullanilir (ADR-001). Bu surum kalici ayarlari ve" \
+            "ayar panelini ekler (worldseed.cfg); onceki P12 CPU render hizlandirmasi ve" \
+            "opt-in yonlu golgeler korunur." \
             "" \
             "Bilinen sinirlamalar: 4K/30 FPS referans donanim hedefi henuz olculup gecilemedi;" \
             "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
-            "olceklendirilir; ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir)." \
+            "olceklendirilir; ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir);" \
+            "ses/giris alt ayarlari ve tam etkilesimli ayar menusu sonraki dilimdedir." \
             "" \
             "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + MANIFEST.txt)," \
             "sha256 dosyasi, ekteki PNG kareleri ve CI artefaktlari." \

@@ -71,9 +71,11 @@ New-Item -ItemType Directory -Force -Path "$stage/live" | Out-Null
 Copy-Item evidence/live/tour-a/*.png "$stage/live/"
 Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
 @(
-    "Worldseed Engine preview (P12 - render performansi, canli yonlu golgeler).",
+    "Worldseed Engine preview (P11 - kalici ayarlar ve ayar paneli).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
-    "Canli tuslar: T yonlu golgeleri acar/kapatir (varsayilan kapali).",
+    "Kalici ayarlar: seciminiz worldseed.cfg dosyasina yazilir ve sonraki acilista geri yuklenir;",
+    "pencerede O tusu ayar panelini acar. Acik komut satiri bayragi dosyayi gecersiz kilar.",
+    "Canli tuslar: O ayarlar, T yonlu golgeleri acar/kapatir (varsayilan kapali).",
     "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
     "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",
     "Kanit: preview/*.png (CPU referans renderer ciktilari), live/*.png (canli uygulama turu),",
