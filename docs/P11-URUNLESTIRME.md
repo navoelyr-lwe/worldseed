@@ -164,8 +164,9 @@ yardımcısı (POSIX `mkdir` / Win32 `_mkdir`). Simülasyon tarafından kullanı
   içerir; `worldseed.exe --version` ile sürüm bildirir; `tools/ws_manifest` ile
   `MANIFEST.txt` üretilir; sürüm notu P11 canlı uygulamasını ve kalan sınırlamaları
   açıklar.
-- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.11.0-preview`
-  olarak hizalandı; `worldseed.exe --version` aynı dizeyi yazdırır.
+- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.14.0-preview`
+  olarak hizalandı (kalıcı ayarlar dilimi); `worldseed.exe --version` aynı dizeyi
+  yazdırır.
 
 ## Bilinen sınırlamalar
 
