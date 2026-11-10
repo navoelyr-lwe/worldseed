@@ -34,6 +34,9 @@ add_library(worldseed_core STATIC
   life/ws_species.c
   life/ws_ecology.c
   life/ws_population.c
+  life/ws_life_event.c
+  cinema/ws_director.c
+  audio/ws_audio.c
   render/ws_framebuffer.c
   render/ws_raster.c
   render/ws_mesh.c

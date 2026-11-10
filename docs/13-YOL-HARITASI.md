@@ -62,6 +62,16 @@ Bu yol haritası takvim tahmini değildir. Her aşama bir öncekinin kabul kapı
 
 **Kabul:** yönetmen world state'i değiştiremez; sahte olay üretmez; gerçek event ID'leri çekim kaydına bağlı; kamera yumuşaklık/continuity testleri.
 
+**Durum:** Tamamlandı (kullanıcıya görünür `director_shot` ve `soundscape`
+sahneleri). Kanıt: `docs/P9-SINEMATIK-YONETMEN-VE-SES.md`,
+`docs/cinema/MODEL-KARTI-YONETMEN.md`, `docs/audio/MODEL-KARTI-SES-MANZARASI.md`,
+`src/cinema/ws_director.*`, `src/audio/ws_audio.*`, `src/life/ws_life_event.*`,
+`tools/ws_audio.c`, `tests/test_cinema.c` (10 test), `tests/golden/director_shot.ppm`,
+`tests/golden/soundscape.ppm`. Kabul ölçütleri: yönetmen dünyaya yazmaz
+(yönetmenli/yönetmensiz koşu bit-özdeş olay özeti); yalnız gerçek olay kimliğine
+bağlanır (sahte olay yok); kamera hız/ivme/dönüş sınırları ve kesmeler arası
+süreklilik testleri geçer; ses olay-tabanlı ve deterministiktir.
+
 ## P10 — GPU ve performans ölçekleme
 
 **Çıktı:** donanım keşfi, GPU compute/render spike sonucu, seçilmiş GPU backend, CPU fallback, multi-core work scheduler.

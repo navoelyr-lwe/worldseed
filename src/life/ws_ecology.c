@@ -2,6 +2,7 @@
 #include "ws_ecology.h"
 
 #include "../core/ws_math.h"
+#include "ws_life_event.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -149,6 +150,60 @@ double ws_ecology_plant_capacity_total(const ws_ecology *e)
     return n * e->config.plant_capacity * e->config.shock_biomass;
 }
 
+/* --- life event log (P9) -------------------------------------------------- */
+
+/* Append a life event to the ring. Payloads use the ws_life_event encoding so
+ * the director can decode position, participants and value. The tick is the
+ * world tick derived from the ecology's simulation time. */
+static void emit_life_event(ws_ecology *e, uint8_t kind, uint32_t actor,
+                            uint32_t subject, double x, double y, double value)
+{
+    ws_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.sequence = e->next_event_sequence++;
+    ev.tick = (uint64_t)(e->time_s + 0.5);
+    ev.type = WS_EVENT_LIFE;
+    ev.payload_size = ws_life_event_encode(ev.payload, kind, actor, subject,
+                                           (float)x, (float)y, (float)value,
+                                           (uint32_t)ev.tick);
+    if (e->event_count < WS_ECOLOGY_MAX_EVENTS) {
+        e->events[e->event_count++] = ev;
+    } else {
+        memmove(&e->events[0], &e->events[1],
+                (WS_ECOLOGY_MAX_EVENTS - 1u) * sizeof(ws_event));
+        e->events[WS_ECOLOGY_MAX_EVENTS - 1u] = ev;
+        e->events_dropped += 1u;
+    }
+    e->events_total += 1u;
+}
+
+uint32_t ws_ecology_event_count(const ws_ecology *e)
+{
+    return e != NULL ? e->event_count : 0u;
+}
+
+ws_result ws_ecology_event_at(const ws_ecology *e, uint32_t index, ws_event *out)
+{
+    if (e == NULL || out == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (index >= e->event_count) {
+        return WS_ERR_NOT_FOUND;
+    }
+    *out = e->events[index];
+    return WS_OK;
+}
+
+uint64_t ws_ecology_events_total(const ws_ecology *e)
+{
+    return e != NULL ? e->events_total : 0u;
+}
+
+uint64_t ws_ecology_events_dropped(const ws_ecology *e)
+{
+    return e != NULL ? e->events_dropped : 0u;
+}
+
 /* Logistic growth of every plant cell toward the (shocked) capacity, plus a
  * small recruitment (seed-rain) floor so a cell grazed to zero is not an
  * absorbing state. */
@@ -215,6 +270,8 @@ static int spawn_offspring(ws_ecology *e, ws_eco_agent *parent, int species)
     }
     e->births += 1u;
     parent->offspring += 1u;
+    emit_life_event(e, WS_LIFE_EV_BORN, (uint32_t)species, 0u, x, y,
+                    child->energy);
     return 1;
 }
 
@@ -229,6 +286,8 @@ static void step_agent(ws_ecology *e, uint32_t i, double dt)
         e->deaths += 1u;
         e->age_deaths += 1u;
         e->deaths_by_species[a->species] += 1u;
+        emit_life_event(e, WS_LIFE_EV_DIED, (uint32_t)a->species, 0u,
+                        a->x, a->y, 0.0);
         return;
     }
 
@@ -340,6 +399,8 @@ static void step_agent(ws_ecology *e, uint32_t i, double dt)
                 a->energy = ws_clamp_double(a->energy + taken * gain, 0.0, 1.0);
                 a->bites += 1u;
                 e->forage_events += 1u;
+                emit_life_event(e, WS_LIFE_EV_ATE, (uint32_t)a->species, 0u,
+                                a->x, a->y, taken * gain);
                 need -= taken;
             }
         }
@@ -391,6 +452,9 @@ static void step_agent(ws_ecology *e, uint32_t i, double dt)
                     a->kills += 1u;
                     a->hunt_cooldown = e->config.pred_handling_s;
                     e->predation_events += 1u;
+                    emit_life_event(e, WS_LIFE_EV_KILLED, (uint32_t)a->species,
+                                    (uint32_t)prey_kind, prey->x, prey->y,
+                                    gained);
                 }
                 break;
             }
@@ -418,6 +482,8 @@ static void step_agent(ws_ecology *e, uint32_t i, double dt)
         e->deaths += 1u;
         e->starvation_deaths += 1u;
         e->deaths_by_species[a->species] += 1u;
+        emit_life_event(e, WS_LIFE_EV_DIED, (uint32_t)a->species, 0u,
+                        a->x, a->y, 0.0);
         return;
     }
 

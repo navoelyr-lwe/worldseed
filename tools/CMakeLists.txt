@@ -14,3 +14,6 @@ target_link_libraries(ws_imgdiff PRIVATE worldseed_core)
 
 add_executable(ws_assetgen ws_assetgen.c)
 target_link_libraries(ws_assetgen PRIVATE worldseed_core)
+
+add_executable(ws_audio ws_audio.c)
+target_link_libraries(ws_audio PRIVATE worldseed_core)

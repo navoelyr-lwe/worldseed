@@ -2,11 +2,16 @@
 #include "ws_env_scene.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "../core/ws_hash.h"
 #include "../core/ws_math.h"
 #include "../core/ws_noise.h"
+#include "../audio/ws_audio.h"
+#include "../cinema/ws_director.h"
+#include "../life/ws_life_event.h"
 #include "../physics/ws_physics.h"
 #include "../world/ws_world_host.h"
 
@@ -59,6 +64,8 @@ const char *ws_env_scene_kind_id(int scene_kind)
     case 5: return "organism_forage";
     case 6: return "ecosystem";
     case 7: return "world_stream";
+    case 8: return "director_shot";
+    case 9: return "soundscape";
     default: return "terrain";
     }
 }
@@ -768,6 +775,247 @@ static void add_ecosystem_objects(ws_env_scene *e)
     }
 }
 
+/* Run the P9 cinematic observer over the ecosystem's real life events. The
+ * ecology runs headless and every life event it produces is offered to the
+ * director; the director plans a shot, drives the camera under its motion
+ * limits, and the scene renders the animal it chose from the camera it drove.
+ * The director never writes to the ecology, so the run is identical to the same
+ * ecology run without a director (docs/09). */
+static ws_result run_director(ws_env_scene *e)
+{
+    ws_eco_config cfg = ws_eco_config_default(0x7ec0u ^ e->terrain.config.seed);
+    ws_ecology eco;
+    ws_result r = ws_ecology_init(&eco, &cfg);
+    if (r != WS_OK) {
+        return r;
+    }
+    ws_director dir;
+    ws_director_init(&dir, NULL);
+
+    const double dt = 0.05;
+    int steps = (int)(600.0 / dt);
+    for (int i = 0; i < steps; ++i) {
+        (void)ws_ecology_step(&eco, dt);
+        /* Feed every retained event; the director ignores ones it has seen. */
+        uint32_t n = ws_ecology_event_count(&eco);
+        for (uint32_t k = 0; k < n; ++k) {
+            ws_event ev;
+            if (ws_ecology_event_at(&eco, k, &ev) == WS_OK) {
+                (void)ws_director_observe(&dir, &ev);
+            }
+        }
+        /* Track the subject the director chose: follow a live agent of that
+         * species so the shot moves with the animal, not a frozen point. */
+        const ws_director_shot *s = ws_director_current_shot(&dir);
+        if (s != NULL) {
+            for (uint32_t a = 0; a < eco.capacity; ++a) {
+                if (eco.agents[a].alive &&
+                    (uint32_t)eco.agents[a].species == s->actor_species) {
+                    (void)ws_director_track(
+                        &dir, ws_vec3_make(eco.agents[a].x, 0.0, eco.agents[a].y));
+                    break;
+                }
+            }
+        }
+        (void)ws_director_update(&dir, dt);
+    }
+
+    const ws_director_shot *shot = ws_director_current_shot(&dir);
+    const ws_director_metrics *m = ws_director_metrics_of(&dir);
+    e->director_events_seen = m->events_observed;
+    e->director_cuts = m->cuts;
+    e->director_track_error_max = m->track_error_max;
+    e->director_speed_max = m->speed_max;
+    e->director_turn_rate_max = m->turn_rate_max;
+    if (shot != NULL) {
+        e->director_has_subject = 1;
+        e->director_shot_type = shot->type;
+        e->director_event_kind = shot->event_kind;
+        e->director_event_sequence = shot->event_sequence;
+        snprintf(e->director_shot_desc, sizeof(e->director_shot_desc),
+                 "%s/%s", ws_shot_type_name(shot->type),
+                 ws_life_event_kind_name(shot->event_kind));
+        /* Place the chosen animal at the event's real world position, facing
+         * the camera, so the picture is the event the director followed. */
+        int species = (int)shot->actor_species;
+        if (species < 0 || species >= WS_SPECIES_COUNT) {
+            species = WS_SPECIES_DEER;
+        }
+        const ws_camera *cam = ws_director_camera(&dir);
+        double heading = atan2(cam->eye.z - shot->subject.z,
+                               cam->eye.x - shot->subject.x);
+        r = build_species_walk(e, species, shot->subject.x, shot->subject.z,
+                               heading, &e->director_subject);
+        if (r != WS_OK) {
+            ws_ecology_free(&eco);
+            return r;
+        }
+    }
+    const ws_camera *cam = ws_director_camera(&dir);
+    e->director_eye = cam->eye;
+    e->director_target = cam->target;
+    ws_ecology_free(&eco);
+    return WS_OK;
+}
+
+static void add_director_objects(ws_env_scene *e)
+{
+    if (!e->director_has_subject) {
+        return;
+    }
+    const struct ws_rendered_creature *rc = &e->director_subject;
+    const ws_quad_parts *p = &rc->parts;
+    uint8_t col[3];
+    species_color(rc->species, col);
+    ws_material body = ws_material_make(col[0] / 255.0, col[1] / 255.0,
+                                        col[2] / 255.0, 0.85, 0.0, 0.05);
+    ws_material dark = ws_material_make(col[0] / 320.0, col[1] / 320.0,
+                                        col[2] / 320.0, 0.85, 0.0, 0.05);
+    const double leg_z = 0.12;
+    for (uint32_t i = 0; i < rc->body_count; ++i) {
+        const ws_cbody *b = &rc->bodies[i];
+        int is_leg = ((int)i == p->front_upper || (int)i == p->front_lower ||
+                      (int)i == p->rear_upper || (int)i == p->rear_lower);
+        ws_material m = is_leg ? dark : body;
+        double sx = b->half_len * 2.0;
+        double sy = b->half_thick * 2.0;
+        double sz = b->half_width * 2.0;
+        if (is_leg) {
+            for (int side = -1; side <= 1; side += 2) {
+                ws_mat4 t = ws_mat4_translation(
+                    ws_vec3_make(b->px, b->py, rc->z + side * leg_z));
+                t = ws_mat4_multiply(t, ws_mat4_rotation_z(b->angle));
+                t = ws_mat4_multiply(t, ws_mat4_scale(ws_vec3_make(sx, sy, sz)));
+                (void)ws_scene_add_object(&e->scene, &e->cube_mesh, t, m);
+            }
+        } else {
+            ws_mat4 t = ws_mat4_translation(ws_vec3_make(b->px, b->py, rc->z));
+            t = ws_mat4_multiply(t, ws_mat4_rotation_z(b->angle));
+            t = ws_mat4_multiply(t, ws_mat4_scale(ws_vec3_make(sx, sy, sz)));
+            (void)ws_scene_add_object(&e->scene, &e->cube_mesh, t, m);
+        }
+    }
+}
+
+/* Run the P9 soundscape: real life events trigger voices, the mix is rendered
+ * and hashed, and each voice kind becomes a meter bar whose height reflects how
+ * often the run produced that event. The scene is the soundscape the world
+ * actually made, not a fixed track. */
+static ws_result run_soundscape(ws_env_scene *e)
+{
+    ws_eco_config cfg = ws_eco_config_default(0x7ec0u ^ e->terrain.config.seed);
+    ws_ecology eco;
+    ws_result r = ws_ecology_init(&eco, &cfg);
+    if (r != WS_OK) {
+        return r;
+    }
+    ws_audio audio;
+    ws_audio_init(&audio, WS_AUDIO_SAMPLE_RATE);
+
+    uint32_t hits[WS_ENV_MAX_AUDIO_BARS];
+    memset(hits, 0, sizeof(hits));
+
+    /* Run 60 s of world and mix the audio in step, so each voice decays over
+     * real time instead of piling up into a drone. The mix is the evidence. */
+    const double dt = 0.05;
+    const int steps = (int)(60.0 / dt);
+    const uint32_t frames_per_step = (uint32_t)(WS_AUDIO_SAMPLE_RATE * dt);
+    const uint32_t total_frames = frames_per_step * (uint32_t)steps;
+    int16_t *pcm = (int16_t *)malloc((size_t)total_frames * 2u * sizeof(int16_t));
+    if (pcm == NULL) {
+        ws_ecology_free(&eco);
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+    uint64_t next_seq = 0u;
+    for (int i = 0; i < steps; ++i) {
+        (void)ws_ecology_step(&eco, dt);
+        uint32_t n = ws_ecology_event_count(&eco);
+        for (uint32_t k = 0; k < n; ++k) {
+            ws_event ev;
+            if (ws_ecology_event_at(&eco, k, &ev) != WS_OK) {
+                continue;
+            }
+            if (ev.sequence < next_seq) {
+                continue;
+            }
+            next_seq = ev.sequence + 1u;
+            uint8_t kind;
+            float x;
+            if (!ws_life_event_decode(ev.payload, ev.payload_size, &kind, NULL,
+                                      NULL, &x, NULL, NULL, NULL)) {
+                continue;
+            }
+            double pan = (x / cfg.area_m) * 2.0 - 1.0;
+            if (kind < WS_ENV_MAX_AUDIO_BARS) {
+                hits[kind] += 1u;
+            }
+            (void)ws_audio_trigger_event(&audio, kind, pan, (double)i * dt);
+        }
+        r = ws_audio_mix(&audio, &pcm[(size_t)i * frames_per_step * 2u],
+                         frames_per_step);
+        if (r != WS_OK) {
+            free(pcm);
+            ws_ecology_free(&eco);
+            return r;
+        }
+    }
+
+    uint8_t digest[WS_SHA256_DIGEST_SIZE];
+    ws_sha256_buffer(pcm, (size_t)total_frames * 2u * sizeof(int16_t), digest);
+    ws_sha256_hex(digest, e->audio_digest);
+    free(pcm);
+
+    e->audio_events_played = audio.events_played;
+    e->audio_samples = ws_audio_samples_rendered(&audio);
+
+    /* Bars: one per kind that occurred, ordered by kind, height from hit count
+     * scaled by the kind's designed loudness. */
+    uint32_t max_hits = 1u;
+    for (uint32_t k = 0; k < WS_ENV_MAX_AUDIO_BARS; ++k) {
+        if (hits[k] > max_hits) {
+            max_hits = hits[k];
+        }
+    }
+    e->audio_bar_count = 0u;
+    for (uint32_t kind = 0u; kind < WS_ENV_MAX_AUDIO_BARS; ++kind) {
+        if (hits[kind] == 0u) {
+            continue;
+        }
+        struct ws_audio_bar *b = &e->audio_bars[e->audio_bar_count++];
+        b->kind = (int)kind;
+        b->hits = hits[kind];
+        b->level = (float)((double)hits[kind] / (double)max_hits);
+    }
+    ws_ecology_free(&eco);
+    return WS_OK;
+}
+
+static void add_soundscape_objects(ws_env_scene *e)
+{
+    /* Bars stand on the flat scene centre, one per kind, rising with level. */
+    double base_x = e->extent * 0.5 - (double)e->audio_bar_count * 1.6;
+    double base_z = e->extent * 0.5;
+    double gy = ws_terrain_height_bilinear(&e->terrain, base_x, base_z);
+    static const uint8_t bar_col[4][3] = {
+        {120u, 80u, 40u},   /* ate */
+        {240u, 220u, 120u}, /* born */
+        {80u, 70u, 80u},    /* died */
+        {200u, 60u, 50u}    /* killed */
+    };
+    for (uint32_t i = 0; i < e->audio_bar_count; ++i) {
+        const struct ws_audio_bar *b = &e->audio_bars[i];
+        double h = 0.5 + (double)b->level * 9.0;
+        const uint8_t *c = (b->kind >= 0 && b->kind < 4) ? bar_col[b->kind]
+                                                         : bar_col[0];
+        ws_material m = ws_material_make(c[0] / 255.0, c[1] / 255.0,
+                                         c[2] / 255.0, 0.7, 0.0, 0.1);
+        double x = base_x + (double)i * 3.2;
+        ws_mat4 t = ws_mat4_translation(ws_vec3_make(x, gy + h * 0.5, base_z));
+        t = ws_mat4_multiply(t, ws_mat4_scale(ws_vec3_make(1.4, h, 1.4)));
+        (void)ws_scene_add_object(&e->scene, &e->cube_mesh, t, m);
+    }
+}
+
 /* Run the P8 world host: stream a loaded set of regions around a focus that
  * walks a short path, so the picture shows a world that has progressed while
  * the camera moved. Record the loaded set as level-tinted tiles and keep the
@@ -984,7 +1232,9 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
     if (opts->scene_kind == WS_ENV_SCENE_CREATURE ||
         opts->scene_kind == WS_ENV_SCENE_ORGANISM ||
         opts->scene_kind == WS_ENV_SCENE_ECOSYSTEM ||
-        opts->scene_kind == WS_ENV_SCENE_WORLD_STREAM) {
+        opts->scene_kind == WS_ENV_SCENE_WORLD_STREAM ||
+        opts->scene_kind == WS_ENV_SCENE_DIRECTOR ||
+        opts->scene_kind == WS_ENV_SCENE_SOUNDSCAPE) {
         pick_drop_point(e, &cre_x, &cre_z);
         /* Build the shared unit-cube mesh used for every link. */
         size_t vc = ws_mesh_cube_vertex_count();
@@ -1020,6 +1270,18 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
             }
         } else if (opts->scene_kind == WS_ENV_SCENE_WORLD_STREAM) {
             cr = run_world_stream(e, e->extent);
+            if (cr != WS_OK) {
+                ws_env_scene_free(e);
+                return cr;
+            }
+        } else if (opts->scene_kind == WS_ENV_SCENE_DIRECTOR) {
+            cr = run_director(e);
+            if (cr != WS_OK) {
+                ws_env_scene_free(e);
+                return cr;
+            }
+        } else if (opts->scene_kind == WS_ENV_SCENE_SOUNDSCAPE) {
+            cr = run_soundscape(e);
             if (cr != WS_OK) {
                 ws_env_scene_free(e);
                 return cr;
@@ -1081,6 +1343,31 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         tgt_x = mid;
         tgt_y = cy;
         tgt_z = mid;
+    } else if (opts->scene_kind == WS_ENV_SCENE_DIRECTOR) {
+        /* The director's own camera, lifted onto the terrain. The director
+         * planned and drove it in a ground-relative frame; the renderer adds the
+         * terrain height so the shot sits on the land. */
+        double eh = ws_terrain_height_bilinear(&e->terrain, e->director_eye.x,
+                                               e->director_eye.z);
+        double th = ws_terrain_height_bilinear(&e->terrain, e->director_target.x,
+                                               e->director_target.z);
+        eye_x = e->director_eye.x;
+        eye_y = eh + e->director_eye.y;
+        eye_z = e->director_eye.z;
+        tgt_x = e->director_target.x;
+        tgt_y = th + e->director_target.y;
+        tgt_z = e->director_target.z;
+    } else if (opts->scene_kind == WS_ENV_SCENE_SOUNDSCAPE) {
+        /* Front view of the voice bars so their relative heights read. */
+        double cx = e->extent * 0.5;
+        double cz = e->extent * 0.5;
+        double cy = ws_terrain_height_bilinear(&e->terrain, cx, cz);
+        eye_x = cx;
+        eye_y = cy + 7.0;
+        eye_z = cz - 22.0;
+        tgt_x = cx;
+        tgt_y = cy + 4.0;
+        tgt_z = cz;
     } else if (opts->scene_kind == WS_ENV_SCENE_CREATURE ||
                opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
         /* Side-on view of the walking animal: the sagittal gait reads best from
@@ -1221,6 +1508,16 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
     /* World stream: the loaded region set as level-tinted tiles. */
     if (opts->scene_kind == WS_ENV_SCENE_WORLD_STREAM) {
         add_world_stream_objects(e);
+    }
+
+    /* Director: the animal the observer chose, at the event's real position. */
+    if (opts->scene_kind == WS_ENV_SCENE_DIRECTOR) {
+        add_director_objects(e);
+    }
+
+    /* Soundscape: one meter bar per voice kind the run produced. */
+    if (opts->scene_kind == WS_ENV_SCENE_SOUNDSCAPE) {
+        add_soundscape_objects(e);
     }
 
     e->scene.camera = camera;

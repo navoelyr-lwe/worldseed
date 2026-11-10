@@ -55,7 +55,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path evidence/preview | Out-Null
           $exe = "build/src/app/Release/worldseed.exe"
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage","ecosystem","world_stream"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage","ecosystem","world_stream","director_shot","soundscape"
           for ($i = 0; $i -lt $scenes.Count; $i++) {
             $s = $scenes[$i]
             & $exe --capture "evidence/preview/$s.ppm" --scene $i --size 1280x720
@@ -63,17 +63,23 @@ jobs:
           }
           & $exe --selftest --size 640x360 | Tee-Object -FilePath evidence/preview/selftest.txt
 
+          # P9 soundscape: our own C17 synthesis, rendered from a real ecology
+          # run, so the preview ships a listenable WAV next to the frames.
+          & build/tools/Release/ws_audio.exe "evidence/preview/soundscape.wav" 20260101 |
+            Tee-Object -FilePath evidence/preview/audio.txt
+
           $stage = "stage/worldseed"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item $exe "$stage/worldseed.exe"
           New-Item -ItemType Directory -Force -Path "$stage/preview" | Out-Null
           Copy-Item evidence/preview/*.png "$stage/preview/"
+          Copy-Item evidence/preview/soundscape.wav "$stage/preview/"
           @(
-            "Worldseed Engine preview (P8 - kalici ve cok olcekli dunya).",
-            "Calistirma: worldseed.exe --scene 13 --size 1280x720",
+            "Worldseed Engine preview (P9 - sinematik yonetmen ve ses).",
+            "Calistirma: worldseed.exe --scene 14 --size 1280x720",
             "Sahneler: worldseed.exe --list",
             "Kanit: preview/*.png (CPU referans renderer ciktilari) ve CI artefaktlari.",
-            "Bu bir onizleme surumudur; sinematik yonetmen sonraki asamadadir."
+            "Bu bir onizleme surumudur; GPU/hizlandirma sonraki asamadadir."
           ) | Set-Content -Path "$stage/README.txt"
           Compress-Archive -Path "$stage/*" -DestinationPath "worldseed-windows-x64.zip" -Force
           Get-FileHash worldseed-windows-x64.zip -Algorithm SHA256 |
@@ -108,7 +114,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P8 - kalici ve cok olcekli dunya)." \
+            "Worldseed Engine onizleme surumu (P9 - sinematik yonetmen ve ses)." \
             "" \
             "Bu paket, kendi C17 CPU referans renderer'imizle uretilen sabit sahneleri gosterir." \
             "worldseed.exe --list ile sahne listesini, --scene N ile secimi gorursunuz." \
@@ -126,9 +132,13 @@ jobs:
             "yuruyus; ecosystem golden sahnesi. P8 kalici ve cok olcekli dunya: bolge" \
             "geometrisi, region streaming, near/mid/far simulasyon seviyeleri, kamera disi" \
             "dunya ilerlemesi, bolge unload/load (durum korunur), checkpoint kaydet/yukle," \
-            "olay gunlugu (journal) ve deterministik replay; world_stream golden sahnesi;" \
-            "golden-scene kaniti ve determinizm testleri." \
-            "Bu surumde henuz olmayanlar: sinematik yonetmen (sonraki asama)." \
+            "olay gunlugu (journal) ve deterministik replay; world_stream golden sahnesi. P9 sinematik" \
+            "yonetmen: olay-tabanli yonetmen (dunyayi degistirmez, olay uydurmaz, gercek olay" \
+            "kimligine bagli cekim), cekim planlayici (genis/orta/yakin/takip), takip" \
+            "kamerasi, serbest kamera, prosedurel ses manzarasi ve tekrar gozlem;" \
+            "director_shot ve soundscape golden sahneleri; golden-scene kaniti ve" \
+            "determinizm testleri." \
+            "Bu surumde henuz olmayanlar: GPU hizlandirma ve cok cekirdekli olceklendirme (P10)." \
             "" \
             "Kanit: bu surumun ekleri (preview/*.png), sha256 dosyasi ve CI artefaktlari." \
             > notes.md
@@ -143,6 +153,8 @@ jobs:
             evidence/preview/organism_forage.png \
             evidence/preview/ecosystem.png \
             evidence/preview/world_stream.png \
+            evidence/preview/director_shot.png \
+            evidence/preview/soundscape.png \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md
