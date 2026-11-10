@@ -57,8 +57,16 @@
  * simulation left it, on the terrain with its vegetation. The picture is the
  * population's result, not a scripted arrangement. */
 #define WS_ENV_SCENE_ECOSYSTEM 6
+/* 7 (world_stream) runs the P8 persistent multi-scale world host: it streams a
+ * loaded set of regions around a moving focus, assigns each a near/mid/far
+ * simulation level and advances them independently of the camera. The scene
+ * renders the loaded regions as terrain-coloured tiles tinted by level, with the
+ * focus region shown at full detail, so the streaming and level structure are
+ * visible and reproducible. */
+#define WS_ENV_SCENE_WORLD_STREAM 7
 
 #define WS_ENV_MAX_CREATURES 8u
+#define WS_ENV_MAX_STREAM_TILES 64u
 
 typedef struct ws_env_scene_options {
     uint64_t seed;
@@ -139,6 +147,23 @@ typedef struct ws_env_scene {
         int species;           /* ws_species_kind */
     } ecosystem_creatures[WS_ENV_MAX_CREATURES];
     uint32_t ecosystem_count;
+
+    /* World-stream scene (scene kind 7): the P8 host's loaded set rendered as
+     * level-tinted tiles, plus a summary of the run for evidence. */
+    struct ws_stream_tile {
+        double x, z;      /* region-local centre of the tile, m */
+        double size;      /* tile side, m */
+        int level;        /* ws_world_level */
+        float pop;        /* total population of the region (for colour) */
+        int is_focus;
+    } stream_tiles[WS_ENV_MAX_STREAM_TILES];
+    uint32_t stream_tile_count;
+    uint32_t stream_loaded;
+    uint64_t stream_loads;
+    uint64_t stream_unloads;
+    uint64_t stream_extinctions;
+    double stream_time_s;
+    char stream_digest[65];
 
     ws_scene_object *objects;
     uint32_t object_capacity;

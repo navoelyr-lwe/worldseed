@@ -8,6 +8,7 @@
 #include "../core/ws_math.h"
 #include "../core/ws_noise.h"
 #include "../physics/ws_physics.h"
+#include "../world/ws_world_host.h"
 
 /* Per-surface sRGB colours used by the terrain texture. */
 static void surface_color(uint8_t surface, uint8_t out[3])
@@ -57,6 +58,7 @@ const char *ws_env_scene_kind_id(int scene_kind)
     case 4: return "creature_walk";
     case 5: return "organism_forage";
     case 6: return "ecosystem";
+    case 7: return "world_stream";
     default: return "terrain";
     }
 }
@@ -766,6 +768,97 @@ static void add_ecosystem_objects(ws_env_scene *e)
     }
 }
 
+/* Run the P8 world host: stream a loaded set of regions around a focus that
+ * walks a short path, so the picture shows a world that has progressed while
+ * the camera moved. Record the loaded set as level-tinted tiles and keep the
+ * run summary (loads/unloads/extinctions and the replay digest) for evidence. */
+static ws_result run_world_stream(ws_env_scene *e, double extent)
+{
+    ws_world_host_config cfg = ws_world_host_config_default(e->terrain.config.seed,
+                                                            e->terrain.config.seed);
+    /* The region grid here is coarser than the render region: a region is the
+     * scene extent, so the tiles map cleanly onto the frame. */
+    cfg.region.cells = (uint32_t)(extent / cfg.region.cell_size);
+    ws_world_host host;
+    ws_result r = ws_world_host_init(&host, &cfg);
+    if (r != WS_OK) {
+        return r;
+    }
+    /* Walk the focus along a fixed path so the streaming and level structure
+     * are exercised, then settle so the NEAR region advances every tick. */
+    const ws_region_coord path[5] = {
+        {0, 0}, {1, 0}, {1, 1}, {0, 1}, {-1, 0}
+    };
+    for (uint32_t i = 0; i < 5u; ++i) {
+        r = ws_world_host_set_focus(&host, path[i]);
+        if (r != WS_OK) {
+            return r;
+        }
+        r = ws_world_host_run(&host, 90.0);
+        if (r != WS_OK) {
+            return r;
+        }
+    }
+
+    double half = extent * 0.5;
+    /* Size the tiles so the whole loaded set spans the render region. */
+    double tile = extent / (double)(2u * cfg.radius_load + 1u);
+    e->stream_tile_count = 0u;
+    for (uint32_t i = 0; i < ws_world_host_loaded_count(&host) &&
+                         e->stream_tile_count < WS_ENV_MAX_STREAM_TILES; ++i) {
+        const ws_region_slot *s = &host.slots[i];
+        struct ws_stream_tile *t = &e->stream_tiles[e->stream_tile_count++];
+        /* Region-local offset from the focus region centre, then shifted so the
+         * focus region sits at the middle of the scene. */
+        double rx = (double)(s->coord.x - host.focus.x);
+        double ry = (double)(s->coord.y - host.focus.y);
+        t->x = half + rx * tile;
+        t->z = half + ry * tile;
+        t->size = tile;
+        t->level = s->level;
+        t->pop = (float)ws_pop_total(&s->pop);
+        t->is_focus = ws_region_coord_equal(s->coord, host.focus) ? 1 : 0;
+    }
+    e->stream_loaded = ws_world_host_loaded_count(&host);
+    e->stream_loads = host.total_loads;
+    e->stream_unloads = host.total_unloads;
+    e->stream_extinctions = host.extinctions;
+    e->stream_time_s = host.time_s;
+    (void)ws_world_host_digest(&host, e->stream_digest);
+    if (e->stream_tile_count == 0u) {
+        return WS_ERR_INVALID_STATE;
+    }
+    return WS_OK;
+}
+
+/* One flat tile per loaded region, raised just above the terrain so it reads as
+ * a level-tinted map: NEAR bright green, MID amber, FAR dim blue-grey. The focus
+ * region is outlined by a brighter tile. */
+static void add_world_stream_objects(ws_env_scene *e)
+{
+    for (uint32_t i = 0; i < e->stream_tile_count; ++i) {
+        const struct ws_stream_tile *t = &e->stream_tiles[i];
+        double gy = ws_terrain_height_bilinear(&e->terrain, t->x, t->z) + 0.4;
+        uint8_t col[3];
+        switch (t->level) {
+        case WS_LEVEL_NEAR: col[0] = 90u;  col[1] = 170u; col[2] = 90u;  break;
+        case WS_LEVEL_MID:  col[0] = 190u; col[1] = 150u; col[2] = 70u;  break;
+        default:            col[0] = 90u;  col[1] = 110u; col[2] = 150u; break;
+        }
+        if (t->is_focus) {
+            col[0] = 235u; col[1] = 235u; col[2] = 150u;
+        }
+        double s = t->size * 0.5;
+        ws_material m = ws_material_make(col[0] / 255.0, col[1] / 255.0,
+                                         col[2] / 255.0, 0.95, 0.0, 0.02);
+        ws_mat4 tr = ws_mat4_translation(ws_vec3_make(t->x, gy, t->z));
+        tr = ws_mat4_multiply(tr, ws_mat4_scale(ws_vec3_make(s * 1.9, 0.6, s * 1.9)));
+        (void)ws_scene_add_object(&e->scene, &e->cube_mesh, tr, m);
+    }
+}
+
+
+
 
 static void sun_and_sky(const ws_environment *env, ws_light *light,
                         double *out_intensity, double *out_ambient)
@@ -890,7 +983,8 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
     double cre_z = e->extent * 0.5;
     if (opts->scene_kind == WS_ENV_SCENE_CREATURE ||
         opts->scene_kind == WS_ENV_SCENE_ORGANISM ||
-        opts->scene_kind == WS_ENV_SCENE_ECOSYSTEM) {
+        opts->scene_kind == WS_ENV_SCENE_ECOSYSTEM ||
+        opts->scene_kind == WS_ENV_SCENE_WORLD_STREAM) {
         pick_drop_point(e, &cre_x, &cre_z);
         /* Build the shared unit-cube mesh used for every link. */
         size_t vc = ws_mesh_cube_vertex_count();
@@ -920,6 +1014,12 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         } else if (opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
             e->resource_kind = -1;
             cr = run_organism_forage(e, cre_x, cre_z);
+            if (cr != WS_OK) {
+                ws_env_scene_free(e);
+                return cr;
+            }
+        } else if (opts->scene_kind == WS_ENV_SCENE_WORLD_STREAM) {
+            cr = run_world_stream(e, e->extent);
             if (cr != WS_OK) {
                 ws_env_scene_free(e);
                 return cr;
@@ -970,6 +1070,17 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         tgt_x = cx;
         tgt_y = cy + 0.9;
         tgt_z = cz;
+    } else if (opts->scene_kind == WS_ENV_SCENE_WORLD_STREAM) {
+        /* High three-quarter view of the whole loaded set so the near/mid/far
+         * level structure and the focus tile all read at once. */
+        double mid = e->extent * 0.5;
+        double cy = ws_terrain_height_bilinear(&e->terrain, mid, mid);
+        eye_x = mid - e->extent * 0.55;
+        eye_y = cy + e->extent * 0.95;
+        eye_z = mid - e->extent * 0.75;
+        tgt_x = mid;
+        tgt_y = cy;
+        tgt_z = mid;
     } else if (opts->scene_kind == WS_ENV_SCENE_CREATURE ||
                opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
         /* Side-on view of the walking animal: the sagittal gait reads best from
@@ -1105,6 +1216,11 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
     /* Ecosystem: one representative body per surviving species. */
     if (opts->scene_kind == WS_ENV_SCENE_ECOSYSTEM) {
         add_ecosystem_objects(e);
+    }
+
+    /* World stream: the loaded region set as level-tinted tiles. */
+    if (opts->scene_kind == WS_ENV_SCENE_WORLD_STREAM) {
+        add_world_stream_objects(e);
     }
 
     e->scene.camera = camera;

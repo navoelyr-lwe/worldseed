@@ -14,6 +14,7 @@
 #include "world/ws_hydro.h"
 #include "world/ws_terrain.h"
 #include "world/ws_vegetation.h"
+#include "world/ws_world_host.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -472,6 +473,61 @@ static int test_env_scene_ecosystem(void)
     return 1;
 }
 
+/* The world_stream scene must run the P8 host headless: stream a loaded set of
+ * regions around a moving focus, assign each a near/mid/far level and advance
+ * them independently of the camera, then render the loaded set as level-tinted
+ * tiles. The picture is the host's result, not a scripted arrangement, and the
+ * same seed must reproduce the same tiles and the same run summary. */
+static int test_env_scene_world_stream(void)
+{
+    ws_env_scene_options o = ws_env_scene_options_default(20260101ULL);
+    o.scene_kind = WS_ENV_SCENE_WORLD_STREAM;
+    ws_env_scene a;
+    ws_env_scene b;
+    WS_CHECK(ws_env_scene_create(&a, &o) == WS_OK);
+    WS_CHECK(ws_env_scene_create(&b, &o) == WS_OK);
+
+    /* The loaded set is a full (2r+1)^2 square and every tile is a real region
+     * with a valid level, so the picture reflects streaming, not a stub. */
+    WS_CHECK(a.stream_tile_count >= 9u);
+    WS_CHECK(a.stream_tile_count <= WS_ENV_MAX_STREAM_TILES);
+    WS_CHECK(a.stream_loaded == a.stream_tile_count);
+    WS_CHECK(a.stream_loads > 0u);
+    WS_CHECK(a.stream_unloads > 0u);
+    WS_CHECK(a.stream_time_s > 0.0);
+    WS_CHECK(a.stream_digest[0] != '\0');
+    int near = 0, mid = 0, far = 0, focus = 0;
+    for (uint32_t k = 0; k < a.stream_tile_count; ++k) {
+        const struct ws_stream_tile *t = &a.stream_tiles[k];
+        WS_CHECK(t->level == WS_LEVEL_NEAR || t->level == WS_LEVEL_MID ||
+                 t->level == WS_LEVEL_FAR);
+        WS_CHECK(t->size > 0.0);
+        WS_CHECK(isfinite(t->pop) && t->pop >= 0.0);
+        if (t->level == WS_LEVEL_NEAR) near++;
+        if (t->level == WS_LEVEL_MID) mid++;
+        if (t->level == WS_LEVEL_FAR) far++;
+        if (t->is_focus) focus++;
+    }
+    WS_CHECK(focus == 1);
+    WS_CHECK(near > 0 && mid > 0 && far > 0);
+
+    /* Deterministic: same seed, same tiles, same summary, same digest. */
+    WS_CHECK(a.stream_tile_count == b.stream_tile_count);
+    WS_CHECK(a.stream_loaded == b.stream_loaded);
+    WS_CHECK(a.stream_loads == b.stream_loads);
+    WS_CHECK(a.stream_unloads == b.stream_unloads);
+    WS_CHECK(a.stream_time_s == b.stream_time_s);
+    WS_CHECK(strcmp(a.stream_digest, b.stream_digest) == 0);
+    for (uint32_t k = 0; k < a.stream_tile_count; ++k) {
+        WS_CHECK(a.stream_tiles[k].x == b.stream_tiles[k].x);
+        WS_CHECK(a.stream_tiles[k].z == b.stream_tiles[k].z);
+        WS_CHECK(a.stream_tiles[k].level == b.stream_tiles[k].level);
+    }
+    ws_env_scene_free(&a);
+    ws_env_scene_free(&b);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -493,6 +549,7 @@ int main(void)
         {"env scene creature walk", test_env_scene_creature},
         {"env scene organism forage", test_env_scene_organism},
         {"env scene ecosystem", test_env_scene_ecosystem},
+        {"env scene world stream", test_env_scene_world_stream},
         {"catalog builds all scenes", test_catalog_builds_all},
     };
     return ws_test_run("world_env", cases, (int)(sizeof(cases) / sizeof(cases[0])));
