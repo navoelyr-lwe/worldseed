@@ -140,6 +140,7 @@ jobs:
             evidence/preview/selftest.txt
             evidence/preview/perf.txt
             evidence/live/tour-a/*.png
+            evidence/live/tour-a/manifest.txt
             evidence/live/headless.txt
             evidence/live/tour-a.txt
 
