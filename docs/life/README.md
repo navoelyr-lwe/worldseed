@@ -12,6 +12,9 @@ diye tanıtılmaz.
 | `MODEL-KARTI-REFERANS-TUR.md` | Referans tür (kızıl geyik) anatomi, kütle/atalet, eklemler | D1 (oranlar literatür-bilgili; nicel D3 kıyası yok) |
 | `MODEL-KARTI-YURUYUS-KONTROLU.md` | Raibert tarzı ayak yerleştirmeli yürüyüş kontrolcüsü | D2 (sayısal kararlılık ve determinizm testleri geçti) |
 | `MODEL-KARTI-HAREKET-MALIYETI.md` | Kas-eşdeğeri motor işi ve hareket maliyeti | D1 (mekanik iş vekili; metabolik D3 kıyası yok) |
+| `MODEL-KARTI-ALGI.md` | Duyusal algı (menzil/görüş alanı, en yakın hedef) | D1 (sınır davranışı; ölçülmüş algı D3 kıyası yok) |
+| `MODEL-KARTI-HOMEOSTAZ.md` | İç durum ve ihtiyaç homeostazı | D2 (korunum ve kararlılık testleri geçti) |
+| `MODEL-KARTI-DAVRANIS.md` | Fayda tabanlı davranış ve sınırlı öğrenme | D2 (senaryo ve çok tohum testleri geçti) |
 
 Bilinen ortak sınır: model düzlemseldir (sagittal); lateral denge ve yaw torku
 henüz yoktur. Yürüyüş hattı zemin profili yürüyüş hattı boyunca örneklenir.

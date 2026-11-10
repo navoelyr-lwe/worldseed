@@ -55,6 +55,7 @@ const char *ws_env_scene_kind_id(int scene_kind)
     case 2: return "terrain_weather";
     case 3: return "terrain_physics";
     case 4: return "creature_walk";
+    case 5: return "organism_forage";
     default: return "terrain";
     }
 }
@@ -443,6 +444,144 @@ static void add_creature_objects(ws_env_scene *e)
     }
 }
 
+/* ---- P6 behaviour organism scene ------------------------------------------
+ * The reference animal runs the behaviour agent over resources placed from the
+ * world layers. It senses, decides from its internal drives and walks to what
+ * it needs; the scene then frames the animal where the decision took it, next
+ * to the resource it acted on. The picture is the behaviour result, not a
+ * scripted pose. */
+
+typedef struct ws_organism_ground {
+    const ws_env_scene *e;
+} ws_organism_ground;
+
+/* Build the reference quadruped standing at a region-local spot, facing
+ * `heading` (rad, in-plane). Reuses the shared creature body storage. */
+static ws_result build_creature_posed(ws_env_scene *e, double lx, double lz,
+                                      double heading, double ground_y)
+{
+    static ws_cjoint joints[8];
+    static ws_cfoot feet[4];
+    ws_quad_storage st;
+    ws_species_profile sp = ws_species_red_deer();
+    ws_creature c;
+    ws_quad_parts parts;
+    ws_result r = ws_creature_init(&c, 1.0 / 500.0, 9.80665, 30, 0.2,
+                                   e->creature_bodies, 8u, joints, 8u, feet, 4u);
+    if (r != WS_OK) {
+        return r;
+    }
+    /* Ground profile along the sagittal axis through the animal's spot. The
+     * profile callback ignores heading because the body is settled before it is
+     * rotated into place; on the gentle reference terrain this is well within
+     * the model's stated validity. */
+    static ws_creature_ground cg;
+    cg.e = e;
+    cg.z = lz + e->terrain.origin_y;
+    ws_creature_set_ground(&c, creature_profile_cb, &cg);
+    r = ws_quadruped_build(&c, &st, &sp, ground_y, &parts);
+    if (r != WS_OK) {
+        return r;
+    }
+    for (int i = 0; i < 800; ++i) {
+        ws_quadruped_balance(&c, parts.torso, 4000.0, 500.0, 0.0);
+        ws_creature_step(&c);
+    }
+    /* Rotate the settled body about its spot into the decided heading and move
+     * it to the region-local spot. */
+    double ox = e->creature_bodies[parts.torso].px;
+    double oy = e->creature_bodies[parts.torso].py;
+    double ch = cos(heading);
+    double sh = sin(heading);
+    for (uint32_t i = 0; i < c.body_count; ++i) {
+        ws_cbody *b = &e->creature_bodies[i];
+        double rx = b->px - ox;
+        double ry = b->py - oy;
+        b->px = lx + rx * ch - ry * sh;
+        b->py = ground_y + (rx * sh + ry * ch);
+        b->angle += heading;
+    }
+    e->creature_body_count = c.body_count;
+    e->creature_parts = parts;
+    e->creature_z = lz;
+    return WS_OK;
+}
+
+/* Run the behaviour agent over a food patch and a water source placed near the
+ * flattest dry spot, then pose the animal where the decision left it. */
+static ws_result run_organism_forage(ws_env_scene *e, double spot_x, double spot_z)
+{
+    /* Two resources: a food patch and a water source, a short walk apart. */
+    ws_sense_point pts[2];
+    memset(pts, 0, sizeof(pts));
+    pts[0].kind = WS_SENSE_FOOD;
+    pts[0].x = spot_x + 10.0;
+    pts[0].y = spot_z + 3.0;
+    pts[0].value = 1.0;
+    pts[1].kind = WS_SENSE_WATER;
+    pts[1].x = spot_x - 6.0;
+    pts[1].y = spot_z - 8.0;
+    pts[1].value = 1.0;
+    uint32_t count = 2u;
+
+    ws_agent_config cfg = ws_agent_config_default();
+    ws_agent_init(&e->organism, &cfg, 0x50u ^ e->terrain.config.seed, spot_x, spot_z, 0.0);
+    /* Start hungry so the first decision is to forage for food. */
+    e->organism.org.energy = 0.30;
+
+    int steps = (int)(18.0 / 0.02);
+    for (int i = 0; i < steps; ++i) {
+        (void)ws_agent_step(&e->organism, 0.02, pts, &count, e->env.temperature_c);
+    }
+
+    /* Report the resource the animal acted on: the nearer of the two, and its
+     * remaining value. */
+    double d_food = hypot(pts[0].x - e->organism.x, pts[0].y - e->organism.y);
+    double d_water = hypot(pts[1].x - e->organism.x, pts[1].y - e->organism.y);
+    if (d_food <= d_water) {
+        e->resource_kind = WS_SENSE_FOOD;
+        e->resource_x = pts[0].x - e->terrain.origin_x;
+        e->resource_z = pts[0].y - e->terrain.origin_y;
+        e->resource_value = pts[0].value;
+    } else {
+        e->resource_kind = WS_SENSE_WATER;
+        e->resource_x = pts[1].x - e->terrain.origin_x;
+        e->resource_z = pts[1].y - e->terrain.origin_y;
+        e->resource_value = pts[1].value;
+    }
+
+    e->organism_behavior = e->organism.behavior;
+    e->organism_dist_m = e->organism.distance_travelled;
+    e->organism_food_found = e->organism.food_found;
+    e->organism_water_found = e->organism.water_found;
+
+    double lx = e->organism.x - e->terrain.origin_x;
+    double lz = e->organism.y - e->terrain.origin_y;
+    double gy = ws_terrain_height_bilinear(&e->terrain, e->organism.x, e->organism.y);
+    return build_creature_posed(e, lx, lz, e->organism.heading, gy);
+}
+
+/* Add a resource marker: a small coloured box on the ground at its position. */
+static void add_resource_marker(ws_env_scene *e, double lx, double lz, ws_material m,
+                                double sx, double sy, double sz)
+{
+    double gy = ws_terrain_height_bilinear(&e->terrain, lx + e->terrain.origin_x,
+                                           lz + e->terrain.origin_y);
+    ws_mat4 t = ws_mat4_translation(ws_vec3_make(lx, gy + sy * 0.5, lz));
+    t = ws_mat4_multiply(t, ws_mat4_scale(ws_vec3_make(sx, sy, sz)));
+    (void)ws_scene_add_object(&e->scene, &e->cube_mesh, t, m);
+}
+
+static void add_organism_objects(ws_env_scene *e)
+{
+    add_creature_objects(e);
+    /* Food marker (green) and water marker (blue) so the acted-on resource is
+     * visible next to the animal. */
+    add_resource_marker(e, e->resource_x, e->resource_z,
+                        ws_material_make(0.16, 0.55, 0.18, 0.85, 0.0, 0.05),
+                        2.4, 0.9, 2.4);
+}
+
 
 static void sun_and_sky(const ws_environment *env, ws_light *light,
                         double *out_intensity, double *out_ambient)
@@ -565,7 +704,8 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
      * frame it where the simulation left it. */
     double cre_x = e->extent * 0.35;
     double cre_z = e->extent * 0.5;
-    if (opts->scene_kind == WS_ENV_SCENE_CREATURE) {
+    if (opts->scene_kind == WS_ENV_SCENE_CREATURE ||
+        opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
         pick_drop_point(e, &cre_x, &cre_z);
         /* Build the shared unit-cube mesh used for every link. */
         size_t vc = ws_mesh_cube_vertex_count();
@@ -583,14 +723,23 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
             ws_env_scene_free(e);
             return cr;
         }
-        double fwd = 0.0;
-        cr = run_creature_walk(e, cre_x, cre_z, &fwd);
-        if (cr != WS_OK) {
-            ws_env_scene_free(e);
-            return cr;
+        if (opts->scene_kind == WS_ENV_SCENE_CREATURE) {
+            double fwd = 0.0;
+            cr = run_creature_walk(e, cre_x, cre_z, &fwd);
+            if (cr != WS_OK) {
+                ws_env_scene_free(e);
+                return cr;
+            }
+            e->creature_z = cre_z - e->terrain.origin_y;
+            e->creature_forward_m = fwd;
+        } else {
+            e->resource_kind = -1;
+            cr = run_organism_forage(e, cre_x, cre_z);
+            if (cr != WS_OK) {
+                ws_env_scene_free(e);
+                return cr;
+            }
         }
-        e->creature_z = cre_z - e->terrain.origin_y;
-        e->creature_forward_m = fwd;
     }
 
     /* Camera. Default environment scenes use a low, near-ground view from
@@ -616,10 +765,13 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         tgt_x = rx;
         tgt_y = ry;
         tgt_z = rz;
-    } else if (opts->scene_kind == WS_ENV_SCENE_CREATURE) {
+    } else if (opts->scene_kind == WS_ENV_SCENE_CREATURE ||
+               opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
         /* Side-on view of the walking animal: the sagittal gait reads best from
          * the side, so the camera looks across the direction of travel and is
-         * framed on the middle of the body. */
+         * framed on the middle of the body. For the behaviour scene the frame is
+         * widened a little and biased toward the acted-on resource so both the
+         * animal and the resource it chose are visible. */
         const ws_cbody *torso = &e->creature_bodies[e->creature_parts.torso];
         double rx = torso->px - e->terrain.origin_x;
         double rz = cre_z - e->terrain.origin_y;
@@ -631,6 +783,16 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         tgt_x = rx + 0.3;
         tgt_y = torso->py - 0.15;
         tgt_z = rz;
+        if (opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
+            /* Look from a slightly raised angle toward the resource marker. */
+            tgt_x = (torso->px - e->terrain.origin_x) * 0.4 + e->resource_x * 0.6;
+            tgt_z = rz * 0.4 + e->resource_z * 0.6;
+            back = 6.0;
+            up = 2.4;
+            eye_x = tgt_x - 1.5;
+            eye_y = torso->py + up;
+            eye_z = tgt_z - back;
+        }
     } else {
         double mid_x = e->extent * 0.5;
         eye_x = mid_x - e->extent * 0.08;
@@ -727,6 +889,12 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
     /* Reference creature: the articulated body where the gait controller left it. */
     if (opts->scene_kind == WS_ENV_SCENE_CREATURE) {
         add_creature_objects(e);
+    }
+
+    /* Behaviour organism: the animal where its decision took it, plus the
+     * resource marker it acted on. */
+    if (opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
+        add_organism_objects(e);
     }
 
     e->scene.camera = camera;

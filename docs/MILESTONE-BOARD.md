@@ -10,7 +10,7 @@ Bu pano `13-YOL-HARITASI.md` aşamalarının durumunu izler. Durum yalnız kanı
 | P3 | İlk doğal çevre | Tamamlandı (statik dünya; kullanıcıya görünür) | `docs/P3-ILK-DOGAL-CEVRE.md`, `src/world`, `src/core/ws_noise.c`, `src/render/ws_env_scene.c`, `src/render/ws_catalog.c`, `tests/test_world_env.c`, `tests/golden/` |
 | P4 | Çevresel fizik | Çekirdek + sahne köprüsü tamamlandı (D2) | `docs/P4-ILK-CEVRESEL-FIZIK.md`, `docs/physics/`, `src/physics`, `src/render/ws_env_scene.c`, `tests/test_physics.c`, `tests/golden/terrain_physics.ppm` |
 | P5 | Referans canlı biyomekaniği | Kullanıcıya görünür (artiküle beden, kapalı-çevrim yürüyüş kontrolcüsü, `creature_walk` sahnesi) | `docs/P5-REFERANS-CANLI-BIYOMEKANIGI.md`, `docs/life/`, `src/life`, `src/render/ws_env_scene.c`, `tests/test_life.c`, `tests/golden/creature_walk.ppm` |
-| P6 | Organizma ve davranış | Planlandı | — |
+| P6 | Organizma ve davranış | Kullanıcıya görünür (algı, homeostaz, fayda tabanlı davranış, sınırlı öğrenme, `organism_forage` sahnesi) | `docs/P6-ORGANIZMA-VE-DAVRANIS.md`, `docs/life/MODEL-KARTI-ALGI.md`, `MODEL-KARTI-HOMEOSTAZ.md`, `MODEL-KARTI-DAVRANIS.md`, `src/life/ws_perception.*`, `ws_organism.*`, `ws_agent.*`, `tests/test_agent.c`, `tests/golden/organism_forage.ppm` |
 | P7 | Ekosistem ve temsilî türler | Planlandı | — |
 | P8 | Kalıcı ve çok ölçekli dünya | Planlandı | — |
 | P9 | Sinematik yönetmen ve ses | Planlandı | — |
@@ -27,4 +27,5 @@ Bu pano `13-YOL-HARITASI.md` aşamalarının durumunu izler. Durum yalnız kanı
 - İlk görev yalnız doküman/altyapı PR'ıdır; ürün release'i değildir.
 - Kullanıcıya görünür ilk Windows paketi P2'den itibaren prerelease olarak yayımlanır.
 - P5 kullanıcıya görünür `creature_walk` sahnesini ekledi: referans geyik kendi C17 fiziksel bedeni ve kapalı-çevrim yürüyüş kontrolcüsüyle yürür; kamera simülasyonun bıraktığı gerçek poza bakar. Model düzlemseldir (sagittal); lateral denge ve yaw torku sonraki dilimlerdedir.
+- P6 kullanıcıya görünür `organism_forage` sahnesini ekledi: referans canlı dünya katmanlarından yerleştirilen besin/su kaynağını algılar, iç ihtiyaçlarına göre davranış seçer ve seçtiği kaynağa yürür; kamera kararın onu götürdüğü gerçek konuma bakar. Algı, homeostaz, fayda tabanlı davranış ve sınırlı öğrenme kendi C17 kodumuzdadır; davranış kameradan bağımsızdır.
 - P2 ilk kullanıcıya görünür sürümü `v0.1.0-preview` olarak yayımlandı: `worldseed.exe` sabit referans sahnelerini CPU referans renderer'ıyla çizer; paket her sahnenin gerçek render çıktısını `preview/*.png` olarak içerir. Canlı simülasyon, fizik ve etkileşim henüz yoktur.

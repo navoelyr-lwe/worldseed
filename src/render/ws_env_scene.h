@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 #include "../core/ws_result.h"
+#include "../life/ws_agent.h"
 #include "../life/ws_creature.h"
 #include "../life/ws_quadruped.h"
 #include "../world/ws_environment.h"
@@ -42,6 +43,11 @@
 #define WS_ENV_SCENE_WEATHER 2
 #define WS_ENV_SCENE_PHYSICS 3
 #define WS_ENV_SCENE_CREATURE 4
+/* 5 (organism_forage) runs the P6 behaviour agent: the animal senses food and
+ * water placed from the world layers, chooses a behaviour from its internal
+ * drives and walks to the resource it needs, and the scene renders the animal
+ * where the decision took it, next to the resource it acted on. */
+#define WS_ENV_SCENE_ORGANISM 5
 
 typedef struct ws_env_scene_options {
     uint64_t seed;
@@ -98,6 +104,19 @@ typedef struct ws_env_scene {
     double creature_z;         /* region-local z of the walking line, m */
     double creature_forward_m; /* distance walked in metres, for evidence */
     int creature_contact;      /* feet in contact at the rendered instant */
+
+    /* Behaviour organism (scene kind 5): the P6 agent's final decision and the
+     * resource it acted on, kept so the visible picture reflects the simulated
+     * behaviour rather than a scripted pose. */
+    ws_agent organism;
+    int organism_behavior;     /* ws_behavior at the rendered instant */
+    double organism_dist_m;    /* distance travelled, m */
+    uint32_t organism_food_found;
+    uint32_t organism_water_found;
+    double resource_x;         /* region-local position of the acted-on resource */
+    double resource_z;
+    int resource_kind;         /* ws_sense_kind, or -1 when none */
+    double resource_value;     /* remaining value 0..1 */
 
     ws_scene_object *objects;
     uint32_t object_capacity;
