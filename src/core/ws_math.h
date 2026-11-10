@@ -211,6 +211,10 @@ ws_mat4 ws_mat4_look_at(ws_vec3 eye, ws_vec3 target, ws_vec3 up);
 /* Perspective projection, right-handed, mapping depth to [-1, 1] (OpenGL-style
  * clip space, since the engine performs its own divide and viewport map). */
 ws_mat4 ws_mat4_perspective(double fov_y_radians, double aspect, double near_z, double far_z);
+/* Orthographic projection, right-handed, mapping depth to [-1, 1]. Used for the
+ * directional light's shadow projection. */
+ws_mat4 ws_mat4_ortho(double left, double right, double bottom, double top,
+                      double near_z, double far_z);
 
 /* Returns 1 if the box is empty or inverted on any axis, else 0. */
 int ws_aabb3_is_empty(ws_aabb3 box);

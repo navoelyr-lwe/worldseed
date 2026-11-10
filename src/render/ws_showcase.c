@@ -204,6 +204,36 @@ static ws_result scene_sky(ws_showcase *s)
     return WS_OK;
 }
 
+/* Directional shadows: a raised block and a sphere cast onto the ground from a
+ * low sun. The scene opts into the shadow pass; every other scene leaves it off
+ * so their golden frames are unaffected. */
+static ws_result scene_shadows(ws_showcase *s)
+{
+    scene_ground(s);
+    ws_mat4 box = ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(-0.8, 0.4, -0.3)),
+                                   ws_mat4_scale(ws_vec3_make(1.1, 1.1, 1.1)));
+    ws_result r = ws_scene_add_object(&s->scene, &s->cube, box,
+                                      ws_material_make(0.70, 0.55, 0.34, 0.7, 0.0, 0.1));
+    if (r != WS_OK) {
+        return r;
+    }
+    ws_mat4 ball = ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(0.9, 0.6, 0.2)),
+                                    ws_mat4_scale(ws_vec3_make(1.2, 1.2, 1.2)));
+    r = ws_scene_add_object(&s->scene, &s->sphere, ball,
+                            ws_material_make(0.55, 0.42, 0.32, 0.5, 0.0, 0.3));
+    if (r != WS_OK) {
+        return r;
+    }
+    s->scene.camera = ws_camera_default();
+    s->scene.camera.eye = ws_vec3_make(3.2, 2.6, 5.0);
+    s->scene.camera.target = ws_vec3_make(0.0, 0.2, 0.0);
+    s->scene.light = ws_light_default();
+    s->scene.light.direction = ws_vec3_normalize(ws_vec3_make(-0.55, -0.75, -0.35));
+    s->scene.settings = ws_render_settings_default();
+    s->scene.settings.shadows_enabled = 1;
+    return WS_OK;
+}
+
 typedef ws_result (*showcase_scene_fn)(ws_showcase *);
 
 typedef struct showcase_scene_def {
@@ -218,6 +248,7 @@ static const showcase_scene_def SHOWCASE_SCENES[] = {
     {"materials", scene_materials},
     {"textured", scene_textured},
     {"sky", scene_sky},
+    {"shadows", scene_shadows},
 };
 
 size_t ws_showcase_scene_count(void)

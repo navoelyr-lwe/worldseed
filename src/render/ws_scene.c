@@ -96,5 +96,9 @@ ws_render_settings ws_render_settings_default(void)
     s.tonemap = 0;
     s.sky_enabled = 0;
     s.fog_density = 0.0;
+    s.shadows_enabled = 0;
+    s.shadow_strength = 1.0;
+    s.shadow_bias = 0.0015;
+    s.shadow_map_size = 1024u;
     return s;
 }

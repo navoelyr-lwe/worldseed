@@ -60,6 +60,15 @@ typedef struct ws_render_settings {
     int tonemap;        /* 0 = clamp, 1 = Reinhard filmic shoulder */
     int sky_enabled;    /* 1 = draw the gradient sky behind the geometry */
     double fog_density; /* exponential distance fog; 0 disables it */
+    /* Directional shadow map. 0 (the default) keeps the direct-only path, so
+     * existing scenes and golden frames are unchanged; 1 renders a shadow pass
+     * from the light and attenuates the direct term where geometry occludes it.
+     * The shadow pass is an extra scene render and costs a second frame's worth
+     * of geometry work, so scenes opt in. */
+    int shadows_enabled;
+    double shadow_strength; /* 0..1 how dark full shadow is (1 = black) */
+    double shadow_bias;     /* depth bias in light space to fight acne */
+    unsigned shadow_map_size; /* square shadow map edge in texels (0 = 1024) */
 } ws_render_settings;
 
 typedef struct ws_scene {

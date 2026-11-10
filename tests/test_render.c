@@ -339,6 +339,80 @@ static int test_render_depth_occlusion(void)
     return 1;
 }
 
+/* A ground plane with a raised occluder under a low sun: enabling the shadow
+ * pass must darken the ground behind the occluder and leave lit ground alone,
+ * without changing the geometry or the ambient term. */
+static int test_render_shadow_darkens_occluded(void)
+{
+    ws_vertex gverts[4];
+    uint32_t gidx[6];
+    const uint8_t white[3] = {255u, 255u, 255u};
+    ws_mesh ground;
+    WS_CHECK(ws_mesh_make_plane(&ground, gverts, 4u, gidx, 6u, 8.0, 1u, white) == WS_OK);
+
+    ws_vertex cverts[24];
+    uint32_t cidx[36];
+    ws_mesh block;
+    WS_CHECK(ws_mesh_make_cube(&block, cverts, 24u, cidx, 36u, white) == WS_OK);
+
+    ws_scene_object objects[2];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 2u) == WS_OK);
+    ws_mat4 gt = ws_mat4_translation(ws_vec3_make(0.0, 0.0, 0.0));
+    WS_CHECK(ws_scene_add_object(&scene, &ground, gt,
+                                 ws_material_make(0.8, 0.8, 0.8, 1.0, 0.0, 0.0)) == WS_OK);
+    ws_mat4 bt = ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(0.0, 0.9, 0.0)),
+                                  ws_mat4_scale(ws_vec3_make(0.6, 0.6, 0.6)));
+    WS_CHECK(ws_scene_add_object(&scene, &block, bt,
+                                 ws_material_make(0.8, 0.6, 0.4, 1.0, 0.0, 0.0)) == WS_OK);
+    /* Camera looks straight down; sun comes in at a steep angle from +x. */
+    scene.camera.eye = ws_vec3_make(0.0, 6.0, 0.0001);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, 0.0);
+    scene.camera.up = ws_vec3_make(0.0, 0.0, -1.0);
+    scene.camera.far_z = 100.0;
+    scene.light.direction = ws_vec3_normalize(ws_vec3_make(-0.6, -0.8, 0.0));
+
+    ws_framebuffer lit;
+    ws_framebuffer shadowed;
+    WS_CHECK(ws_framebuffer_create(&lit, 96u, 96u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&shadowed, 96u, 96u) == WS_OK);
+    size_t count = (size_t)lit.width * lit.height;
+    float *depth = malloc(count * sizeof(float));
+    WS_CHECK(depth != NULL);
+
+    scene.settings = ws_render_settings_default();
+    scene.settings.shadows_enabled = 0;
+    WS_CHECK(ws_render_scene(&scene, &lit, depth, 16u, NULL) == WS_OK);
+    scene.settings.shadows_enabled = 1;
+    WS_CHECK(ws_render_scene(&scene, &shadowed, depth, 16u, NULL) == WS_OK);
+
+    /* The shadow must be a real change: some pixels darker, none brighter. */
+    uint64_t darker = 0u;
+    uint64_t brighter = 0u;
+    for (size_t i = 0; i < count; ++i) {
+        const uint8_t *a = &lit.pixels[i * 4u];
+        const uint8_t *b = &shadowed.pixels[i * 4u];
+        int la = a[0] + a[1] + a[2];
+        int lb = b[0] + b[1] + b[2];
+        if (lb < la - 3) { darker += 1u; }
+        if (lb > la + 3) { brighter += 1u; }
+    }
+    WS_CHECK(darker > 40u);   /* the occluder casts a visible shadow */
+    WS_CHECK(brighter == 0u); /* shadows only remove direct light */
+
+    /* Shadowing is deterministic: a second shadowed render is byte-identical. */
+    ws_framebuffer again;
+    WS_CHECK(ws_framebuffer_create(&again, 96u, 96u) == WS_OK);
+    WS_CHECK(ws_render_scene(&scene, &again, depth, 16u, NULL) == WS_OK);
+    WS_CHECK(memcmp(shadowed.pixels, again.pixels, count * 4u) == 0);
+
+    free(depth);
+    ws_framebuffer_free(&lit);
+    ws_framebuffer_free(&shadowed);
+    ws_framebuffer_free(&again);
+    return 1;
+}
+
 static int test_ppm_roundtrip(void)
 {
     ws_framebuffer src;
@@ -391,7 +465,7 @@ static int test_ppm_crlf_header(void)
 
 static int test_showcase_scenes(void)
 {
-    WS_CHECK(ws_showcase_scene_count() == 6u);
+    WS_CHECK(ws_showcase_scene_count() == 7u);
     ws_showcase s;
     WS_CHECK(ws_showcase_init(&s) == WS_OK);
     for (size_t i = 0; i < ws_showcase_scene_count(); ++i) {
@@ -818,6 +892,7 @@ int main(void)
         {"render tile invariance", test_render_tile_invariance},
         {"render determinism", test_render_determinism},
         {"render depth occlusion", test_render_depth_occlusion},
+        {"render shadow darkens occluded", test_render_shadow_darkens_occluded},
         {"render specular highlight", test_render_specular_highlight},
         {"render sky gradient", test_render_sky_gradient},
         {"render fog attenuates distance", test_render_fog_attenuates},
