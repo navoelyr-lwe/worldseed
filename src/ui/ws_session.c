@@ -27,6 +27,15 @@
 #define WS_SESSION_PATCH_CELLS 32u
 #define WS_SESSION_TREE_BUDGET 160u
 
+/* Replay ring: bounded history of periodic whole-world checkpoints (docs/17
+ * item 8). 24 samples at one sample every 2 world seconds covers ~48 s of
+ * history; at ~64 KB per sample this is ~1.5 MB, cheap enough to keep live. */
+#define WS_SESSION_REPLAY_MAX 24u
+#define WS_SESSION_REPLAY_INTERVAL_S 2.0
+
+static ws_result session_serialize(ws_session *s, uint8_t **out_buf, size_t *out_len);
+static ws_result session_deserialize(ws_session *s, const uint8_t *bytes, size_t len);
+
 typedef struct ws_actor {
     int active;
     int species;
@@ -84,6 +93,20 @@ struct ws_session {
 
     char save_path[512]; /* default checkpoint path for the S/L keys */
     double tick_accumulator_s; /* leftover wall time carried between steps */
+
+    /* Replay recording (docs/17 item 8): a ring of whole-world checkpoints. */
+    uint8_t *replay_blob[WS_SESSION_REPLAY_MAX];
+    size_t replay_len[WS_SESSION_REPLAY_MAX];
+    uint64_t replay_step[WS_SESSION_REPLAY_MAX];
+    uint32_t replay_head;   /* next write slot */
+    uint32_t replay_count;  /* valid samples, <= WS_SESSION_REPLAY_MAX */
+    double replay_next_s;   /* world time of the next scheduled sample */
+    int replay_active;
+    uint32_t replay_cursor; /* slot index shown while replay_active */
+    /* Live state captured when replay begins, restored exactly on exit so the
+     * live world is never perturbed by entering/leaving replay. */
+    uint8_t *replay_live_blob;
+    size_t replay_live_len;
 };
 
 static const double WS_SPEEDS[WS_SESSION_SPEEDS] = {0.0, 0.5, 1.0, 2.0, 4.0};
@@ -336,6 +359,130 @@ static void track_director_subject(ws_session *s)
     }
 }
 
+/* --- replay recording ---------------------------------------------------- */
+
+static void replay_ring_clear(ws_session *s)
+{
+    for (uint32_t i = 0; i < WS_SESSION_REPLAY_MAX; ++i) {
+        free(s->replay_blob[i]);
+        s->replay_blob[i] = NULL;
+        s->replay_len[i] = 0u;
+    }
+    free(s->replay_live_blob);
+    s->replay_live_blob = NULL;
+    s->replay_live_len = 0u;
+    s->replay_head = 0u;
+    s->replay_count = 0u;
+    s->replay_active = 0;
+    s->replay_cursor = 0u;
+}
+
+/* Record the current whole-world state into the ring. Bounded and best-effort:
+ * a failed sample is skipped rather than disrupting the run. */
+static void replay_record(ws_session *s)
+{
+    uint8_t *blob = NULL;
+    size_t len = 0u;
+    if (session_serialize(s, &blob, &len) != WS_OK) {
+        return;
+    }
+    uint32_t slot = s->replay_head;
+    free(s->replay_blob[slot]);
+    s->replay_blob[slot] = blob;
+    s->replay_len[slot] = len;
+    s->replay_step[slot] = s->steps;
+    s->replay_head = (slot + 1u) % WS_SESSION_REPLAY_MAX;
+    if (s->replay_count < WS_SESSION_REPLAY_MAX) {
+        s->replay_count += 1u;
+    }
+}
+
+/* Slot index of the `age`-th newest sample (age 0 = newest). */
+static uint32_t replay_slot_newest(const ws_session *s, uint32_t age)
+{
+    uint32_t newest = (s->replay_head + WS_SESSION_REPLAY_MAX - 1u) % WS_SESSION_REPLAY_MAX;
+    return (newest + WS_SESSION_REPLAY_MAX - (age % WS_SESSION_REPLAY_MAX)) % WS_SESSION_REPLAY_MAX;
+}
+
+/* Sample the world on a fixed world-time cadence as it advances. */
+static void replay_maybe_record(ws_session *s)
+{
+    double world_t = (double)s->steps * s->config.tick_s;
+    if (s->replay_count == 0u) {
+        replay_record(s);
+        s->replay_next_s = world_t + WS_SESSION_REPLAY_INTERVAL_S;
+        return;
+    }
+    if (world_t >= s->replay_next_s) {
+        replay_record(s);
+        s->replay_next_s = world_t + WS_SESSION_REPLAY_INTERVAL_S;
+    }
+}
+
+static ws_result replay_restore_slot(ws_session *s, uint32_t slot)
+{
+    if (s->replay_count == 0u || s->replay_blob[slot] == NULL) {
+        return WS_ERR_CORRUPT;
+    }
+    ws_result r = session_deserialize(s, s->replay_blob[slot], s->replay_len[slot]);
+    if (r == WS_OK) {
+        s->tick_accumulator_s = 0.0;
+    }
+    return r;
+}
+
+static ws_result replay_restore_cursor(ws_session *s)
+{
+    uint32_t slot = replay_slot_newest(s, s->replay_cursor);
+    return replay_restore_slot(s, slot);
+}
+
+/* Enter replay: capture the live state so leaving restores it exactly, snapshot
+ * the current state as the newest sample (the recording edge), then show the
+ * oldest retained sample. */
+static void replay_enter(ws_session *s)
+{
+    if (s->replay_active) {
+        return;
+    }
+    /* Make "now" the edge of the recording so the newest sample is the live
+     * state; seeking to the end of the span then reproduces the live world. */
+    replay_record(s);
+    if (s->replay_count == 0u) {
+        return;
+    }
+    uint8_t *live = NULL;
+    size_t live_len = 0u;
+    if (session_serialize(s, &live, &live_len) != WS_OK) {
+        return;
+    }
+    s->replay_cursor = s->replay_count - 1u;
+    if (replay_restore_cursor(s) != WS_OK) {
+        free(live);
+        return;
+    }
+    free(s->replay_live_blob);
+    s->replay_live_blob = live;
+    s->replay_live_len = live_len;
+    s->replay_active = 1;
+}
+
+/* Leave replay: restore the captured live state bit-exactly and resume. */
+static void replay_exit(ws_session *s)
+{
+    if (!s->replay_active) {
+        return;
+    }
+    if (s->replay_live_blob != NULL) {
+        (void)session_deserialize(s, s->replay_live_blob, s->replay_live_len);
+    }
+    free(s->replay_live_blob);
+    s->replay_live_blob = NULL;
+    s->replay_live_len = 0u;
+    s->replay_active = 0;
+    s->replay_cursor = 0u;
+}
+
 /* --- world advance ------------------------------------------------------ */
 
 static void world_tick(ws_session *s)
@@ -343,6 +490,7 @@ static void world_tick(ws_session *s)
     ws_world_host_step(&s->host, s->config.tick_s);
     (void)ws_ecology_step(&s->eco, s->config.tick_s);
     s->steps += 1u;
+    replay_maybe_record(s);
 
     /* Follow the focus region: the focus region's centre defines the world
      * point the camera observes, and the high-detail ecology covers it. */
@@ -421,6 +569,7 @@ void ws_session_destroy(ws_session *s)
     if (s == NULL) {
         return;
     }
+    replay_ring_clear(s);
     ws_env_scene_free(&s->env);
     ws_ecology_free(&s->eco);
     free(s);
@@ -487,6 +636,40 @@ ws_result ws_session_apply_command(ws_session *s, int command, double arg)
     case WS_CMD_TOGGLE_SETTINGS:
         s->settings_visible = !s->settings_visible;
         break;
+    case WS_CMD_REPLAY_TOGGLE:
+        if (s->replay_active) {
+            replay_exit(s);
+        } else {
+            replay_enter(s);
+        }
+        break;
+    case WS_CMD_REPLAY_SEEK: {
+        if (!s->replay_active || s->replay_count == 0u) {
+            break;
+        }
+        /* arg is normalized time 0..1 over the retained span (0 = oldest,
+         * 1 = newest). The cursor counts samples back from the newest. */
+        double t = arg < 0.0 ? 0.0 : (arg > 1.0 ? 1.0 : arg);
+        double age = (1.0 - t) * (double)(s->replay_count - 1u);
+        s->replay_cursor = (uint32_t)(age + 0.5);
+        (void)replay_restore_cursor(s);
+        break;
+    }
+    case WS_CMD_REPLAY_STEP_BACK:
+        if (s->replay_active && s->replay_cursor + 1u < s->replay_count) {
+            s->replay_cursor += 1u;
+            (void)replay_restore_cursor(s);
+        }
+        break;
+    case WS_CMD_REPLAY_STEP_FORWARD:
+        if (s->replay_active && s->replay_cursor > 0u) {
+            s->replay_cursor -= 1u;
+            (void)replay_restore_cursor(s);
+        }
+        break;
+    case WS_CMD_REPLAY_LIVE:
+        replay_exit(s);
+        break;
     case WS_CMD_QUIT:
         break;
     default:
@@ -543,7 +726,7 @@ ws_result ws_session_step(ws_session *s, double real_dt)
         real_dt = 0.0;
     }
     double speed = WS_SPEEDS[s->speed_index];
-    if (!s->paused && speed > 0.0) {
+    if (!s->paused && !s->replay_active && speed > 0.0) {
         /* Cap the catch-up so a very long frame does not spiral, and carry the
          * sub-tick remainder so the world advances at the right rate. */
         s->tick_accumulator_s += real_dt * speed;
@@ -607,6 +790,62 @@ int ws_session_help_visible(const ws_session *s) { return s != NULL ? s->help_vi
 int ws_session_stats_visible(const ws_session *s) { return s != NULL ? s->stats_visible : 0; }
 int ws_session_settings_visible(const ws_session *s) { return s != NULL ? s->settings_visible : 0; }
 int ws_session_shadows_visible(const ws_session *s) { return s != NULL ? s->shadows_visible : 0; }
+
+/* --- replay queries ----------------------------------------------------- */
+
+uint32_t ws_session_replay_samples(const ws_session *s)
+{
+    return s != NULL ? s->replay_count : 0u;
+}
+
+int ws_session_replay_active(const ws_session *s)
+{
+    return s != NULL ? s->replay_active : 0;
+}
+
+double ws_session_replay_live_time_s(const ws_session *s)
+{
+    if (s == NULL || s->replay_count == 0u) {
+        return 0.0;
+    }
+    uint32_t newest = replay_slot_newest(s, 0u);
+    return (double)s->replay_step[newest] * s->config.tick_s;
+}
+
+double ws_session_replay_time_s(const ws_session *s)
+{
+    if (s == NULL || s->replay_count == 0u) {
+        return 0.0;
+    }
+    uint32_t slot = s->replay_active ? replay_slot_newest(s, s->replay_cursor)
+                                     : replay_slot_newest(s, 0u);
+    return (double)s->replay_step[slot] * s->config.tick_s;
+}
+
+double ws_session_replay_position(const ws_session *s)
+{
+    if (s == NULL || s->replay_count <= 1u) {
+        return 1.0;
+    }
+    uint32_t age = s->replay_active ? s->replay_cursor : 0u;
+    if (age >= s->replay_count) {
+        age = s->replay_count - 1u;
+    }
+    /* 0 = oldest, 1 = newest. */
+    return 1.0 - (double)age / (double)(s->replay_count - 1u);
+}
+
+double ws_session_replay_span_s(const ws_session *s)
+{
+    if (s == NULL || s->replay_count == 0u) {
+        return 0.0;
+    }
+    uint32_t newest = replay_slot_newest(s, 0u);
+    uint32_t oldest = replay_slot_newest(s, s->replay_count - 1u);
+    double span = (double)(s->replay_step[newest] - s->replay_step[oldest]) *
+                  s->config.tick_s;
+    return span > 0.0 ? span : 0.0;
+}
 uint64_t ws_session_seed(const ws_session *s) { return s != NULL ? s->config.seed : 0u; }
 
 double ws_session_perf_last_ms(const ws_session *s) { return s != NULL ? s->last_frame_ms : 0.0; }
@@ -1119,11 +1358,13 @@ static ws_result read_ecology(ws_reader *rd, ws_ecology *e)
     return WS_OK;
 }
 
-ws_result ws_session_save(ws_session *s, const char *path)
+/* Serialize the whole session into a freshly allocated buffer. The caller owns
+ * the buffer. Shared by the file checkpoint (ws_session_save) and the replay
+ * ring, so a recorded state and a saved checkpoint are byte-identical. */
+static ws_result session_serialize(ws_session *s, uint8_t **out_buf, size_t *out_len)
 {
-    if (s == NULL || path == NULL) {
-        return WS_ERR_NULL_POINTER;
-    }
+    *out_buf = NULL;
+    *out_len = 0u;
     size_t cap = 8u * 1024u * 1024u;
     uint8_t *buf = (uint8_t *)malloc(cap);
     if (buf == NULL) {
@@ -1159,7 +1400,22 @@ ws_result ws_session_save(ws_session *s, const char *path)
     r = write_ecology(&w, &s->eco);
     if (r) { free(buf); return r; }
 
-    size_t len = ws_writer_size(&w);
+    *out_buf = buf;
+    *out_len = ws_writer_size(&w);
+    return WS_OK;
+}
+
+ws_result ws_session_save(ws_session *s, const char *path)
+{
+    if (s == NULL || path == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    uint8_t *buf = NULL;
+    size_t len = 0u;
+    ws_result r = session_serialize(s, &buf, &len);
+    if (r != WS_OK) {
+        return r;
+    }
     FILE *f = fopen(path, "wb");
     if (f == NULL) {
         free(buf);
@@ -1190,26 +1446,43 @@ ws_result ws_session_load(ws_session *s, const char *path)
     fclose(f);
     if (got != (size_t)sz) { free(buf); return WS_ERR_IO; }
 
+    ws_result r = session_deserialize(s, buf, (size_t)sz);
+    free(buf);
+    if (r == WS_OK) {
+        /* A loaded checkpoint is a new world state; drop history recorded before
+         * the load and start a fresh recording from here. */
+        replay_ring_clear(s);
+        s->replay_next_s = (double)s->steps * s->config.tick_s +
+                           WS_SESSION_REPLAY_INTERVAL_S;
+    }
+    return r;
+}
+
+/* Restore a session from a serialized buffer (the inverse of session_serialize).
+ * Does not free `bytes`; the caller owns it. Shared by the file checkpoint
+ * (ws_session_load) and the replay ring. */
+static ws_result session_deserialize(ws_session *s, const uint8_t *bytes, size_t len)
+{
     ws_reader rd;
-    ws_reader_init(&rd, buf, (size_t)sz);
+    ws_reader_init(&rd, bytes, len);
     char magic[4];
     ws_result r;
     r = ws_reader_bytes(&rd, magic, 4u);
-    if (r || memcmp(magic, WS_SESSION_MAGIC, 4u) != 0) { free(buf); return WS_ERR_CORRUPT; }
+    if (r || memcmp(magic, WS_SESSION_MAGIC, 4u) != 0) { return WS_ERR_CORRUPT; }
     uint32_t version = 0u;
     r = ws_reader_u32(&rd, &version);
-    if (r || version != WS_SESSION_VERSION) { free(buf); return WS_ERR_CORRUPT; }
+    if (r || version != WS_SESSION_VERSION) { return WS_ERR_CORRUPT; }
 
     uint64_t seed = 0u, uid = 0u;
-    r = ws_reader_u64(&rd, &seed); if (r) { free(buf); return r; }
-    r = ws_reader_u64(&rd, &uid); if (r) { free(buf); return r; }
-    r = ws_reader_u64(&rd, &s->steps); if (r) { free(buf); return r; }
-    r = ws_reader_f64(&rd, &s->time_of_day_s); if (r) { free(buf); return r; }
+    r = ws_reader_u64(&rd, &seed); if (r) { return r; }
+    r = ws_reader_u64(&rd, &uid); if (r) { return r; }
+    r = ws_reader_u64(&rd, &s->steps); if (r) { return r; }
+    r = ws_reader_f64(&rd, &s->time_of_day_s); if (r) { return r; }
     uint32_t speed = 0u, paused = 0u, view = 0u, sel = 0u;
-    r = ws_reader_u32(&rd, &speed); if (r) { free(buf); return r; }
-    r = ws_reader_u32(&rd, &paused); if (r) { free(buf); return r; }
-    r = ws_reader_u32(&rd, &view); if (r) { free(buf); return r; }
-    r = ws_reader_u32(&rd, &sel); if (r) { free(buf); return r; }
+    r = ws_reader_u32(&rd, &speed); if (r) { return r; }
+    r = ws_reader_u32(&rd, &paused); if (r) { return r; }
+    r = ws_reader_u32(&rd, &view); if (r) { return r; }
+    r = ws_reader_u32(&rd, &sel); if (r) { return r; }
     s->config.seed = seed;
     s->config.world_uid = uid;
     s->speed_index = (int)(speed < WS_SESSION_SPEEDS ? speed : 2u);
@@ -1219,9 +1492,9 @@ ws_result ws_session_load(ws_session *s, const char *path)
 
     uint32_t hlen = 0u;
     r = ws_reader_u32(&rd, &hlen);
-    if (r || hlen > ws_reader_remaining(&rd)) { free(buf); return WS_ERR_CORRUPT; }
+    if (r || hlen > ws_reader_remaining(&rd)) { return WS_ERR_CORRUPT; }
     r = ws_world_host_load(&s->host, rd.buffer + rd.offset, hlen);
-    if (r) { free(buf); return r; }
+    if (r) { return r; }
     rd.offset += hlen;
 
     /* The previous ecology owns a plant grid; free it before overwriting. */
@@ -1229,7 +1502,7 @@ ws_result ws_session_load(ws_session *s, const char *path)
         ws_ecology_free(&s->eco);
     }
     r = read_ecology(&rd, &s->eco);
-    if (r) { free(buf); return r; }
+    if (r) { return r; }
 
     s->env_region_valid = 0;
     rebuild_env(s, s->host.focus.x, s->host.focus.y);
@@ -1237,7 +1510,6 @@ ws_result ws_session_load(ws_session *s, const char *path)
     s->host_ev_cursor = 0u;
     s->eco_event_cursor = 0u;
     s->timeline_count = 0u;
-    free(buf);
     return WS_OK;
 }
 

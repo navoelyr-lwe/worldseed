@@ -16,6 +16,19 @@ Uygulama açıldığında kullanıcı yeni dünya oluşturabilir, mevcut dünyay
 8. **Replay:** Önceki checkpoint/event kayıtlarından geçmişi yeniden gözlemleme.
 9. **Ayarlar:** Çözünürlük, kalite, ses, giriş, kamera, simülasyon hızı ve kayıt ayarları.
 
+### Replay (madde 8)
+
+Replay, kaydedilmiş **gerçek dünya anlık görüntülerinden** geçmişi yeniden gözlemler;
+kayıttan oynatılan yapay bir animasyon değildir. Oturum, dünyayı periyodik olarak
+tam-durum checkpoint'i biçiminde sınırlı bir halka tamponda (en fazla 24 örnek)
+saklar. `R` ile replay'e girildiğinde canlı durum yedeklenir ve en eski saklanan
+örneğe dönülür; `,` / `.` ile örnekler arasında adım adım gezinilir; canlı durum
+oturum dosyasıyla bit-özdeş biçimde geri yüklenir. Replay etkinken dünya ilerlemez.
+Replay salt okunurdur: girip çıkmak otoritatif dünyayı hiç değiştirmez (aynı tohum
+ve tick sayısında özet bit-özdeş kalır). HUD, kayıt penceresinin zamanını, canlı
+zamanı ve imlecin konumunu ayrı gösterir (`docs/17` "Replay zamanı, yaşayan dünya
+zamanından ayrı gösterilir").
+
 ## Zaman kontrolleri
 
 Duraklatma, tek adım, normal hız ve hızlandırma seçenekleri bulunur. Hızlandırma simülasyon adımlarını çoğaltır; fizik solver dt'sini keyfi büyütmez. Replay zamanı, yaşayan dünya zamanından ayrı gösterilir.

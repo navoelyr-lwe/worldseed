@@ -139,6 +139,33 @@ static int test_settings_file_precedence(void)
     return 1;
 }
 
+static int test_replay_run(void)
+{
+    const char *const argv[] = {"worldseed", "--live-replay", "ws_live_replay_test_out",
+                                "--size", "160x90"};
+    ws_live_options o;
+    WS_CHECK(ws_live_parse_options(5, argv, &o) == WS_OK);
+    WS_CHECK(o.replay == 1);
+    WS_CHECK(o.headless == 1);
+    WS_CHECK(ws_live_run(&o) == 0);
+    /* The evidence manifest records the replay invariants. */
+    FILE *f = fopen("ws_live_replay_test_out/replay-manifest.txt", "r");
+    WS_CHECK(f != NULL);
+    if (f != NULL) {
+        char line[256];
+        int saw_samples = 0, saw_span = 0, saw_newest = 0, saw_restored = 0;
+        while (fgets(line, sizeof(line), f) != NULL) {
+            if (strstr(line, "samples=") != NULL) { saw_samples = 1; }
+            if (strstr(line, "span_seconds=") != NULL) { saw_span = 1; }
+            if (strstr(line, "newest_matches_live=1") != NULL) { saw_newest = 1; }
+            if (strstr(line, "live_restored=1") != NULL) { saw_restored = 1; }
+        }
+        fclose(f);
+        WS_CHECK(saw_samples && saw_span && saw_newest && saw_restored);
+    }
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -149,6 +176,7 @@ int main(void)
         {"live_headless_run", test_headless_run},
         {"live_tour_run", test_tour_run},
         {"live_settings_precedence", test_settings_file_precedence},
+        {"live_replay_run", test_replay_run},
     };
     return ws_test_run("live", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

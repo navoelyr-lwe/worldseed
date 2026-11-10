@@ -9,6 +9,7 @@
 
 #include "ui/ws_session.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 static ws_session *make(uint64_t seed)
@@ -396,6 +397,127 @@ static int test_settings_apply_and_readonly(void)
     return 1;
 }
 
+/* Mean absolute per-channel difference between two RGBA frames, 0..255. */
+static double frame_mad(const ws_framebuffer *fb, const uint8_t *ref, size_t bytes)
+{
+    unsigned long long sum = 0u;
+    for (size_t i = 0; i < bytes; ++i) {
+        int d = (int)fb->pixels[i] - (int)ref[i];
+        sum += (unsigned long long)(d < 0 ? -d : d);
+    }
+    return (double)sum / (double)bytes;
+}
+
+static int test_replay_enter_seek_exit(void)
+{
+    /* Replay (docs/17 item 8) re-observes real recorded states. Entering and
+     * leaving replay must not perturb the live world at all. */
+    ws_session *s = make(21ULL);
+    WS_CHECK(s != NULL);
+    run_seconds(s, 30.0);
+
+    uint32_t samples = ws_session_replay_samples(s);
+    WS_CHECK(samples >= 2u);
+    WS_CHECK(samples <= 24u);
+    double span = ws_session_replay_span_s(s);
+    WS_CHECK(span > 0.0);
+    WS_CHECK(ws_session_replay_active(s) == 0);
+
+    /* Baseline: the digest of the live world and a render of it. */
+    char live_digest[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, live_digest) == WS_OK);
+    ws_framebuffer live_fb;
+    WS_CHECK(ws_framebuffer_create(&live_fb, 160u, 90u) == WS_OK);
+    WS_CHECK(ws_session_render(s, &live_fb, NULL) == WS_OK);
+    size_t bytes = (size_t)live_fb.width * live_fb.height * 4u;
+    uint8_t *live_pixels = malloc(bytes);
+    WS_CHECK(live_pixels != NULL);
+    memcpy(live_pixels, live_fb.pixels, bytes);
+
+    /* Enter replay: we start at the oldest retained sample, which is strictly
+     * earlier than the live edge. */
+    (void)ws_session_apply_command(s, WS_CMD_REPLAY_TOGGLE, 0.0);
+    WS_CHECK(ws_session_replay_active(s) == 1);
+    double t_oldest = ws_session_replay_time_s(s);
+    double t_live = ws_session_replay_live_time_s(s);
+    WS_CHECK(t_oldest < t_live);
+
+    /* Seek to the newest recorded sample: time reaches the live edge and the
+     * reconstructed authoritative world matches the live digest exactly. */
+    (void)ws_session_apply_command(s, WS_CMD_REPLAY_SEEK, 1.0);
+    WS_CHECK(ws_session_replay_time_s(s) == t_live);
+    char newest_digest[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, newest_digest) == WS_OK);
+    WS_CHECK(strcmp(newest_digest, live_digest) == 0);
+    /* The image is the same scene (the leg-gait phase is presentation, not part
+     * of the authoritative state), so it must be very close, not bit-identical. */
+    WS_CHECK(ws_session_render(s, &live_fb, NULL) == WS_OK);
+    WS_CHECK(frame_mad(&live_fb, live_pixels, bytes) < 3.0);
+
+    /* Seek back to the oldest sample: earlier time and a different world; the
+     * newest digest is reproduced when we seek forward again. */
+    (void)ws_session_apply_command(s, WS_CMD_REPLAY_SEEK, 0.0);
+    WS_CHECK(ws_session_replay_time_s(s) == t_oldest);
+    char oldest_digest[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, oldest_digest) == WS_OK);
+    WS_CHECK(strcmp(oldest_digest, live_digest) != 0);
+    (void)ws_session_apply_command(s, WS_CMD_REPLAY_SEEK, 1.0);
+    char again[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, again) == WS_OK);
+    WS_CHECK(strcmp(again, newest_digest) == 0);
+
+    /* The world does not advance while replay is active. */
+    uint64_t step_before = ws_session_steps(s);
+    run_seconds(s, 5.0);
+    WS_CHECK(ws_session_steps(s) == step_before);
+
+    /* Leaving replay restores the live authoritative state bit-exactly. */
+    (void)ws_session_apply_command(s, WS_CMD_REPLAY_LIVE, 0.0);
+    WS_CHECK(ws_session_replay_active(s) == 0);
+    char after_digest[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, after_digest) == WS_OK);
+    WS_CHECK(strcmp(after_digest, live_digest) == 0);
+    WS_CHECK(ws_session_render(s, &live_fb, NULL) == WS_OK);
+    WS_CHECK(frame_mad(&live_fb, live_pixels, bytes) < 3.0);
+
+    /* The world resumes after leaving replay. */
+    run_seconds(s, 3.0);
+    WS_CHECK(ws_session_steps(s) > step_before);
+
+    free(live_pixels);
+    ws_framebuffer_free(&live_fb);
+    ws_session_destroy(s);
+    return 1;
+}
+
+static int test_replay_is_observation_only(void)
+{
+    /* Two identical runs: entering, seeking and leaving replay on one must not
+     * change its world digest relative to the other. */
+    ws_session *a = make(31ULL);
+    ws_session *b = make(31ULL);
+    WS_CHECK(a != NULL && b != NULL);
+    run_seconds(a, 40.0);
+    run_seconds(b, 40.0);
+
+    WS_CHECK(ws_session_replay_samples(b) >= 2u);
+    (void)ws_session_apply_command(b, WS_CMD_REPLAY_TOGGLE, 0.0);
+    (void)ws_session_apply_command(b, WS_CMD_REPLAY_SEEK, 0.3);
+    (void)ws_session_apply_command(b, WS_CMD_REPLAY_SEEK, 0.7);
+    (void)ws_session_apply_command(b, WS_CMD_REPLAY_TOGGLE, 0.0);
+    WS_CHECK(ws_session_replay_active(b) == 0);
+
+    char da[WS_SESSION_DIGEST_HEX];
+    char db[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(a, da) == WS_OK);
+    WS_CHECK(ws_session_digest(b, db) == WS_OK);
+    WS_CHECK(strcmp(da, db) == 0);
+
+    ws_session_destroy(a);
+    ws_session_destroy(b);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -413,6 +535,8 @@ int main(void)
         {"session_stats_demography", test_stats_and_demography},
         {"session_shadows_toggle", test_shadows_toggle},
         {"session_settings_apply_readonly", test_settings_apply_and_readonly},
+        {"session_replay_enter_seek_exit", test_replay_enter_seek_exit},
+        {"session_replay_observation_only", test_replay_is_observation_only},
     };
     return ws_test_run("session", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

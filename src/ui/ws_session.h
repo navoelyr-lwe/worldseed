@@ -76,7 +76,12 @@ typedef enum ws_session_command {
     WS_CMD_QUIT = 15,
     WS_CMD_TOGGLE_STATS = 16,
     WS_CMD_TOGGLE_SHADOWS = 17,
-    WS_CMD_TOGGLE_SETTINGS = 18
+    WS_CMD_TOGGLE_SETTINGS = 18,
+    WS_CMD_REPLAY_TOGGLE = 19,
+    WS_CMD_REPLAY_SEEK = 20,  /* arg = normalized position 0..1, oldest..newest */
+    WS_CMD_REPLAY_LIVE = 21,  /* leave replay and jump to the newest state */
+    WS_CMD_REPLAY_STEP_BACK = 22,    /* show one older recorded sample */
+    WS_CMD_REPLAY_STEP_FORWARD = 23  /* show one newer recorded sample */
 } ws_session_command;
 
 typedef struct ws_session_config {
@@ -125,6 +130,24 @@ int ws_session_stats_visible(const ws_session *s);
 int ws_session_settings_visible(const ws_session *s);
 /* Directional shadows in the live view (off by default; T toggles). */
 int ws_session_shadows_visible(const ws_session *s);
+
+/* --- replay (docs/17 item 8) -------------------------------------------- */
+
+/* The session keeps a bounded ring of periodic whole-world checkpoints as the
+ * world advances (a real recording, not a scripted demo). Replay mode lets the
+ * user re-observe any recorded state. The ring is observation bookkeeping: it
+ * never feeds back into the simulation, so the world digest is unaffected.
+ * Oldest-to-newest time span of the retained history, in world seconds. */
+double ws_session_replay_span_s(const ws_session *s);
+/* Number of retained checkpoint samples (0 until the first sample is taken). */
+uint32_t ws_session_replay_samples(const ws_session *s);
+int ws_session_replay_active(const ws_session *s);
+/* World time of the sample the replay cursor currently shows. */
+double ws_session_replay_time_s(const ws_session *s);
+/* Cursor position in the retained history: 0 = oldest sample, 1 = newest. */
+double ws_session_replay_position(const ws_session *s);
+/* Newest recorded world time (the live edge of the recording). */
+double ws_session_replay_live_time_s(const ws_session *s);
 
 /* Apply a persistent settings snapshot to the observer (start view, time of
  * day, shadow/panel visibility). Read-only for the world: the same seed and
