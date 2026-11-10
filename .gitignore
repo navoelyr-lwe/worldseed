@@ -32,3 +32,7 @@ compile_commands.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Test scratch dirs
+/ws_live_test_out/
+/ws_live_replay_test_out/

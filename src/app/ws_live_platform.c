@@ -76,7 +76,7 @@ static void handle_key(live_state *st, WPARAM key)
     case 'L': (void)ws_session_apply_command(s, WS_CMD_LOAD, 0.0); break;
     case 'R': (void)ws_session_apply_command(s, WS_CMD_REPLAY_TOGGLE, 0.0); break;
     case VK_OEM_COMMA: (void)ws_session_apply_command(s, WS_CMD_REPLAY_STEP_BACK, 0.0); break;
-    case VK_OEM_PERIOD: (void)ws_session_apply_command(s, WS_CMD_REPLAY_STEP_FORWARD, 0.0); break;
+    case VK_OEM_PERIOD: (void)ws_session_apply_command(s, WS_CMD_STEP_ONCE, 0.0); break;
     case VK_OEM_4: /* [ */
         (void)ws_session_apply_command(s, WS_CMD_SET_TIME_OF_DAY,
                                        ws_session_time_of_day_s(s) - 3600.0);

@@ -336,7 +336,7 @@ static int run_headless(const ws_live_options *opts)
 static const char *TOUR_STEPS[] = {
     "auto_day", "free_overview", "follow_deer", "map_overview",
     "auto_dusk", "follow_fox", "auto_night", "reload_check",
-    "shadows_off", "shadows_on",
+    "shadows_off", "shadows_on", "single_step",
 };
 
 static int capture_step(ws_session *s, ws_framebuffer *fb, float *depth,
@@ -484,6 +484,22 @@ static int run_tour(const ws_live_options *opts)
     }
     ok &= shadow_pair_changed;
 
+    /* 11: single-step time control (docs/17). While paused, each step advances
+     * exactly one fixed world tick and never more; the step is deterministic. */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_PAUSE, 0.0);
+    uint64_t paused_tick = ws_session_tick(s);
+    uint64_t single_step_tick = paused_tick;
+    for (int i = 0; i < 5; ++i) {
+        (void)ws_session_apply_command(s, WS_CMD_STEP_ONCE, 0.0);
+    }
+    single_step_tick = ws_session_tick(s);
+    int single_step_ok = ws_session_paused(s) && single_step_tick == paused_tick + 5u;
+    printf("tour single_step paused=%d from=%llu to=%llu ok=%d\n",
+           ws_session_paused(s), (unsigned long long)paused_tick,
+           (unsigned long long)single_step_tick, single_step_ok);
+    ok &= single_step_ok;
+    ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
+
     if (mf != NULL) {
         fprintf(mf, "# Worldseed Engine P11 live tour manifest\n");
         fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
@@ -493,6 +509,7 @@ static int run_tour(const ws_live_options *opts)
         fprintf(mf, "loaded_regions=%u\n", ws_session_loaded_regions(s));
         fprintf(mf, "save_load_roundtrip=%d\n", roundtrip);
         fprintf(mf, "shadows_verified=%d\n", shadow_pair_changed);
+        fprintf(mf, "single_step_verified=%d\n", single_step_ok);
         fprintf(mf, "steps=%d\n", step);
         fclose(mf);
     }

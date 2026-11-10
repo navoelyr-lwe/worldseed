@@ -670,6 +670,20 @@ ws_result ws_session_apply_command(ws_session *s, int command, double arg)
     case WS_CMD_REPLAY_LIVE:
         replay_exit(s);
         break;
+    case WS_CMD_STEP_ONCE:
+        /* Time control (docs/17): advance exactly one fixed world tick. While
+         * replaying, the same key means "show the next recorded sample", so one
+         * key steps forward in both the live and the replay timeline. */
+        if (s->replay_active) {
+            if (s->replay_cursor > 0u) {
+                s->replay_cursor -= 1u;
+                (void)replay_restore_cursor(s);
+            }
+        } else {
+            world_tick(s);
+            s->tick_accumulator_s = 0.0;
+        }
+        break;
     case WS_CMD_QUIT:
         break;
     default:
