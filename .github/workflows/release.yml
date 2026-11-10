@@ -38,6 +38,10 @@ jobs:
           print("plan integrity ok")
           PY
 
+  # Primary Windows package build on GitHub-hosted runners. Kept as the
+  # canonical path; while the hosted runner pool is unavailable for this private
+  # repository (see docs/CI-VE-DAL-KORUMASI.md) the self-hosted job below builds
+  # the same package from the same script.
   build-windows:
     name: windows x64 package
     runs-on: windows-2022
@@ -52,87 +56,48 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure
       - name: Package (portable folder + zip)
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path evidence/preview | Out-Null
-          $exe = "build/src/app/Release/worldseed.exe"
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky","shadows","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage","ecosystem","world_stream","director_shot","soundscape"
-          for ($i = 0; $i -lt $scenes.Count; $i++) {
-            $s = $scenes[$i]
-            & $exe --capture "evidence/preview/$s.ppm" --scene $i --size 1280x720
-            & tools/ppm2png.ps1 -In "evidence/preview/$s.ppm" -Out "evidence/preview/$s.png"
-          }
-          & $exe --selftest --size 640x360 | Tee-Object -FilePath evidence/preview/selftest.txt
+        run: ./tools/package-windows.ps1 -BuildDir build -Version "${{ github.event.inputs.version || github.ref_name }}"
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldseed-windows-x64
+          path: |
+            worldseed-windows-x64.zip
+            worldseed-windows-x64.zip.sha256
+            MANIFEST.txt
+            evidence/preview/*.png
+            evidence/preview/selftest.txt
+            evidence/preview/perf.txt
+            evidence/live/tour-a/*.png
+            evidence/live/tour-a/manifest.txt
+            evidence/live/tour-a/tour-manifest.txt
+            evidence/live/headless.txt
+            evidence/live/tour-a.txt
 
-          # P11 interactive application: drive the real live loop headless and a
-          # deterministic tour (view switches, selection, save/load, stats panel),
-          # then prove two tours agree frame-for-frame (the observer is read-only).
-          New-Item -ItemType Directory -Force -Path evidence/live/tour-a,evidence/live/tour-b | Out-Null
-          & $exe --live-headless 3 --size 1280x720 | Tee-Object -FilePath evidence/live/headless.txt
-          if (-not (Select-String -Path evidence/live/headless.txt -Pattern "LIVE_HEADLESS_OK" -Quiet)) { exit 1 }
-          & $exe --live-tour evidence/live/tour-a --size 1280x720 | Tee-Object -FilePath evidence/live/tour-a.txt
-          if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "LIVE_TOUR_OK" -Quiet)) { exit 1 }
-          if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }
-          & $exe --live-tour evidence/live/tour-b --size 1280x720 | Out-Null
-          Get-ChildItem evidence/live/tour-a/step-*.ppm | ForEach-Object {
-            $b = Join-Path "evidence/live/tour-b" $_.Name
-            if ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $b).Hash) {
-              Write-Error "live tour $($_.Name) not reproducible"; exit 1
-            }
-            & tools/ppm2png.ps1 -In $_.FullName -Out ($_.FullName -replace '\.ppm$', '.png')
-          }
-          # Distinct asset name: the release also ships the package MANIFEST.txt,
-          # and release asset names are case-insensitive.
-          Copy-Item evidence/live/tour-a/manifest.txt evidence/live/tour-a/tour-manifest.txt
-
-          # P9 soundscape: our own C17 synthesis, rendered from a real ecology
-          # run, so the preview ships a listenable WAV next to the frames.
-          & build/tools/Release/ws_audio.exe "evidence/preview/soundscape.wav" 20260101 |
-            Tee-Object -FilePath evidence/preview/audio.txt
-
-          # P10 performance evidence: hardware profile, CPU/GPU raster timing and
-          # reference-scene frame times. Runs on the CPU path here (no OpenCL
-          # device on the runner) and reports gpu=unavailable.
-          & build/tools/Release/ws_perf.exe --quick |
-            Tee-Object -FilePath evidence/preview/perf.txt
-
-          $stage = "stage/worldseed"
-          New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item $exe "$stage/worldseed.exe"
-          New-Item -ItemType Directory -Force -Path "$stage/preview" | Out-Null
-          Copy-Item evidence/preview/*.png "$stage/preview/"
-          Copy-Item evidence/preview/soundscape.wav "$stage/preview/"
-          Copy-Item evidence/preview/perf.txt "$stage/preview/"
-          New-Item -ItemType Directory -Force -Path "$stage/live" | Out-Null
-          Copy-Item evidence/live/tour-a/*.png "$stage/live/"
-          Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
-          @(
-            "Worldseed Engine preview (P12 - render performansi, canli yonlu golgeler).",
-            "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
-            "Canli tuslar: T yonlu golgeleri acar/kapatir (varsayilan kapali).",
-            "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
-            "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",
-            "Kanit: preview/*.png (CPU referans renderer ciktilari), live/*.png (canli uygulama turu),",
-            "preview/perf.txt (donanim/olcum) ve manifest.txt (SHA-256) ile CI artefaktlari.",
-            "CPU referans renderer bit-ozdes kalarak hizlandirildi; golgeler opt-in ve eklemeli.",
-            "GPU yalniz gercek kazanc oldugunda kullanilir; OpenCL cihazi yoksa CPU fallback calisir."
-          ) | Set-Content -Path "$stage/README.txt"
-
-          # Evidence manifest: every shipped artefact with its size and SHA-256,
-          # generated by our own C17 tool (docs/12, docs/18).
-          $mfFiles = @("$stage/worldseed.exe")
-          $mfFiles += Get-ChildItem "$stage/preview/*.png" | ForEach-Object { $_.FullName }
-          $mfFiles += Get-ChildItem "$stage/live/*.png" | ForEach-Object { $_.FullName }
-          $mfFiles += "$stage/preview/soundscape.wav"
-          $mfFiles += "$stage/preview/perf.txt"
-          & build/tools/Release/ws_manifest.exe --out "MANIFEST.txt" --version "${{ github.ref_name }}" @mfFiles
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          Copy-Item "MANIFEST.txt" "$stage/MANIFEST.txt"
-
-          Compress-Archive -Path "$stage/*" -DestinationPath "worldseed-windows-x64.zip" -Force
-          Get-FileHash worldseed-windows-x64.zip -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash)  worldseed-windows-x64.zip" } |
-            Set-Content -Path worldseed-windows-x64.zip.sha256
-
+  # Resilient path: build the identical package on the isolated self-hosted
+  # Windows runner when the hosted pool is unavailable. The publish job consumes
+  # whichever job produced the artifact.
+  build-windows-selfhosted:
+    name: windows x64 package (self-hosted)
+    runs-on: [self-hosted, windows, x64, worldseed-gui]
+    needs: [verify, build-windows]
+    # Fallback only: run when the hosted Windows job did not succeed, so the
+    # canonical artifact name is uploaded exactly once.
+    if: always() && needs.verify.result == 'success' && needs.build-windows.result != 'success'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (MSVC x64)
+        shell: pwsh
+        run: cmake -S . -B build-rel -A x64 -DCMAKE_BUILD_TYPE=Release -DWS_WARNINGS_AS_ERRORS=ON
+      - name: Build
+        shell: pwsh
+        run: cmake --build build-rel --config Release
+      - name: Test
+        shell: pwsh
+        run: ctest --test-dir build-rel -C Release --output-on-failure
+      - name: Package (portable folder + zip)
+        shell: pwsh
+        run: ./tools/package-windows.ps1 -BuildDir build-rel -Version "${{ github.event.inputs.version || github.ref_name }}"
       - name: Upload package
         uses: actions/upload-artifact@v4
         with:
@@ -153,7 +118,8 @@ jobs:
   publish:
     name: publish prerelease
     runs-on: ubuntu-24.04
-    needs: [verify, build-windows]
+    needs: [verify, build-windows, build-windows-selfhosted]
+    if: always() && needs.verify.result == 'success' && (needs.build-windows.result == 'success' || needs.build-windows-selfhosted.result == 'success')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

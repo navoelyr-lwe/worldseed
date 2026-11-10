@@ -1,0 +1,6 @@
+image_diff mean=0.0205 peak=9.0000 psnr=58.79 ssim=0.999983 differing=741
+signed_mean a-b: r=0.034 g=0.026 b=0.002
+pixel[0] a=(84,56,37) b=(78,51,36)
+pixel[28800] a=(52,35,42) b=(52,35,42)
+pixel[57599] a=(39,28,18) b=(38,28,18)
+WS_IMGDIFF_OK

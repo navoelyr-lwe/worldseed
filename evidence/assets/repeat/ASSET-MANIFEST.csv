@@ -1,0 +1,6 @@
+file,producer,tool_version,derivation,license,sha256
+cube.wsmesh,tools/ws_assetgen,1,procedural cube,project-original,fdbef23e1cf63bf4af3c5529bf01fb84d165f05d74d9af728ba0ad733377dc23
+plane.wsmesh,tools/ws_assetgen,1,procedural plane,project-original,1d36cc27a30b83733fd945f41b92d8a79b08fdf02e4183b4f47b0217bbec2bfa
+sphere.wsmesh,tools/ws_assetgen,1,procedural uv-sphere,project-original,94503fa3bcbd54db83459d9c7b1cef1f43ee965ed321d3999ac93c9bb425ec5b
+checker.wstex,tools/ws_assetgen,1,procedural checkerboard,project-original,973cd993afb9a6b2148dc786f5d8f8ecdf29a5ac0f86cfc04f9819f90a85a747
+noise.wstex,tools/ws_assetgen,1,procedural value noise,project-original,05a29e98b7a861ad0bed4a1f5ad3f2aa541109450c922c0a5eb2816bfc1bb0ec

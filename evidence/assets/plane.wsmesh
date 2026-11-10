@@ -1,0 +1,7 @@
+worldseed-mesh 1
+vertex -4 0 4 0 1 0 0 0 70 110 60
+vertex 4 0 4 0 1 0 1 0 70 110 60
+vertex 4 0 -4 0 1 0 1 1 70 110 60
+vertex -4 0 -4 0 1 0 0 1 70 110 60
+index 0 1 2
+index 0 2 3
