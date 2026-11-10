@@ -348,6 +348,54 @@ static int test_shadows_toggle(void)
     return 1;
 }
 
+static int test_settings_apply_and_readonly(void)
+{
+    /* Applying a persistent settings snapshot drives the observer (view, clock,
+     * panel/shadow visibility) but must never touch the world digest. */
+    ws_session *a = make(5ULL);
+    ws_session *b = make(5ULL);
+    WS_CHECK(a != NULL && b != NULL);
+    run_seconds(a, 2.0);
+    run_seconds(b, 2.0);
+
+    ws_settings cfg = ws_settings_default();
+    cfg.view = WS_VIEW_FOLLOW;
+    cfg.time_of_day_s = 6.0 * 3600.0;
+    cfg.shadows = 1;
+    cfg.stats = 1;
+    cfg.help = 1;
+    WS_CHECK(ws_session_apply_settings(b, &cfg) == WS_OK);
+    WS_CHECK(ws_session_view_mode(b) == WS_VIEW_FOLLOW);
+    WS_CHECK(ws_session_time_of_day_s(b) == 6.0 * 3600.0);
+    WS_CHECK(ws_session_shadows_visible(b) == 1);
+    WS_CHECK(ws_session_stats_visible(b) == 1);
+    WS_CHECK(ws_session_help_visible(b) == 1);
+    WS_CHECK(ws_session_settings_visible(b) == 0);
+    (void)ws_session_apply_command(b, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    WS_CHECK(ws_session_settings_visible(b) == 1);
+
+    char da[WS_SESSION_DIGEST_HEX];
+    char db[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(a, da) == WS_OK);
+    WS_CHECK(ws_session_digest(b, db) == WS_OK);
+    WS_CHECK(strcmp(da, db) == 0);
+
+    /* Read-back reflects what was applied. */
+    ws_settings got;
+    WS_CHECK(ws_session_get_settings(b, &got) == WS_OK);
+    WS_CHECK(got.view == WS_VIEW_FOLLOW);
+    WS_CHECK(got.time_of_day_s == 6.0 * 3600.0);
+    WS_CHECK(got.shadows == 1 && got.stats == 1 && got.help == 1);
+
+    WS_CHECK(ws_session_apply_settings(NULL, &cfg) == WS_ERR_NULL_POINTER);
+    WS_CHECK(ws_session_apply_settings(b, NULL) == WS_ERR_NULL_POINTER);
+    WS_CHECK(ws_session_get_settings(NULL, &got) == WS_ERR_NULL_POINTER);
+    WS_CHECK(ws_session_get_settings(b, NULL) == WS_ERR_NULL_POINTER);
+    ws_session_destroy(a);
+    ws_session_destroy(b);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -364,6 +412,7 @@ int main(void)
         {"session_view_modes", test_view_modes_cycle},
         {"session_stats_demography", test_stats_and_demography},
         {"session_shadows_toggle", test_shadows_toggle},
+        {"session_settings_apply_readonly", test_settings_apply_and_readonly},
     };
     return ws_test_run("session", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

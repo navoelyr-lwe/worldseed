@@ -18,6 +18,7 @@ typedef struct ws_hud_options {
     int show_panels; /* info panel + timeline (on by default) */
     int show_help;   /* help overlay */
     int show_stats;  /* population/statistics panel */
+    int show_settings; /* persisted-settings panel */
     int scale;       /* base font scale (1 = small, 2 = large) */
 } ws_hud_options;
 

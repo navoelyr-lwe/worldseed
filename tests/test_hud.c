@@ -154,6 +154,24 @@ static int test_hud_stats_panel(void)
     return 1;
 }
 
+static int test_hud_settings_panel(void)
+{
+    ws_session *s = make(105ULL);
+    WS_CHECK(s != NULL);
+    run_seconds(s, 1.0);
+    WS_CHECK(ws_session_settings_visible(s) == 0);
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    WS_CHECK(ws_session_settings_visible(s) == 1);
+    ws_framebuffer fb;
+    WS_CHECK(ws_framebuffer_create(&fb, 320u, 180u) == WS_OK);
+    WS_CHECK(ws_session_render(s, &fb, NULL) == WS_OK);
+    ws_hud_options o = ws_hud_options_default();
+    ws_hud_draw(&fb, s, &o); /* settings panel must draw without overrunning */
+    ws_framebuffer_free(&fb);
+    ws_session_destroy(s);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -163,6 +181,7 @@ int main(void)
         {"hud_scale", test_hud_scale},
         {"hud_null_safe", test_hud_null_safe},
         {"hud_stats_panel", test_hud_stats_panel},
+        {"hud_settings_panel", test_hud_settings_panel},
     };
     return ws_test_run("hud", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

@@ -69,6 +69,7 @@ add_library(worldseed_core STATIC
   ui/ws_hud.c
   platform/ws_dynlib.c
   platform/ws_fs.c
+  platform/ws_settings.c
   platform/ws_opencl_probe.c
   platform/ws_threads.c
   platform/ws_hardware.c

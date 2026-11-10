@@ -71,6 +71,7 @@ static void handle_key(live_state *st, WPARAM key)
     case 'H': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_HELP, 0.0); break;
     case 'G': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_STATS, 0.0); break;
     case 'T': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0); break;
+    case 'O': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0); break;
     case 'S': (void)ws_session_apply_command(s, WS_CMD_SAVE, 0.0); break;
     case 'L': (void)ws_session_apply_command(s, WS_CMD_LOAD, 0.0); break;
     case VK_OEM_4: /* [ */
@@ -317,6 +318,8 @@ int ws_live_present(const ws_live_options *opts)
     ws_framebuffer_free(&st.fb);
     free(st.depth);
     free(st.bgra);
+    /* Persist the user's observer choices on a clean exit. */
+    ws_live_save_settings(opts, st.session);
     ws_session_destroy(st.session);
     return rc_code;
 }
