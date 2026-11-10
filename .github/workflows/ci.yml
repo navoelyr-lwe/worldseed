@@ -197,6 +197,53 @@ jobs:
           name: evidence-${{ matrix.compiler }}-${{ matrix.build_type }}-${{ matrix.sanitizers }}
           path: evidence/
 
+  # Dedicated OpenCL job: installs a CPU OpenCL 1.2 ICD (pocl) so the OpenCL C
+  # 1.2 raster kernel is really compiled and run, then checks it reproduces the
+  # CPU rasterizer within tolerance and that a device loss falls back cleanly.
+  # The product never ships this runtime (ADR-001); it is CI test tooling.
+  opencl-cpu:
+    name: opencl cpu kernel
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain and OpenCL ICD
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pocl-opencl-icd ocl-icd-libopencl1 clinfo
+          clinfo -l || true
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWS_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: GPU unit tests
+        run: ctest --test-dir build -R gpu --output-on-failure
+
+      - name: GPU semantic comparison and device-loss recovery
+        run: |
+          mkdir -p evidence/gpu
+          ./build/tools/ws_gpu_check | tee evidence/gpu/gpu_check.txt
+          grep -q "WS_GPU_CHECK_OK" evidence/gpu/gpu_check.txt
+          grep -q "gpu=available" evidence/gpu/gpu_check.txt
+          grep -q "semantic_match=ok" evidence/gpu/gpu_check.txt
+          grep -q "device_loss_recovered=1" evidence/gpu/gpu_check.txt
+
+      - name: Performance and scaling evidence
+        run: |
+          mkdir -p evidence/perf
+          ./build/tools/ws_perf --quick | tee evidence/perf/perf.txt
+          grep -q "WS_PERF_OK" evidence/perf/perf.txt
+          grep -q "identical=1" evidence/perf/perf.txt
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence-opencl-cpu
+          path: evidence/
+
   windows-msvc:
     name: windows msvc ${{ matrix.build_type }}
     runs-on: windows-2022

@@ -68,18 +68,25 @@ jobs:
           & build/tools/Release/ws_audio.exe "evidence/preview/soundscape.wav" 20260101 |
             Tee-Object -FilePath evidence/preview/audio.txt
 
+          # P10 performance evidence: hardware profile, CPU/GPU raster timing and
+          # reference-scene frame times. Runs on the CPU path here (no OpenCL
+          # device on the runner) and reports gpu=unavailable.
+          & build/tools/Release/ws_perf.exe --quick |
+            Tee-Object -FilePath evidence/preview/perf.txt
+
           $stage = "stage/worldseed"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item $exe "$stage/worldseed.exe"
           New-Item -ItemType Directory -Force -Path "$stage/preview" | Out-Null
           Copy-Item evidence/preview/*.png "$stage/preview/"
           Copy-Item evidence/preview/soundscape.wav "$stage/preview/"
+          Copy-Item evidence/preview/perf.txt "$stage/preview/"
           @(
-            "Worldseed Engine preview (P9 - sinematik yonetmen ve ses).",
+            "Worldseed Engine preview (P10 - GPU ve performans olcekleme).",
             "Calistirma: worldseed.exe --scene 14 --size 1280x720",
             "Sahneler: worldseed.exe --list",
-            "Kanit: preview/*.png (CPU referans renderer ciktilari) ve CI artefaktlari.",
-            "Bu bir onizleme surumudur; GPU/hizlandirma sonraki asamadadir."
+            "Kanit: preview/*.png (CPU referans renderer ciktilari), preview/perf.txt (donanim/olcum) ve CI artefaktlari.",
+            "GPU yalniz gercek kazanc oldugunda kullanilir; OpenCL cihazi yoksa CPU fallback calisir."
           ) | Set-Content -Path "$stage/README.txt"
           Compress-Archive -Path "$stage/*" -DestinationPath "worldseed-windows-x64.zip" -Force
           Get-FileHash worldseed-windows-x64.zip -Algorithm SHA256 |
@@ -95,6 +102,7 @@ jobs:
             worldseed-windows-x64.zip.sha256
             evidence/preview/*.png
             evidence/preview/selftest.txt
+            evidence/preview/perf.txt
 
   publish:
     name: publish prerelease
@@ -114,11 +122,12 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P9 - sinematik yonetmen ve ses)." \
+            "Worldseed Engine onizleme surumu (P10 - GPU ve performans olcekleme)." \
             "" \
             "Bu paket, kendi C17 CPU referans renderer'imizle uretilen sabit sahneleri gosterir." \
             "worldseed.exe --list ile sahne listesini, --scene N ile secimi gorursunuz." \
             "preview/ klasorunde her sahnenin gercek render ciktisi PNG olarak eklenmistir." \
+            "preview/perf.txt donanim profilini ve CPU/GPU olcumlerini icerir." \
             "" \
             "Bu surumde olanlar: sahne/geometri/malzeme/isik/doku boru hatti, CPU referans" \
             "renderer, prosedurel arazi/su/habitat/bitki/atmosfer, kendi C17 fizik cekirdegi" \
@@ -126,7 +135,7 @@ jobs:
             "golden sahnesi, P5 referans canli biyomekanigi (artikule beden, kapali-cevrim" \
             "yuruyus kontrolcusu, creature_walk golden sahnesi), P6 organizma/davranis" \
             "(algi, homeostaz, fayda tabanli davranis, sinirli ogrenme, organism_forage" \
-            "golden sahnesi) ve P7 ekosistem: kendi C17 populasyon/enerji modeli, besin agi," \
+            "golden sahnesi), P7 ekosistem: kendi C17 populasyon/enerji modeli, besin agi," \
             "ureme/olum, av-avci eslesmesi ve dordu birden kalici temsili tur (kizil geyik," \
             "kizil tilki, Avrupa tavsani, yaban domuzu) icin ayri fiziksel beden ve tur-ozgu" \
             "yuruyus; ecosystem golden sahnesi. P8 kalici ve cok olcekli dunya: bolge" \
@@ -134,13 +143,15 @@ jobs:
             "dunya ilerlemesi, bolge unload/load (durum korunur), checkpoint kaydet/yukle," \
             "olay gunlugu (journal) ve deterministik replay; world_stream golden sahnesi. P9 sinematik" \
             "yonetmen: olay-tabanli yonetmen (dunyayi degistirmez, olay uydurmaz, gercek olay" \
-            "kimligine bagli cekim), cekim planlayici (genis/orta/yakin/takip), takip" \
-            "kamerasi, serbest kamera, prosedurel ses manzarasi ve tekrar gozlem;" \
-            "director_shot ve soundscape golden sahneleri; golden-scene kaniti ve" \
-            "determinizm testleri." \
-            "Bu surumde henuz olmayanlar: GPU hizlandirma ve cok cekirdekli olceklendirme (P10)." \
+            "kimligine bagli cekim), cekim planlayici, takip kamerasi, serbest kamera," \
+            "prosedurel ses manzarasi ve tekrar gozlem; director_shot ve soundscape golden" \
+            "sahneleri. P10 GPU ve performans olcekleme: donanim kesfi, OpenCL C 1.2" \
+            "rasterleme kernel'i (CPU referansiyla semantik eslesir, tolerans icinde)," \
+            "device-loss kurtarma ve CPU fallback, deterministik cok cekirdekli is" \
+            "zamanlayici (seri/paralel bit-ozdes), 4K/olcek olcumu. GPU yalniz gercek kazanc" \
+            "oldugunda kullanilir (ADR-001); OpenCL cihazi yoksa CPU fallback calisir." \
             "" \
-            "Kanit: bu surumun ekleri (preview/*.png), sha256 dosyasi ve CI artefaktlari." \
+            "Kanit: bu surumun ekleri (preview/*.png, preview/perf.txt), sha256 dosyasi ve CI artefaktlari." \
             > notes.md
           gh release create "$tag" \
             worldseed-windows-x64.zip worldseed-windows-x64.zip.sha256 \

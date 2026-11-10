@@ -33,6 +33,9 @@ target_link_libraries(ws_test_world_host PRIVATE worldseed_core)
 add_executable(ws_test_cinema test_cinema.c)
 target_link_libraries(ws_test_cinema PRIVATE worldseed_core)
 
+add_executable(ws_test_gpu test_gpu.c)
+target_link_libraries(ws_test_gpu PRIVATE worldseed_core)
+
 add_test(NAME core COMMAND ws_test_core)
 add_test(NAME world_render COMMAND ws_test_world)
 add_test(NAME fuzz COMMAND ws_test_fuzz)
@@ -44,3 +47,10 @@ add_test(NAME agent COMMAND ws_test_agent)
 add_test(NAME ecology COMMAND ws_test_ecology)
 add_test(NAME world_host COMMAND ws_test_world_host)
 add_test(NAME cinema COMMAND ws_test_cinema)
+add_test(NAME gpu COMMAND ws_test_gpu)
+
+# The OpenCL ICD (pocl in CI) keeps runtime caches it never frees; those
+# allocations are in the driver, not our code. Disable leak detection for the
+# gpu test so ASan still catches memory errors in our code without failing on
+# the driver's own state. Harmless in non-sanitizer builds.
+set_tests_properties(gpu PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")

@@ -2,6 +2,21 @@
 # One static library keeps the first milestone simple; module boundaries are
 # directory and header boundaries, not separate binaries yet.
 
+# Embed the OpenCL C kernel source into a generated C file so the product ships
+# no OpenCL runtime and the kernel travels inside the executable (ADR-001).
+set(WS_KERNEL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../kernels)
+set(WS_KERNEL_GEN ${CMAKE_CURRENT_BINARY_DIR}/ws_kernel_ws_raster.c)
+add_custom_command(
+  OUTPUT ${WS_KERNEL_GEN}
+  COMMAND ${CMAKE_COMMAND}
+          -DKERNEL_IN=${WS_KERNEL_DIR}/ws_raster.cl
+          -DKERNEL_OUT=${WS_KERNEL_GEN}
+          -DKERNEL_NAME=ws_raster
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/embed_kernel.cmake
+  DEPENDS ${WS_KERNEL_DIR}/ws_raster.cl ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/embed_kernel.cmake
+  COMMENT "Embedding OpenCL kernel ws_raster.cl")
+add_custom_target(ws_kernel_gen DEPENDS ${WS_KERNEL_GEN})
+
 add_library(worldseed_core STATIC
   core/ws_result.c
   core/ws_math.c
@@ -13,6 +28,7 @@ add_library(worldseed_core STATIC
   core/ws_slotmap.c
   core/ws_log.c
   core/ws_serialize.c
+  core/ws_sched.c
   world/ws_world.c
   world/ws_entity.c
   world/ws_event.c
@@ -50,7 +66,13 @@ add_library(worldseed_core STATIC
   render/ws_texture.c
   platform/ws_dynlib.c
   platform/ws_opencl_probe.c
-  platform/ws_clock.c)
+  platform/ws_threads.c
+  platform/ws_hardware.c
+  platform/ws_clock.c
+  gpu/ws_opencl.c
+  ${WS_KERNEL_GEN})
+
+add_dependencies(worldseed_core ws_kernel_gen)
 
 target_include_directories(worldseed_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(worldseed_core PUBLIC ${WS_COMMON_FLAGS_TARGET})
@@ -60,4 +82,6 @@ if(NOT MSVC)
   if(UNIX)
     target_link_libraries(worldseed_core PUBLIC dl)
   endif()
+  find_package(Threads REQUIRED)
+  target_link_libraries(worldseed_core PUBLIC Threads::Threads)
 endif()
