@@ -80,6 +80,9 @@ jobs:
             }
             & tools/ppm2png.ps1 -In $_.FullName -Out ($_.FullName -replace '\.ppm$', '.png')
           }
+          # Distinct asset name: the release also ships the package MANIFEST.txt,
+          # and release asset names are case-insensitive.
+          Copy-Item evidence/live/tour-a/manifest.txt evidence/live/tour-a/tour-manifest.txt
 
           # P9 soundscape: our own C17 synthesis, rendered from a real ecology
           # run, so the preview ships a listenable WAV next to the frames.
@@ -141,6 +144,7 @@ jobs:
             evidence/preview/perf.txt
             evidence/live/tour-a/*.png
             evidence/live/tour-a/manifest.txt
+            evidence/live/tour-a/tour-manifest.txt
             evidence/live/headless.txt
             evidence/live/tour-a.txt
 
@@ -218,7 +222,7 @@ jobs:
             evidence/preview/director_shot.png \
             evidence/preview/soundscape.png \
             evidence/live/tour-a/*.png \
-            evidence/live/tour-a/manifest.txt \
+            evidence/live/tour-a/tour-manifest.txt \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md
