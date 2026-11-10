@@ -55,7 +55,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path evidence/preview | Out-Null
           $exe = "build/src/app/Release/worldseed.exe"
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage","ecosystem","world_stream","director_shot","soundscape"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky","shadows","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage","ecosystem","world_stream","director_shot","soundscape"
           for ($i = 0; $i -lt $scenes.Count; $i++) {
             $s = $scenes[$i]
             & $exe --capture "evidence/preview/$s.ppm" --scene $i --size 1280x720
@@ -106,12 +106,13 @@ jobs:
           Copy-Item evidence/live/tour-a/*.png "$stage/live/"
           Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
           @(
-            "Worldseed Engine preview (P11 - urunlestirme ve ilk release).",
+            "Worldseed Engine preview (P12 - render performansi ve gorsel kalite).",
             "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
             "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
-            "Sahneler: worldseed.exe --list",
+            "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",
             "Kanit: preview/*.png (CPU referans renderer ciktilari), live/*.png (canli uygulama turu),",
             "preview/perf.txt (donanim/olcum) ve manifest.txt (SHA-256) ile CI artefaktlari.",
+            "CPU referans renderer bit-ozdes kalarak hizlandirildi; golgeler opt-in ve eklemeli.",
             "GPU yalniz gercek kazanc oldugunda kullanilir; OpenCL cihazi yoksa CPU fallback calisir."
           ) | Set-Content -Path "$stage/README.txt"
 
@@ -166,11 +167,18 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P11 - urunlestirme ve ilk release)." \
+            "Worldseed Engine onizleme surumu (P12 - render performansi ve gorsel kalite)." \
             "" \
-            "Bu surumde urun artik CANLI bir gozlem uygulamasi: dunya gercek zamanli" \
-            "ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve istatistikleri" \
-            "gorur, kaydedip geri yuklersiniz. Dunya, yonetmen ve ses kendi C17 kodumuzdadir." \
+            "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
+            "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
+            "istatistikleri gorur, kaydedip geri yuklersiniz. Dunya, yonetmen ve ses kendi" \
+            "C17 kodumuzdadir. P12 bu surumde iki is ekler: (1) CPU referans renderer" \
+            "GORUNTUYU BIT-OZDES biraka hizlandirildi (baslikta satir ici matematik" \
+            "yardimcilari, sRGB kodlama LUT'u, cok cekirdekli bant render; 1080p terrain_day" \
+            "543.78 ms -> ~88 ms, yaklasik 6.2x); (2) yonlu (directional) GOLGE ESLEMESI" \
+            "eklendi (isigin bakis acisindan ortografik derinlik haritasi, 3x3 PCF, yalniz" \
+            "dogrudan isigi azaltir). Golgeler opt-in ve eklemelidir; kapaliyken cikti" \
+            "bit-ozdes kalir. Yeni 'shadows' golden sahnesi golgeyi gosterir." \
             "" \
             "Canli uygulama (Windows):" \
             "  worldseed.exe --live               pencere modunda canli dunya" \
@@ -198,7 +206,8 @@ jobs:
             "near/mid/far, kamera disi ilerleme, checkpoint, journal, deterministik replay);" \
             "olay-tabanli sinematik yonetmen ve prosedurel ses manzarasi; GPU icin OpenCL C 1.2" \
             "kernel + CPU fallback ve deterministik cok cekirdekli zamanlayici. GPU yalniz" \
-            "gercek kazanc oldugunda kullanilir (ADR-001)." \
+            "gercek kazanc oldugunda kullanilir (ADR-001). P12 CPU render hizlandirmasi ve" \
+            "yonlu golge eslemesini ekler; golgeler opt-in, mevcut sahneler etkilenmez." \
             "" \
             "Bilinen sinirlamalar: 4K/30 FPS referans donanim hedefi henuz olculup gecilemedi;" \
             "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
@@ -213,6 +222,7 @@ jobs:
             evidence/preview/orbit.png evidence/preview/lowlight.png \
             evidence/preview/spheres.png evidence/preview/materials.png \
             evidence/preview/textured.png evidence/preview/sky.png \
+            evidence/preview/shadows.png \
             evidence/preview/terrain_day.png evidence/preview/terrain_dusk.png \
             evidence/preview/terrain_weather.png             evidence/preview/terrain_physics.png \
             evidence/preview/creature_walk.png \
