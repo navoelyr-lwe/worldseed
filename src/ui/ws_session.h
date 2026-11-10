@@ -34,6 +34,7 @@
 #include "../core/ws_math.h"
 #include "../core/ws_result.h"
 #include "../life/ws_ecology.h"
+#include "../platform/ws_settings.h"
 #include "../render/ws_framebuffer.h"
 #include "../render/ws_scene.h"
 #include "../world/ws_region.h"
@@ -74,7 +75,8 @@ typedef enum ws_session_command {
     WS_CMD_TOGGLE_HELP = 14,
     WS_CMD_QUIT = 15,
     WS_CMD_TOGGLE_STATS = 16,
-    WS_CMD_TOGGLE_SHADOWS = 17
+    WS_CMD_TOGGLE_SHADOWS = 17,
+    WS_CMD_TOGGLE_SETTINGS = 18
 } ws_session_command;
 
 typedef struct ws_session_config {
@@ -120,8 +122,16 @@ uint64_t ws_session_tick(const ws_session *s);
 uint64_t ws_session_steps(const ws_session *s);     /* world ticks advanced */
 int ws_session_help_visible(const ws_session *s);
 int ws_session_stats_visible(const ws_session *s);
+int ws_session_settings_visible(const ws_session *s);
 /* Directional shadows in the live view (off by default; T toggles). */
 int ws_session_shadows_visible(const ws_session *s);
+
+/* Apply a persistent settings snapshot to the observer (start view, time of
+ * day, shadow/panel visibility). Read-only for the world: the same seed and
+ * tick count still give a bit-identical digest. Returns WS_OK, or
+ * WS_ERR_NULL_POINTER when either argument is NULL. */
+ws_result ws_session_apply_settings(ws_session *s, const struct ws_settings *settings);
+ws_result ws_session_get_settings(const ws_session *s, struct ws_settings *out);
 uint64_t ws_session_seed(const ws_session *s);
 
 /* Frames and wall time of the most recent render, for the performance HUD. */

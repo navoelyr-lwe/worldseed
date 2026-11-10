@@ -50,6 +50,9 @@ add_executable(ws_test_live test_live.c
   ${CMAKE_SOURCE_DIR}/src/app/ws_live_platform.c)
 target_link_libraries(ws_test_live PRIVATE worldseed_core)
 
+add_executable(ws_test_settings test_settings.c)
+target_link_libraries(ws_test_settings PRIVATE worldseed_core)
+
 add_test(NAME core COMMAND ws_test_core)
 add_test(NAME world_render COMMAND ws_test_world)
 add_test(NAME fuzz COMMAND ws_test_fuzz)
@@ -66,6 +69,7 @@ add_test(NAME font COMMAND ws_test_font)
 add_test(NAME session COMMAND ws_test_session)
 add_test(NAME hud COMMAND ws_test_hud)
 add_test(NAME live COMMAND ws_test_live)
+add_test(NAME settings COMMAND ws_test_settings)
 
 # The OpenCL ICD (pocl in CI) keeps runtime caches it never frees; those
 # allocations are in the driver, not our code. Disable leak detection for the

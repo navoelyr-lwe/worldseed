@@ -29,8 +29,12 @@ ws_live_options ws_live_options_default(void)
     o.start_view = WS_VIEW_AUTO;
     o.start_time_of_day_s = 10.0 * 3600.0;
     o.render_scale = 0; /* auto */
+    o.settings_path = "worldseed.cfg";
+    o.set_flags = WS_LIVE_SET_NONE;
     return o;
 }
+
+static void ws_live_merge_settings(ws_live_options *opts);
 
 ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_options *opts)
 {
@@ -45,6 +49,17 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
         } else if (strcmp(a, "--fullscreen") == 0) {
             opts->enabled = 1;
             opts->fullscreen = 1;
+            opts->set_flags |= WS_LIVE_SET_FULLSCREEN;
+        } else if (strcmp(a, "--live-settings") == 0) {
+            if (i + 1 >= argc) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
+            opts->enabled = 1;
+            opts->settings_path = argv[++i];
+        } else if (strcmp(a, "--live-no-settings") == 0) {
+            /* Ignore any saved settings file and do not write one (used by the
+             * evidence runs so they stay independent of the developer's config). */
+            opts->settings_path = NULL;
         } else if (strcmp(a, "--live-headless") == 0) {
             if (i + 1 >= argc) {
                 return WS_ERR_INVALID_ARGUMENT;
@@ -76,6 +91,7 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
             }
             opts->enabled = 1;
             opts->seed = strtoull(argv[++i], NULL, 10);
+            opts->set_flags |= WS_LIVE_SET_SEED;
         } else if (strcmp(a, "--live-view") == 0) {
             if (i + 1 >= argc) {
                 return WS_ERR_INVALID_ARGUMENT;
@@ -86,12 +102,14 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
                 return WS_ERR_INVALID_ARGUMENT;
             }
             opts->start_view = (int)v;
+            opts->set_flags |= WS_LIVE_SET_VIEW;
         } else if (strcmp(a, "--live-time") == 0) {
             if (i + 1 >= argc) {
                 return WS_ERR_INVALID_ARGUMENT;
             }
             opts->enabled = 1;
             opts->start_time_of_day_s = strtod(argv[++i], NULL);
+            opts->set_flags |= WS_LIVE_SET_TIME;
         } else if (strcmp(a, "--size") == 0) {
             if (i + 1 >= argc) {
                 return WS_ERR_INVALID_ARGUMENT;
@@ -104,6 +122,7 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
             }
             opts->width = w;
             opts->height = h;
+            opts->set_flags |= WS_LIVE_SET_SIZE;
         } else if (strcmp(a, "--live-render-scale") == 0) {
             if (i + 1 >= argc) {
                 return WS_ERR_INVALID_ARGUMENT;
@@ -114,11 +133,80 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
                 return WS_ERR_INVALID_ARGUMENT;
             }
             opts->render_scale = (int)v;
+            opts->set_flags |= WS_LIVE_SET_RENDER_SCALE;
         }
         /* Other non-live flags are handled by the showcase parser; the live run
          * only needs the resolution, which it takes from --size above. */
     }
+    /* Resolve the effective configuration once, here, so both the windowed and
+     * headless paths (and the tests) see the same merged options. */
+    if (opts->enabled) {
+        ws_live_merge_settings(opts);
+    }
     return WS_OK;
+}
+
+/* Fold the saved settings file into the options. An explicit command-line flag
+ * always wins (its WS_LIVE_SET_* bit is set); everything else comes from the
+ * file, and fields with no flag and no file value keep the built-in default. */
+static void ws_live_merge_settings(ws_live_options *opts)
+{
+    ws_settings saved = ws_settings_default();
+    /* Headless evidence runs are hermetic: they never read or write the user's
+     * settings file, so CI results do not depend on a developer's config. */
+    int use_file = (opts->settings_path != NULL) && !opts->headless;
+    if (use_file && ws_settings_load(opts->settings_path, &saved) != WS_OK) {
+        saved = ws_settings_default();
+    }
+    if ((opts->set_flags & WS_LIVE_SET_SEED) != 0u) {
+        saved.seed = opts->seed;
+    }
+    if ((opts->set_flags & WS_LIVE_SET_SIZE) != 0u) {
+        saved.width = opts->width;
+        saved.height = opts->height;
+    }
+    if ((opts->set_flags & WS_LIVE_SET_VIEW) != 0u) {
+        saved.view = opts->start_view;
+    }
+    if ((opts->set_flags & WS_LIVE_SET_TIME) != 0u) {
+        saved.time_of_day_s = opts->start_time_of_day_s;
+    }
+    if ((opts->set_flags & WS_LIVE_SET_RENDER_SCALE) != 0u) {
+        saved.render_scale = opts->render_scale;
+    }
+    if ((opts->set_flags & WS_LIVE_SET_FULLSCREEN) != 0u) {
+        saved.fullscreen = opts->fullscreen;
+    }
+
+    /* Write the effective values back so the rest of the app uses one source. */
+    opts->seed = saved.seed;
+    opts->width = saved.width;
+    opts->height = saved.height;
+    opts->start_view = saved.view;
+    opts->start_time_of_day_s = saved.time_of_day_s;
+    opts->render_scale = saved.render_scale;
+    opts->fullscreen = saved.fullscreen;
+    opts->settings = saved;
+}
+
+/* Snapshot the observer's settings plus the window fields the session does not
+ * own, and write them to the settings file. Called on a clean exit so the user's
+ * choices persist; failures are non-fatal (a read-only location just means no
+ * persistence). */
+void ws_live_save_settings(const ws_live_options *opts, const ws_session *s)
+{
+    if (opts == NULL || opts->settings_path == NULL || s == NULL) {
+        return;
+    }
+    ws_settings out;
+    if (ws_session_get_settings(s, &out) != WS_OK) {
+        return;
+    }
+    out.width = opts->width;
+    out.height = opts->height;
+    out.render_scale = opts->render_scale;
+    out.fullscreen = opts->fullscreen;
+    (void)ws_settings_save(opts->settings_path, &out);
 }
 
 ws_result ws_live_make_session(const ws_live_options *opts, ws_session **out)
@@ -137,6 +225,7 @@ ws_result ws_live_make_session(const ws_live_options *opts, ws_session **out)
         return r;
     }
     (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_AUTO + opts->start_view, 0.0);
+    (void)ws_session_apply_settings(s, &opts->settings);
     *out = s;
     return WS_OK;
 }
@@ -413,6 +502,8 @@ int ws_live_run(const ws_live_options *opts)
     if (opts == NULL || !opts->enabled) {
         return 2;
     }
+    /* Options arrive already merged (parse_options resolves the settings file),
+     * so the windowed and headless paths drive exactly the same product. */
     if (opts->tour) {
         return run_tour(opts);
     }

@@ -98,6 +98,47 @@ static int test_tour_run(void)
     return 1;
 }
 
+static int test_settings_file_precedence(void)
+{
+    /* A saved settings file supplies defaults, but an explicit CLI flag wins.
+     * Headless runs must ignore the file entirely so evidence is hermetic. */
+    const char *path = "ws_live_settings_test.cfg";
+    remove(path);
+
+    ws_settings saved = ws_settings_default();
+    saved.width = 800u;
+    saved.height = 600u;
+    saved.view = WS_VIEW_MAP;
+    saved.time_of_day_s = 3.0 * 3600.0;
+    saved.seed = 555ULL;
+    WS_CHECK(ws_settings_save(path, &saved) == WS_OK);
+
+    /* Headless runs ignore the file and still succeed (hermetic evidence). */
+    const char *const a1[] = {"worldseed", "--live-headless", "1",
+                              "--live-settings", path};
+    ws_live_options o;
+    WS_CHECK(ws_live_parse_options(5, a1, &o) == WS_OK);
+    WS_CHECK(o.width != 800u || o.height != 600u); /* file not applied */
+    WS_CHECK(ws_live_run(&o) == 0);
+
+    /* Explicit flags win over the file. */
+    const char *const a2[] = {"worldseed", "--live-headless", "1", "--size", "320x180",
+                              "--live-seed", "9", "--live-view", "1"};
+    WS_CHECK(ws_live_parse_options(9, a2, &o) == WS_OK);
+    WS_CHECK(o.width == 320u && o.height == 180u);
+    WS_CHECK(o.seed == 9u);
+    WS_CHECK(o.start_view == WS_VIEW_FREE);
+
+    /* A non-live invocation with a settings file still merges it. */
+    const char *const a3[] = {"worldseed", "--live", "--live-settings", path};
+    WS_CHECK(ws_live_parse_options(4, a3, &o) == WS_OK);
+    WS_CHECK(o.width == 800u && o.height == 600u);
+    WS_CHECK(o.start_view == WS_VIEW_MAP);
+
+    remove(path);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -107,6 +148,7 @@ int main(void)
         {"live_parse_rejects_bad", test_parse_rejects_bad},
         {"live_headless_run", test_headless_run},
         {"live_tour_run", test_tour_run},
+        {"live_settings_precedence", test_settings_file_precedence},
     };
     return ws_test_run("live", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

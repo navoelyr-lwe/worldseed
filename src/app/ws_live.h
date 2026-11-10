@@ -18,8 +18,21 @@
 #include <stdint.h>
 
 #include "../core/ws_result.h"
+#include "../platform/ws_settings.h"
 #include "../render/ws_framebuffer.h"
 #include "../ui/ws_session.h"
+
+/* Which fields the user set explicitly on the command line. The settings file
+ * supplies the rest, so an explicit flag always wins over the saved value. */
+enum {
+    WS_LIVE_SET_NONE = 0u,
+    WS_LIVE_SET_SEED = 1u << 0,
+    WS_LIVE_SET_SIZE = 1u << 1,
+    WS_LIVE_SET_VIEW = 1u << 2,
+    WS_LIVE_SET_TIME = 1u << 3,
+    WS_LIVE_SET_RENDER_SCALE = 1u << 4,
+    WS_LIVE_SET_FULLSCREEN = 1u << 5
+};
 
 typedef struct ws_live_options {
     int enabled;        /* a --live* flag was present */
@@ -35,6 +48,9 @@ typedef struct ws_live_options {
     int start_view;     /* ws_view_mode */
     double start_time_of_day_s;
     int render_scale;   /* windowed internal resolution divisor (0 = auto) */
+    const char *settings_path; /* persistent settings file (NULL = none) */
+    unsigned set_flags; /* WS_LIVE_SET_* bits for explicit CLI values */
+    ws_settings settings; /* merged settings (file + CLI) applied to the session */
 } ws_live_options;
 
 ws_live_options ws_live_options_default(void);
@@ -51,6 +67,11 @@ ws_result ws_live_make_session(const ws_live_options *opts, ws_session **out);
 
 /* Run the live application. Returns a process exit code. */
 int ws_live_run(const ws_live_options *opts);
+
+/* Persist the observer's settings (view, clock, panels, shadows) plus the
+ * window fields, to opts->settings_path. Called on a clean windowed exit; a
+ * NULL settings_path or session is a no-op. */
+void ws_live_save_settings(const ws_live_options *opts, const ws_session *s);
 
 /* Platform presentation hook (full-screen windowed). */
 int ws_live_present(const ws_live_options *opts);

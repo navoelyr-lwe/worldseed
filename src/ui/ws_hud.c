@@ -25,6 +25,7 @@ ws_hud_options ws_hud_options_default(void)
     o.show_panels = 1;
     o.show_help = 0;
     o.show_stats = 0;
+    o.show_settings = 0;
     o.scale = 1;
     return o;
 }
@@ -332,6 +333,54 @@ static void draw_stats_panel(ws_framebuffer *fb, const ws_session *s, int scale)
     ws_font_draw(fb, x, cy, buf, scale, COL_DIM);
 }
 
+/* --- settings panel (docs/17 item 9) ------------------------------------ */
+
+static void draw_settings_panel(ws_framebuffer *fb, const ws_session *s, int scale)
+{
+    uint32_t line_h = WS_FONT_GLYPH_H * (uint32_t)scale + 3u;
+    int x = 6;
+    int y = 6 + (int)(line_h * 12u + 8u) + 6;
+    uint32_t w = 250u * (uint32_t)scale;
+    uint32_t h = line_h * 10u + 8u;
+    panel(fb, x - 3, y - 3, w, h);
+
+    struct ws_settings v;
+    if (ws_session_get_settings(s, &v) != WS_OK) {
+        return;
+    }
+
+    char buf[256];
+    int cy = y;
+    ws_font_draw(fb, x, cy, "SETTINGS (persisted)", scale, COL_ACCENT);
+    cy += (int)line_h;
+
+    snprintf(buf, sizeof(buf), "resolution %ux%u", v.width, v.height);
+    ws_font_draw(fb, x, cy, buf, scale, COL_TEXT); cy += (int)line_h;
+
+    snprintf(buf, sizeof(buf), "render scale %s",
+             v.render_scale == 0 ? "auto" : "fixed");
+    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
+
+    snprintf(buf, sizeof(buf), "start view %s", ws_view_mode_name(v.view));
+    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
+
+    char clock[8];
+    clock_string(v.time_of_day_s, clock, sizeof(clock));
+    snprintf(buf, sizeof(buf), "start time %s", clock);
+    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
+
+    snprintf(buf, sizeof(buf), "shadows %s  fullscreen %s",
+             v.shadows ? "on" : "off", v.fullscreen ? "on" : "off");
+    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
+
+    snprintf(buf, sizeof(buf), "seed %llu", (unsigned long long)v.seed);
+    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
+
+    ws_font_draw(fb, x, cy, "Saved on clean exit; edit the", scale, COL_TEXT);
+    cy += (int)line_h;
+    ws_font_draw(fb, x, cy, "config file to change directly.", scale, COL_TEXT);
+}
+
 /* --- help overlay ------------------------------------------------------- */
 
 static const char *HELP_LINES[] = {
@@ -343,6 +392,7 @@ static const char *HELP_LINES[] = {
     "  N / P      select next / previous animal",
     "  G          toggle statistics panel",
     "  T          toggle directional shadows",
+    "  O          toggle settings panel",
     "  Arrow keys / WASD  fly the free camera",
     "  Mouse drag look (free view)",
     "  [ / ]      time of day -/+ 1 hour",
@@ -385,6 +435,9 @@ void ws_hud_draw(ws_framebuffer *fb, const ws_session *s, const ws_hud_options *
     }
     if (o.show_stats || ws_session_stats_visible(s)) {
         draw_stats_panel(fb, s, scale);
+    }
+    if (o.show_settings || ws_session_settings_visible(s)) {
+        draw_settings_panel(fb, s, scale);
     }
     if (ws_session_view_mode(s) == WS_VIEW_MAP) {
         draw_map(fb, s, scale);

@@ -68,6 +68,7 @@ struct ws_session {
     int help_visible;
     int stats_visible;
     int shadows_visible;
+    int settings_visible;
     int speed_index;
     double time_of_day_s;
 
@@ -483,11 +484,53 @@ ws_result ws_session_apply_command(ws_session *s, int command, double arg)
     case WS_CMD_TOGGLE_SHADOWS:
         s->shadows_visible = !s->shadows_visible;
         break;
+    case WS_CMD_TOGGLE_SETTINGS:
+        s->settings_visible = !s->settings_visible;
+        break;
     case WS_CMD_QUIT:
         break;
     default:
         return WS_ERR_INVALID_ARGUMENT;
     }
+    return WS_OK;
+}
+
+ws_result ws_session_apply_settings(ws_session *s, const struct ws_settings *settings)
+{
+    if (s == NULL || settings == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    /* Observer-only: view, clock and panel/shadow visibility. None of this
+     * reaches the host, the ecology or any event stream, so the world digest is
+     * unaffected (docs/00 read-only observer). */
+    if (settings->view >= 0 && settings->view < WS_VIEW_COUNT) {
+        s->view_mode = settings->view;
+    }
+    if (settings->time_of_day_s >= 0.0 && settings->time_of_day_s < 86400.0) {
+        s->time_of_day_s = settings->time_of_day_s;
+    }
+    s->shadows_visible = settings->shadows ? 1 : 0;
+    s->stats_visible = settings->stats ? 1 : 0;
+    s->help_visible = settings->help ? 1 : 0;
+    return WS_OK;
+}
+
+ws_result ws_session_get_settings(const ws_session *s, struct ws_settings *out)
+{
+    if (s == NULL || out == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    /* Start from the defaults so the window/scale/seed fields, which belong to
+     * the application, keep sensible values; overwrite the observer fields with
+     * the live state. */
+    ws_settings v = ws_settings_default();
+    v.seed = s->config.seed;
+    v.view = s->view_mode;
+    v.time_of_day_s = s->time_of_day_s;
+    v.shadows = s->shadows_visible ? 1 : 0;
+    v.stats = s->stats_visible ? 1 : 0;
+    v.help = s->help_visible ? 1 : 0;
+    *out = v;
     return WS_OK;
 }
 
@@ -562,6 +605,7 @@ uint64_t ws_session_tick(const ws_session *s) { return s != NULL ? s->host.tick 
 uint64_t ws_session_steps(const ws_session *s) { return s != NULL ? s->steps : 0u; }
 int ws_session_help_visible(const ws_session *s) { return s != NULL ? s->help_visible : 0; }
 int ws_session_stats_visible(const ws_session *s) { return s != NULL ? s->stats_visible : 0; }
+int ws_session_settings_visible(const ws_session *s) { return s != NULL ? s->settings_visible : 0; }
 int ws_session_shadows_visible(const ws_session *s) { return s != NULL ? s->shadows_visible : 0; }
 uint64_t ws_session_seed(const ws_session *s) { return s != NULL ? s->config.seed : 0u; }
 
