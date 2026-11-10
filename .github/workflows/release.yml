@@ -55,7 +55,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path evidence/preview | Out-Null
           $exe = "build/src/app/Release/worldseed.exe"
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage","ecosystem"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage","ecosystem","world_stream"
           for ($i = 0; $i -lt $scenes.Count; $i++) {
             $s = $scenes[$i]
             & $exe --capture "evidence/preview/$s.ppm" --scene $i --size 1280x720
@@ -69,11 +69,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$stage/preview" | Out-Null
           Copy-Item evidence/preview/*.png "$stage/preview/"
           @(
-            "Worldseed Engine preview (P7 - ekosistem ve temsili turler).",
-            "Calistirma: worldseed.exe --scene 12 --size 1280x720",
+            "Worldseed Engine preview (P8 - kalici ve cok olcekli dunya).",
+            "Calistirma: worldseed.exe --scene 13 --size 1280x720",
             "Sahneler: worldseed.exe --list",
             "Kanit: preview/*.png (CPU referans renderer ciktilari) ve CI artefaktlari.",
-            "Bu bir onizleme surumudur; kalici cok olcekli dunya ve sinematik yonetmen sonraki asamalardadir."
+            "Bu bir onizleme surumudur; sinematik yonetmen sonraki asamadadir."
           ) | Set-Content -Path "$stage/README.txt"
           Compress-Archive -Path "$stage/*" -DestinationPath "worldseed-windows-x64.zip" -Force
           Get-FileHash worldseed-windows-x64.zip -Algorithm SHA256 |
@@ -108,7 +108,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P7 - ekosistem ve temsili turler)." \
+            "Worldseed Engine onizleme surumu (P8 - kalici ve cok olcekli dunya)." \
             "" \
             "Bu paket, kendi C17 CPU referans renderer'imizle uretilen sabit sahneleri gosterir." \
             "worldseed.exe --list ile sahne listesini, --scene N ile secimi gorursunuz." \
@@ -123,9 +123,12 @@ jobs:
             "golden sahnesi) ve P7 ekosistem: kendi C17 populasyon/enerji modeli, besin agi," \
             "ureme/olum, av-avci eslesmesi ve dordu birden kalici temsili tur (kizil geyik," \
             "kizil tilki, Avrupa tavsani, yaban domuzu) icin ayri fiziksel beden ve tur-ozgu" \
-            "yuruyus; ecosystem golden sahnesi; golden-scene kaniti ve determinizm testleri." \
-            "Bu surumde henuz olmayanlar: kalici cok olcekli dunya, tam ekosistem etkilesimi" \
-            "ve sinematik yonetmen (sonraki asamalar)." \
+            "yuruyus; ecosystem golden sahnesi. P8 kalici ve cok olcekli dunya: bolge" \
+            "geometrisi, region streaming, near/mid/far simulasyon seviyeleri, kamera disi" \
+            "dunya ilerlemesi, bolge unload/load (durum korunur), checkpoint kaydet/yukle," \
+            "olay gunlugu (journal) ve deterministik replay; world_stream golden sahnesi;" \
+            "golden-scene kaniti ve determinizm testleri." \
+            "Bu surumde henuz olmayanlar: sinematik yonetmen (sonraki asama)." \
             "" \
             "Kanit: bu surumun ekleri (preview/*.png), sha256 dosyasi ve CI artefaktlari." \
             > notes.md
@@ -139,6 +142,7 @@ jobs:
             evidence/preview/creature_walk.png \
             evidence/preview/organism_forage.png \
             evidence/preview/ecosystem.png \
+            evidence/preview/world_stream.png \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md

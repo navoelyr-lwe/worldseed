@@ -1,4 +1,4 @@
-# P5–P7 — Canlı biyomekaniği ve tür model kartları
+# P5–P8 — Canlı biyomekaniği, tür ve bölge model kartları
 
 Bu dizin, `06-CANLI-BIYOMEKANIK.md`, `02-BILIMSEL-MODELLEME.md` ve
 `07-BIYOLOJI-EKOLOJI.md` uyarınca zorunlu model kartlarını içerir. Her kart;
@@ -18,6 +18,7 @@ model D3 diye tanıtılmaz.
 | `MODEL-KARTI-HOMEOSTAZ.md` | İç durum ve ihtiyaç homeostazı | D2 (korunum ve kararlılık testleri geçti) |
 | `MODEL-KARTI-DAVRANIS.md` | Fayda tabanlı davranış ve sınırlı öğrenme | D2 (senaryo ve çok tohum testleri geçti) |
 | `MODEL-KARTI-EKOLOJI.md` | Popülasyon dinamiği, bitki üretimi, av-avcı, üreme/ölüm | D2 (korunum, sınır ve çok tohum testleri geçti) |
+| `MODEL-KARTI-POPULASYON.md` | Toplam bölge popülasyonu (P8 FAR/MID vekili) | D2 (korunum, sınır ve determinizm testleri geçti) |
 
 ## Tür kartları (P7)
 
