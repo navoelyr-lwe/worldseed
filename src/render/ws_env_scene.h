@@ -19,7 +19,9 @@
 #include "../core/ws_result.h"
 #include "../life/ws_agent.h"
 #include "../life/ws_creature.h"
+#include "../life/ws_ecology.h"
 #include "../life/ws_quadruped.h"
+#include "../life/ws_species.h"
 #include "../world/ws_environment.h"
 #include "../world/ws_habitat.h"
 #include "../world/ws_hydro.h"
@@ -30,7 +32,9 @@
 #include "ws_texture.h"
 
 #define WS_ENV_MAX_TREES 900u
-#define WS_ENV_MAX_OBJECTS (3u + WS_ENV_MAX_TREES + 16u)
+/* 3 fixed meshes (terrain, water, cones) + trees + room for the largest single
+ * subject: the P7 ecosystem's up to eight rendered bodies at ~11 boxes each. */
+#define WS_ENV_MAX_OBJECTS (3u + WS_ENV_MAX_TREES + 96u)
 
 /* Scene kinds. 0..2 are static environment states; 3 (terrain_physics) drops a
  * rigid body onto the terrain with the P4 solver and renders it where it comes
@@ -48,6 +52,13 @@
  * drives and walks to the resource it needs, and the scene renders the animal
  * where the decision took it, next to the resource it acted on. */
 #define WS_ENV_SCENE_ORGANISM 5
+/* 6 (ecosystem) runs the P7 ecosystem headless for a fixed simulated interval
+ * and renders a representative of each of the four species at the place the
+ * simulation left it, on the terrain with its vegetation. The picture is the
+ * population's result, not a scripted arrangement. */
+#define WS_ENV_SCENE_ECOSYSTEM 6
+
+#define WS_ENV_MAX_CREATURES 8u
 
 typedef struct ws_env_scene_options {
     uint64_t seed;
@@ -117,6 +128,17 @@ typedef struct ws_env_scene {
     double resource_z;
     int resource_kind;         /* ws_sense_kind, or -1 when none */
     double resource_value;     /* remaining value 0..1 */
+
+    /* Ecosystem scene (scene kind 6): one rendered body per representative
+     * species, placed where the P7 population simulation left a survivor. */
+    struct ws_rendered_creature {
+        ws_cbody bodies[8];
+        uint32_t body_count;
+        ws_quad_parts parts;
+        double z;              /* region-local z of the body's walking line, m */
+        int species;           /* ws_species_kind */
+    } ecosystem_creatures[WS_ENV_MAX_CREATURES];
+    uint32_t ecosystem_count;
 
     ws_scene_object *objects;
     uint32_t object_capacity;

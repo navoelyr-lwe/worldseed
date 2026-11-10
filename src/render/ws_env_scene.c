@@ -56,6 +56,7 @@ const char *ws_env_scene_kind_id(int scene_kind)
     case 3: return "terrain_physics";
     case 4: return "creature_walk";
     case 5: return "organism_forage";
+    case 6: return "ecosystem";
     default: return "terrain";
     }
 }
@@ -582,6 +583,189 @@ static void add_organism_objects(ws_env_scene *e)
                         2.4, 0.9, 2.4);
 }
 
+/* ---- P7 ecosystem scene ---------------------------------------------------
+ * The ecosystem runs headless over the world region; the scene then renders a
+ * representative body for each species whose population survived, at a spot
+ * derived from the simulated survivor, so the picture summarises the population
+ * result rather than a scripted arrangement. */
+
+/* Per-species runner body colours, so the four species read apart in one frame. */
+static void species_color(int kind, uint8_t out[3])
+{
+    switch (kind) {
+    case WS_SPECIES_DEER: out[0] = 122u; out[1] = 82u;  out[2] = 52u;  break;
+    case WS_SPECIES_FOX:  out[0] = 176u; out[1] = 96u;  out[2] = 44u;  break;
+    case WS_SPECIES_RABBIT: out[0] = 150u; out[1] = 138u; out[2] = 112u; break;
+    case WS_SPECIES_BOAR: out[0] = 78u;  out[1] = 70u;  out[2] = 60u;  break;
+    default:              out[0] = 120u; out[1] = 100u; out[2] = 80u;  break;
+    }
+}
+
+/* Build a species body, settle it, walk it a short interval so it is caught
+ * mid-stride, then rotate/translate it to a region-local spot facing `heading`.
+ * Writes the final link poses into `out`. */
+static ws_result build_species_walk(ws_env_scene *e, int kind,
+                                    double lx, double lz, double heading,
+                                    struct ws_rendered_creature *out)
+{
+    static ws_cjoint joints[8];
+    static ws_cfoot feet[4];
+    static ws_creature_ground cg;
+    ws_quad_storage st;
+    const ws_species_info *si = ws_species_get((ws_species_kind)kind);
+    if (si == NULL) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    const ws_species_profile *sp = &si->body;
+    ws_creature c;
+    ws_quad_parts parts;
+
+    double ground0 = 0.0; /* body is built above 0, then seated on the terrain */
+    ws_result r = ws_creature_init(&c, 1.0 / 500.0, 9.80665, 30, 0.2,
+                                   out->bodies, 8u, joints, 8u, feet, 4u);
+    if (r != WS_OK) {
+        return r;
+    }
+    cg.e = e;
+    cg.z = lz + e->terrain.origin_y;
+    ws_creature_set_ground(&c, creature_profile_cb, &cg);
+    r = ws_quadruped_build(&c, &st, sp, ground0, &parts);
+    if (r != WS_OK) {
+        return r;
+    }
+    for (int i = 0; i < 600; ++i) {
+        ws_quadruped_balance(&c, parts.torso, 4000.0, 500.0, 0.0);
+        ws_creature_step(&c);
+    }
+    ws_gait_state gs;
+    ws_gait_state_init(&gs);
+    double speed = ws_species_walk_speed((ws_species_kind)kind);
+    int steps = (int)(3.0 / c.dt);
+    for (int i = 0; i < steps; ++i) {
+        ws_quadruped_walk(&c, &parts, sp, &gs, speed);
+        ws_quadruped_balance(&c, parts.torso, 4000.0, 500.0, 0.0);
+        ws_creature_step(&c);
+    }
+    /* Re-seat on the terrain at the requested spot and rotate to the heading. */
+    double gy = ws_terrain_height_bilinear(&e->terrain, lx + e->terrain.origin_x,
+                                           lz + e->terrain.origin_y);
+    double ox = c.bodies[parts.torso].px;
+    double oy = c.bodies[parts.torso].py;
+    double ch = cos(heading);
+    double sh = sin(heading);
+    for (uint32_t i = 0; i < c.body_count; ++i) {
+        ws_cbody *b = &out->bodies[i];
+        double rx = b->px - ox;
+        double ry = b->py - oy;
+        b->px = lx + rx * ch - ry * sh;
+        b->py = gy + (rx * sh + ry * ch);
+        b->angle += heading;
+    }
+    out->body_count = c.body_count;
+    out->parts = parts;
+    out->z = lz;
+    out->species = kind;
+    return WS_OK;
+}
+
+/* Run the ecosystem headless and pick one survivor per species (the lowest
+ * index, for determinism). Returns the number of species represented. The
+ * representatives are laid out around the scene's drop point (cre_x, cre_z) so
+ * the camera that frames that point sees them. */
+static ws_result run_ecosystem(ws_env_scene *e, double cre_x, double cre_z)
+{
+    ws_eco_config cfg = ws_eco_config_default(0x7ec0u ^ e->terrain.config.seed);
+    ws_ecology eco;
+    ws_result r = ws_ecology_init(&eco, &cfg);
+    if (r != WS_OK) {
+        return r;
+    }
+    /* A fixed simulated interval: enough generations for the population to sort
+     * itself out, short enough to keep a scene build snappy. */
+    int steps = (int)(600.0 / 0.05);
+    for (int i = 0; i < steps; ++i) {
+        (void)ws_ecology_step(&eco, 0.05);
+    }
+
+    uint32_t placed = 0u;
+    for (int s = 0; s < WS_SPECIES_COUNT && placed < WS_ENV_MAX_CREATURES; ++s) {
+        int survivor = -1;
+        for (uint32_t i = 0; i < eco.alive_count; ++i) {
+            if (eco.agents[i].alive && eco.agents[i].species == s) {
+                survivor = (int)i;
+                break;
+            }
+        }
+        if (survivor < 0) {
+            continue; /* species died out; not rendered */
+        }
+        /* Lay the representatives in a row perpendicular to the camera's
+         * horizontal view direction, so all four read across the frame rather
+         * than receding along the diagonal. */
+        double vx = 1.0, vz = 0.6;         /* camera horizontal view direction */
+        double vlen = sqrt(vx * vx + vz * vz);
+        double px = vz / vlen, pz = -vx / vlen;   /* screen-right in world xz */
+        double off = ((double)placed - 1.5) * 3.6;
+        double lx = cre_x - e->terrain.origin_x + px * off;
+        double lz = cre_z - e->terrain.origin_y + pz * off;
+        /* Face the body toward the camera (opposite the view direction) with a
+         * small per-species turn so the row does not look cloned. */
+        double heading = atan2(-vz, -vx) + (double)(placed - 1) * 0.25;
+        struct ws_rendered_creature *rc = &e->ecosystem_creatures[placed];
+        r = build_species_walk(e, s, lx, lz, heading, rc);
+        if (r != WS_OK) {
+            ws_ecology_free(&eco);
+            return r;
+        }
+        ++placed;
+    }
+    e->ecosystem_count = placed;
+    ws_ecology_free(&eco);
+    if (placed == 0u) {
+        return WS_ERR_INVALID_STATE;
+    }
+    return WS_OK;
+}
+
+static void add_ecosystem_objects(ws_env_scene *e)
+{
+    for (uint32_t k = 0; k < e->ecosystem_count; ++k) {
+        const struct ws_rendered_creature *rc = &e->ecosystem_creatures[k];
+        const ws_quad_parts *p = &rc->parts;
+        uint8_t col[3];
+        species_color(rc->species, col);
+        ws_material body = ws_material_make(col[0] / 255.0, col[1] / 255.0,
+                                            col[2] / 255.0, 0.85, 0.0, 0.05);
+        ws_material dark = ws_material_make(col[0] / 320.0, col[1] / 320.0,
+                                            col[2] / 320.0, 0.85, 0.0, 0.05);
+        const double leg_z = 0.12;
+        for (uint32_t i = 0; i < rc->body_count; ++i) {
+            const ws_cbody *b = &rc->bodies[i];
+            int is_leg = ((int)i == p->front_upper || (int)i == p->front_lower ||
+                          (int)i == p->rear_upper || (int)i == p->rear_lower);
+            ws_material m = is_leg ? dark : body;
+            double sx = b->half_len * 2.0;
+            double sy = b->half_thick * 2.0;
+            double sz = b->half_width * 2.0;
+            double base_z = rc->z;
+            if (is_leg) {
+                for (int side = -1; side <= 1; side += 2) {
+                    ws_mat4 t = ws_mat4_translation(
+                        ws_vec3_make(b->px, b->py, base_z + side * leg_z));
+                    t = ws_mat4_multiply(t, ws_mat4_rotation_z(b->angle));
+                    t = ws_mat4_multiply(t, ws_mat4_scale(ws_vec3_make(sx, sy, sz)));
+                    (void)ws_scene_add_object(&e->scene, &e->cube_mesh, t, m);
+                }
+            } else {
+                ws_mat4 t = ws_mat4_translation(ws_vec3_make(b->px, b->py, base_z));
+                t = ws_mat4_multiply(t, ws_mat4_rotation_z(b->angle));
+                t = ws_mat4_multiply(t, ws_mat4_scale(ws_vec3_make(sx, sy, sz)));
+                (void)ws_scene_add_object(&e->scene, &e->cube_mesh, t, m);
+            }
+        }
+    }
+}
+
 
 static void sun_and_sky(const ws_environment *env, ws_light *light,
                         double *out_intensity, double *out_ambient)
@@ -705,7 +889,8 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
     double cre_x = e->extent * 0.35;
     double cre_z = e->extent * 0.5;
     if (opts->scene_kind == WS_ENV_SCENE_CREATURE ||
-        opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
+        opts->scene_kind == WS_ENV_SCENE_ORGANISM ||
+        opts->scene_kind == WS_ENV_SCENE_ECOSYSTEM) {
         pick_drop_point(e, &cre_x, &cre_z);
         /* Build the shared unit-cube mesh used for every link. */
         size_t vc = ws_mesh_cube_vertex_count();
@@ -732,9 +917,15 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
             }
             e->creature_z = cre_z - e->terrain.origin_y;
             e->creature_forward_m = fwd;
-        } else {
+        } else if (opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
             e->resource_kind = -1;
             cr = run_organism_forage(e, cre_x, cre_z);
+            if (cr != WS_OK) {
+                ws_env_scene_free(e);
+                return cr;
+            }
+        } else {
+            cr = run_ecosystem(e, cre_x, cre_z);
             if (cr != WS_OK) {
                 ws_env_scene_free(e);
                 return cr;
@@ -765,6 +956,20 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
         tgt_x = rx;
         tgt_y = ry;
         tgt_z = rz;
+    } else if (opts->scene_kind == WS_ENV_SCENE_ECOSYSTEM) {
+        /* Frame the group of representative animals on a raised three-quarter
+         * view so all species and the surrounding terrain read together. */
+        double cx = cre_x - e->terrain.origin_x;
+        double cz = cre_z - e->terrain.origin_y;
+        double cy = ws_terrain_height_bilinear(&e->terrain, cre_x, cre_z);
+        double back = 11.0;
+        double up = 4.5;
+        eye_x = cx - back;
+        eye_y = cy + up;
+        eye_z = cz - back * 0.6;
+        tgt_x = cx;
+        tgt_y = cy + 0.9;
+        tgt_z = cz;
     } else if (opts->scene_kind == WS_ENV_SCENE_CREATURE ||
                opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
         /* Side-on view of the walking animal: the sagittal gait reads best from
@@ -895,6 +1100,11 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
      * resource marker it acted on. */
     if (opts->scene_kind == WS_ENV_SCENE_ORGANISM) {
         add_organism_objects(e);
+    }
+
+    /* Ecosystem: one representative body per surviving species. */
+    if (opts->scene_kind == WS_ENV_SCENE_ECOSYSTEM) {
+        add_ecosystem_objects(e);
     }
 
     e->scene.camera = camera;

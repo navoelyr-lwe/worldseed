@@ -66,12 +66,12 @@ jobs:
         run: |
           # Launch the actual Win32 window, let it present a frame, capture the
           # desktop, then close it. This is a real GUI test, not a headless one.
-          # Scene 11 is the P6 organism/behaviour result (the animal where its
-          # own decision took it), so the screenshot shows a simulated behaviour,
-          # not a scripted pose.
+          # Scene 12 is the P7 ecosystem result (a representative of each
+          # surviving species where the population simulation left it), so the
+          # screenshot shows a simulated ecosystem, not a scripted pose.
           New-Item -ItemType Directory -Force -Path evidence/gui/app | Out-Null
           $exe = "build-gui/src/app/Release/worldseed.exe"
-          $proc = Start-Process -FilePath $exe -ArgumentList "--scene","11","--size","1280x720" -PassThru
+          $proc = Start-Process -FilePath $exe -ArgumentList "--scene","12","--size","1280x720" -PassThru
           Start-Sleep -Seconds 5
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
           $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen

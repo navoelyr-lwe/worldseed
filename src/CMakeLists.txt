@@ -29,6 +29,8 @@ add_library(worldseed_core STATIC
   life/ws_perception.c
   life/ws_organism.c
   life/ws_agent.c
+  life/ws_species.c
+  life/ws_ecology.c
   render/ws_framebuffer.c
   render/ws_raster.c
   render/ws_mesh.c

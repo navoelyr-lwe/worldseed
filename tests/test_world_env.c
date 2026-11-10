@@ -425,6 +425,53 @@ static int test_env_scene_organism(void)
     return 1;
 }
 
+/* The ecosystem scene must run the P7 population headless, then render a real
+ * articulated body for each species that survived, all inside the frame the
+ * camera builds. The picture is the population's result, not a scripted pose,
+ * and the same seed must reproduce the same survivors and the same poses. */
+static int test_env_scene_ecosystem(void)
+{
+    ws_env_scene_options o = ws_env_scene_options_default(20260101ULL);
+    o.scene_kind = WS_ENV_SCENE_ECOSYSTEM;
+    ws_env_scene a;
+    ws_env_scene b;
+    WS_CHECK(ws_env_scene_create(&a, &o) == WS_OK);
+    WS_CHECK(ws_env_scene_create(&b, &o) == WS_OK);
+    /* At least one species survived and each rendered body is a real chain. */
+    WS_CHECK(a.ecosystem_count >= 1u);
+    WS_CHECK(a.ecosystem_count <= WS_ENV_MAX_CREATURES);
+    for (uint32_t k = 0; k < a.ecosystem_count; ++k) {
+        const struct ws_rendered_creature *rc = &a.ecosystem_creatures[k];
+        WS_CHECK(rc->species >= 0 && rc->species < WS_SPECIES_COUNT);
+        WS_CHECK(rc->body_count >= 7u);
+    }
+    WS_CHECK(a.scene.object_count >= a.ecosystem_count);
+    /* The rendered representatives sit inside the region, on the ground. */
+    double region_side = (double)a.terrain.cells * a.terrain.config.cell_size;
+    for (uint32_t k = 0; k < a.ecosystem_count; ++k) {
+        const struct ws_rendered_creature *rc = &a.ecosystem_creatures[k];
+        const ws_cbody *t = &rc->bodies[rc->parts.torso];
+        WS_CHECK(t->px >= 0.0 && t->px <= region_side);
+        WS_CHECK(isfinite(t->py));
+    }
+    /* Deterministic: same seed, same survivors, same body poses. */
+    WS_CHECK(a.ecosystem_count == b.ecosystem_count);
+    for (uint32_t k = 0; k < a.ecosystem_count; ++k) {
+        const struct ws_rendered_creature *ra = &a.ecosystem_creatures[k];
+        const struct ws_rendered_creature *rb = &b.ecosystem_creatures[k];
+        WS_CHECK(ra->species == rb->species);
+        WS_CHECK(ra->z == rb->z);
+        const ws_cbody *ta = &ra->bodies[ra->parts.torso];
+        const ws_cbody *tb = &rb->bodies[rb->parts.torso];
+        WS_CHECK(ta->px == tb->px);
+        WS_CHECK(ta->py == tb->py);
+        WS_CHECK(ta->angle == tb->angle);
+    }
+    ws_env_scene_free(&a);
+    ws_env_scene_free(&b);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -445,6 +492,7 @@ int main(void)
         {"env scene physics drop", test_env_scene_physics},
         {"env scene creature walk", test_env_scene_creature},
         {"env scene organism forage", test_env_scene_organism},
+        {"env scene ecosystem", test_env_scene_ecosystem},
         {"catalog builds all scenes", test_catalog_builds_all},
     };
     return ws_test_run("world_env", cases, (int)(sizeof(cases) / sizeof(cases[0])));
