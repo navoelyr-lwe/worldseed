@@ -6,6 +6,7 @@
 #ifndef WS_CORE_MATH_H
 #define WS_CORE_MATH_H
 
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -44,34 +45,148 @@ typedef struct ws_mat3 {
     double m[9];
 } ws_mat3;
 
-double ws_clamp_double(double value, double lo, double hi);
-double ws_lerp(double a, double b, double t);
+/* The small arithmetic helpers below are defined inline in this header: they are
+ * called tens of millions of times per frame on the render path, and out-of-line
+ * calls dominated the profile. Definitions live here so every translation unit
+ * inlines them; there is exactly one implementation. */
+
+static inline double ws_clamp_double(double value, double lo, double hi)
+{
+    if (value < lo) {
+        return lo;
+    }
+    if (value > hi) {
+        return hi;
+    }
+    return value;
+}
+
+static inline double ws_lerp(double a, double b, double t)
+{
+    return a + (b - a) * t;
+}
+
 double ws_deg_to_rad(double degrees);
 
-ws_vec2 ws_vec2_make(double x, double y);
-ws_vec2 ws_vec2_add(ws_vec2 a, ws_vec2 b);
-ws_vec2 ws_vec2_sub(ws_vec2 a, ws_vec2 b);
-ws_vec2 ws_vec2_scale(ws_vec2 v, double s);
-double ws_vec2_dot(ws_vec2 a, ws_vec2 b);
-double ws_vec2_length(ws_vec2 v);
+static inline ws_vec2 ws_vec2_make(double x, double y)
+{
+    ws_vec2 v = {x, y};
+    return v;
+}
 
-ws_vec3 ws_vec3_make(double x, double y, double z);
-ws_vec3 ws_vec3_add(ws_vec3 a, ws_vec3 b);
-ws_vec3 ws_vec3_sub(ws_vec3 a, ws_vec3 b);
-ws_vec3 ws_vec3_scale(ws_vec3 v, double s);
-double ws_vec3_dot(ws_vec3 a, ws_vec3 b);
-ws_vec3 ws_vec3_cross(ws_vec3 a, ws_vec3 b);
-double ws_vec3_length(ws_vec3 v);
+static inline ws_vec2 ws_vec2_add(ws_vec2 a, ws_vec2 b)
+{
+    return ws_vec2_make(a.x + b.x, a.y + b.y);
+}
+
+static inline ws_vec2 ws_vec2_sub(ws_vec2 a, ws_vec2 b)
+{
+    return ws_vec2_make(a.x - b.x, a.y - b.y);
+}
+
+static inline ws_vec2 ws_vec2_scale(ws_vec2 v, double s)
+{
+    return ws_vec2_make(v.x * s, v.y * s);
+}
+
+static inline double ws_vec2_dot(ws_vec2 a, ws_vec2 b)
+{
+    return a.x * b.x + a.y * b.y;
+}
+
+static inline double ws_vec2_length(ws_vec2 v)
+{
+    return sqrt(ws_vec2_dot(v, v));
+}
+
+static inline ws_vec3 ws_vec3_make(double x, double y, double z)
+{
+    ws_vec3 v = {x, y, z};
+    return v;
+}
+
+static inline ws_vec3 ws_vec3_add(ws_vec3 a, ws_vec3 b)
+{
+    return ws_vec3_make(a.x + b.x, a.y + b.y, a.z + b.z);
+}
+
+static inline ws_vec3 ws_vec3_sub(ws_vec3 a, ws_vec3 b)
+{
+    return ws_vec3_make(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
+static inline ws_vec3 ws_vec3_scale(ws_vec3 v, double s)
+{
+    return ws_vec3_make(v.x * s, v.y * s, v.z * s);
+}
+
+static inline double ws_vec3_dot(ws_vec3 a, ws_vec3 b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+static inline double ws_vec3_length(ws_vec3 v)
+{
+    return sqrt(ws_vec3_dot(v, v));
+}
+
+static inline ws_vec3 ws_vec3_cross(ws_vec3 a, ws_vec3 b)
+{
+    return ws_vec3_make(a.y * b.z - a.z * b.y,
+                        a.z * b.x - a.x * b.z,
+                        a.x * b.y - a.y * b.x);
+}
+
 /* Unit vector in the direction of v; returns the zero vector for v == 0. */
-ws_vec3 ws_vec3_normalize(ws_vec3 v);
-ws_vec3 ws_vec3_lerp(ws_vec3 a, ws_vec3 b, double t);
+static inline ws_vec3 ws_vec3_normalize(ws_vec3 v)
+{
+    double len = ws_vec3_length(v);
+    if (len == 0.0) {
+        return ws_vec3_make(0.0, 0.0, 0.0);
+    }
+    return ws_vec3_scale(v, 1.0 / len);
+}
 
-ws_vec4 ws_vec4_make(double x, double y, double z, double w);
-ws_vec4 ws_vec4_add(ws_vec4 a, ws_vec4 b);
-ws_vec4 ws_vec4_sub(ws_vec4 a, ws_vec4 b);
-ws_vec4 ws_vec4_scale(ws_vec4 v, double s);
-double ws_vec4_dot(ws_vec4 a, ws_vec4 b);
-ws_vec4 ws_vec4_lerp(ws_vec4 a, ws_vec4 b, double t);
+static inline ws_vec3 ws_vec3_lerp(ws_vec3 a, ws_vec3 b, double t)
+{
+    return ws_vec3_make(ws_lerp(a.x, b.x, t),
+                        ws_lerp(a.y, b.y, t),
+                        ws_lerp(a.z, b.z, t));
+}
+
+static inline ws_vec4 ws_vec4_make(double x, double y, double z, double w)
+{
+    ws_vec4 v = {x, y, z, w};
+    return v;
+}
+
+static inline ws_vec4 ws_vec4_add(ws_vec4 a, ws_vec4 b)
+{
+    return ws_vec4_make(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
+}
+
+static inline ws_vec4 ws_vec4_sub(ws_vec4 a, ws_vec4 b)
+{
+    return ws_vec4_make(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w);
+}
+
+static inline ws_vec4 ws_vec4_scale(ws_vec4 v, double s)
+{
+    return ws_vec4_make(v.x * s, v.y * s, v.z * s, v.w * s);
+}
+
+static inline double ws_vec4_dot(ws_vec4 a, ws_vec4 b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
+
+static inline ws_vec4 ws_vec4_lerp(ws_vec4 a, ws_vec4 b, double t)
+{
+    return ws_vec4_make(ws_lerp(a.x, b.x, t),
+                        ws_lerp(a.y, b.y, t),
+                        ws_lerp(a.z, b.z, t),
+                        ws_lerp(a.w, b.w, t));
+}
 
 ws_mat4 ws_mat4_identity(void);
 ws_mat4 ws_mat4_multiply(ws_mat4 a, ws_mat4 b);
