@@ -116,6 +116,27 @@ jobs:
             Tee-Object -FilePath evidence/gui/live/tour.txt
           if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "LIVE_TOUR_OK" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "shadows_verified=1" -Quiet)) { exit 1 }
+
+      - name: Directional shadows evidence on isolated runner
+        shell: pwsh
+        run: |
+          # P12: the on/off directional-shadow pair must differ and the shadowed
+          # frame must not be brighter than the unshadowed one. This gate runs on
+          # the real Windows runner because the GitHub-hosted pool is unavailable
+          # for this private repository (see PR notes); it is the same assertion
+          # the hosted CI job makes.
+          $diff = & build-gui/tools/Release/ws_imgdiff.exe `
+            evidence/gui/live/tour/step-08-shadows_off.ppm `
+            evidence/gui/live/tour/step-09-shadows_on.ppm
+          $diff | Out-File -Encoding ascii evidence/gui/live/shadows_diff.txt
+          $diff | Write-Output
+          if (-not ($diff | Select-String -Pattern "WS_IMGDIFF_OK" -Quiet)) { Write-Error "shadow pair diff failed"; exit 1 }
+          $nd = [int]([regex]::Match(($diff -join " "), "differing=(\d+)").Groups[1].Value)
+          if ($nd -le 0) { Write-Error "shadows changed nothing"; exit 1 }
+          # Shadows only darken: signed mean (off - on) must be non-negative.
+          $sm = [regex]::Match(($diff -join " "), "signed_mean a-b: r=(-?[0-9.]+)")
+          if ([double]$sm.Groups[1].Value -lt 0) { Write-Error "shadowed frame brighter than unshadowed"; exit 1 }
 
       - name: Upload evidence
         if: always()
