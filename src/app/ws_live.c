@@ -238,6 +238,7 @@ static int run_headless(const ws_live_options *opts)
 static const char *TOUR_STEPS[] = {
     "auto_day", "free_overview", "follow_deer", "map_overview",
     "auto_dusk", "follow_fox", "auto_night", "reload_check",
+    "shadows_off", "shadows_on",
 };
 
 static int capture_step(ws_session *s, ws_framebuffer *fb, float *depth,
@@ -351,6 +352,40 @@ static int run_tour(const ws_live_options *opts)
     ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
     ok &= roundtrip;
 
+    /* 9-10: shadows off vs on, same low morning sun and same free overview, so
+     * the pair isolates the directional-shadow effect (docs/08, P12). */
+    (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_FREE, 0.0);
+    (void)ws_session_apply_command(s, WS_CMD_SET_TIME_OF_DAY, 8.0 * 3600.0);
+    for (int i = 0; i < 40; ++i) { (void)ws_session_step(s, 0.05); }
+    ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0);
+    ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0); /* back off */
+
+    /* Prove the directional shadows really change the live frame and only ever
+     * darken it (they attenuate the sun term, never the ambient). Same world,
+     * same camera: only the shadow switch differs between the two renders. */
+    int shadow_pair_changed = 0;
+    {
+        size_t bytes = (size_t)fb.width * fb.height * 4u;
+        uint8_t *off = malloc(bytes);
+        if (off != NULL) {
+            ok &= ws_session_render(s, &fb, depth) == WS_OK;
+            memcpy(off, fb.pixels, bytes);
+            (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0);
+            ok &= ws_session_render(s, &fb, depth) == WS_OK;
+            (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0);
+            size_t on_sum = 0u, off_sum = 0u;
+            for (size_t i = 0; i < (size_t)fb.width * fb.height; ++i) {
+                off_sum += off[i * 4u] + off[i * 4u + 1u] + off[i * 4u + 2u];
+                on_sum += fb.pixels[i * 4u] + fb.pixels[i * 4u + 1u] + fb.pixels[i * 4u + 2u];
+            }
+            shadow_pair_changed = (memcmp(off, fb.pixels, bytes) != 0) && (on_sum <= off_sum);
+            free(off);
+        }
+    }
+    ok &= shadow_pair_changed;
+
     if (mf != NULL) {
         fprintf(mf, "# Worldseed Engine P11 live tour manifest\n");
         fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
@@ -359,6 +394,7 @@ static int run_tour(const ws_live_options *opts)
         fprintf(mf, "population=%u\n", ws_session_total_population(s));
         fprintf(mf, "loaded_regions=%u\n", ws_session_loaded_regions(s));
         fprintf(mf, "save_load_roundtrip=%d\n", roundtrip);
+        fprintf(mf, "shadows_verified=%d\n", shadow_pair_changed);
         fprintf(mf, "steps=%d\n", step);
         fclose(mf);
     }

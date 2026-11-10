@@ -70,6 +70,7 @@ static void handle_key(live_state *st, WPARAM key)
     case 'P': (void)ws_session_apply_command(s, WS_CMD_SELECT_PREV, 0.0); break;
     case 'H': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_HELP, 0.0); break;
     case 'G': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_STATS, 0.0); break;
+    case 'T': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0); break;
     case 'S': (void)ws_session_apply_command(s, WS_CMD_SAVE, 0.0); break;
     case 'L': (void)ws_session_apply_command(s, WS_CMD_LOAD, 0.0); break;
     case VK_OEM_4: /* [ */

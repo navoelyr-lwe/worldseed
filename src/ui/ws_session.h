@@ -73,7 +73,8 @@ typedef enum ws_session_command {
     WS_CMD_SET_TIME_OF_DAY = 13, /* arg = seconds since midnight */
     WS_CMD_TOGGLE_HELP = 14,
     WS_CMD_QUIT = 15,
-    WS_CMD_TOGGLE_STATS = 16
+    WS_CMD_TOGGLE_STATS = 16,
+    WS_CMD_TOGGLE_SHADOWS = 17
 } ws_session_command;
 
 typedef struct ws_session_config {
@@ -119,6 +120,8 @@ uint64_t ws_session_tick(const ws_session *s);
 uint64_t ws_session_steps(const ws_session *s);     /* world ticks advanced */
 int ws_session_help_visible(const ws_session *s);
 int ws_session_stats_visible(const ws_session *s);
+/* Directional shadows in the live view (off by default; T toggles). */
+int ws_session_shadows_visible(const ws_session *s);
 uint64_t ws_session_seed(const ws_session *s);
 
 /* Frames and wall time of the most recent render, for the performance HUD. */

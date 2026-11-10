@@ -342,6 +342,7 @@ static const char *HELP_LINES[] = {
     "  V          cycle view (auto / free / follow / map)",
     "  N / P      select next / previous animal",
     "  G          toggle statistics panel",
+    "  T          toggle directional shadows",
     "  Arrow keys / WASD  fly the free camera",
     "  Mouse drag look (free view)",
     "  [ / ]      time of day -/+ 1 hour",

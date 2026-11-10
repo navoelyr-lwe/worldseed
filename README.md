@@ -106,7 +106,7 @@ Bu depo yeni ve bağımsız projedir. Eski `worldseed-engine` deposu değiştiri
 - `worldseed --live` — pencere modunda canlı dünya.
 - `worldseed --live --fullscreen` — tam ekran canlı dünya.
 - Tuşlar: `Space` duraklat, `+`/`-` hız, `V` görünüm (auto/free/follow/map), `N`/`P`
-  canlı seç, `G` istatistik, `H` yardım, `[`/`]` saat, `S`/`L` kaydet/yükle,
+  canlı seç, `G` istatistik, `T` yönlü gölge, `H` yardım, `[`/`]` saat, `S`/`L` kaydet/yükle,
   ok/`WASD` serbest kamera, `F11` tam ekran, `Esc` çıkış.
 - Penceresiz kanıt (her makinede çalışır): `worldseed --live-headless 3 --size 1280x720`
   (kare zamanlaması + dünya özeti) ve `worldseed --live-tour cikti --size 1280x720`

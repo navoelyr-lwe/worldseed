@@ -1,0 +1,9 @@
+# Worldseed Engine P11 live tour manifest
+seed=20260101
+size=1280x720
+world_tick=580
+population=54
+loaded_regions=49
+save_load_roundtrip=1
+shadows_verified=1
+steps=10

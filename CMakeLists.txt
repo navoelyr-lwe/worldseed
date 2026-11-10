@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 # Worldseed Engine — ISO C17 build.
 # CMake is a development tool only; it is not a product runtime dependency.
 project(worldseed
-        VERSION 0.12.0
+        VERSION 0.13.0
         DESCRIPTION "Worldseed Engine — living digital ecosystems"
         LANGUAGES C)
 

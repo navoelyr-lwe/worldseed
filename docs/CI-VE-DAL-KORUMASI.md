@@ -7,7 +7,7 @@ Bu belge ilk görevde kurulan geliştirme altyapısını ve tespit edilen erişi
 | Dosya | Ne yapar | Nerede çalışır |
 |---|---|---|
 | `ci.yml` | Derleme + birim testleri (GCC/Clang × Debug/Release × sanitizer), MSVC Windows derleme/test, plan bütünlüğü, README bağlantı kontrolü | GitHub-hosted (ubuntu, windows) |
-| `gui-windows.yml` | Gerçek Windows GUI/headless smoke; izole, secretsiz, allowlist'li self-hosted runner | Self-hosted `worldseed-gui` (yalnız `main`) |
+| `gui-windows.yml` | Gerçek Windows GUI/headless smoke + tur yeniden üretimi + yönlü gölge farkı (P12); izole, secretsiz, allowlist'li self-hosted runner | Self-hosted `worldseed-gui` (yalnız `main` ve aynı depo PR'ları) |
 | `release.yml` | Plan kapısı + Windows x64 paketleme + prerelease yayını | GitHub-hosted + release |
 
 ## Zorunlu kapılar
@@ -66,3 +66,26 @@ GUI testi "çalıştı" olarak raporlanmaz.
 - Çalışan: dal oluşturma, push, PR açma, PR birleştirme.
 - Kısıtlı (403): branch protection, ruleset, Actions izinleri, repo ayarları.
 - Bu nedenle koruma, yönetici erişimi sağlanana kadar PR akışı + workflow kapılarıyla uygulanır.
+
+## Bilinen altyapı sınırı: GitHub-hosted runner erişilemez (2026-11-10)
+
+2026-11-10'da bu depoda **tüm GitHub-hosted işler sıfır adımla anında düşüyor**
+(`runner_id=0`, hiçbir adım çalışmıyor). Durum bağımsız olarak doğrulandı:
+
+- `main` dalındaki değişmemiş kodda da aynı imza oluşuyor (önceki başarılı `main`
+  koşusu 19:55, sonraki koşular 20:30+ hepsi anında fail).
+- Tek adımlı minimal bir `echo` iş akışı da tüm hosted etiketlerde
+  (`ubuntu-latest`, `ubuntu-22.04`, `ubuntu-24.04`, `windows-2022`) sıfır adımla
+  düşüyor.
+- Self-hosted işler normal çalışıyor: izole Windows GUI işi (adım 1-12) ve
+  self-hosted etiketli bir probe işi başarıyla tamamlandı; self-hosted Linux
+  etiketi kuyrukta kaldı (kayıtlı runner yok).
+- GitHub durum sayfası kesinti göstermiyor; bu, hesap/depo düzeyinde bir runner
+  erişim kısıtı (ör. Actions dakika/spending limiti veya hosted runner izni).
+
+Sonuç ve güvenli alternatif: hosted kapılar (derleme, birim testleri, MSVC,
+plan bütünlüğü, README bağlantıları, P12 gölge farkı) kodda aynen korunur ve
+erişim geri geldiğinde otomatik çalışır. P12 gölge kanıt kapısı ayrıca **gerçekten
+çalışan** izole Windows self-hosted işine eklendi; böylece şu an bile otomatik
+kanıt üretiliyor. Bu sınır kullanıcı adına saklanmaz; yönetici erişimi
+gerektirdiği için `AGENTS.md` uyarınca raporlanır.

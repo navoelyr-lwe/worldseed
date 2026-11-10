@@ -106,8 +106,9 @@ jobs:
           Copy-Item evidence/live/tour-a/*.png "$stage/live/"
           Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
           @(
-            "Worldseed Engine preview (P12 - render performansi ve gorsel kalite).",
+            "Worldseed Engine preview (P12 - render performansi, canli yonlu golgeler).",
             "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
+            "Canli tuslar: T yonlu golgeleri acar/kapatir (varsayilan kapali).",
             "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
             "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",
             "Kanit: preview/*.png (CPU referans renderer ciktilari), live/*.png (canli uygulama turu),",
@@ -167,7 +168,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P12 - render performansi ve gorsel kalite)." \
+            "Worldseed Engine onizleme surumu (P12 - render performansi, canli yonlu golgeler)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
@@ -178,13 +179,15 @@ jobs:
             "543.78 ms -> ~88 ms, yaklasik 6.2x); (2) yonlu (directional) GOLGE ESLEMESI" \
             "eklendi (isigin bakis acisindan ortografik derinlik haritasi, 3x3 PCF, yalniz" \
             "dogrudan isigi azaltir). Golgeler opt-in ve eklemelidir; kapaliyken cikti" \
-            "bit-ozdes kalir. Yeni 'shadows' golden sahnesi golgeyi gosterir." \
+            "bit-ozdes kalir. Yeni 'shadows' golden sahnesi golgeyi gosterir. Ayrica" \
+            "yonlu golgeler artik CANLI urunde gercek bir ozellik: canli pencerede T tusu" \
+            "golgeleri acar/kapatir (varsayilan kapali); tur bu farki olcup dogrular." \
             "" \
             "Canli uygulama (Windows):" \
             "  worldseed.exe --live               pencere modunda canli dunya" \
             "  worldseed.exe --live --fullscreen  tam ekran canli dunya" \
             "  Tuslar: Space duraklat, +/- hiz, V kip (auto/free/follow/map), N/P canli sec," \
-            "  G istatistik, H yardim, [ ] saat, S/L kaydet/yukle, ok/WASD serbest kamera, Esc cikis." \
+            "  G istatistik, T yonlu golge, H yardim, [ ] saat, S/L kaydet/yukle, ok/WASD serbest kamera, Esc cikis." \
             "" \
             "Kanit (penceresiz, her makinede calisir):" \
             "  worldseed.exe --live-headless 3 --size 1280x720  kare zamanlamasi + dunya ozeti" \
