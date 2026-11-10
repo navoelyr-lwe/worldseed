@@ -64,7 +64,11 @@ add_library(worldseed_core STATIC
   render/ws_render.c
   render/ws_image.c
   render/ws_texture.c
+  ui/ws_font.c
+  ui/ws_session.c
+  ui/ws_hud.c
   platform/ws_dynlib.c
+  platform/ws_fs.c
   platform/ws_opencl_probe.c
   platform/ws_threads.c
   platform/ws_hardware.c

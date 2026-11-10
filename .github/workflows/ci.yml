@@ -178,6 +178,25 @@ jobs:
             i=$((i + 1))
           done
 
+      - name: Live application evidence
+        run: |
+          # P11: the interactive application. Drive the real headless live loop
+          # (frame timing, world digest, coverage) and the deterministic tour
+          # (view switches, animal selection, save/load roundtrip, stats panel).
+          # Two tours must agree frame-for-frame: the observer is read-only.
+          mkdir -p evidence/live/tour-a evidence/live/tour-b
+          ./build/src/app/worldseed --live-headless 2 --size 320x180 | tee evidence/live/headless.txt
+          grep -q "LIVE_HEADLESS_OK" evidence/live/headless.txt
+          ./build/src/app/worldseed --live-tour evidence/live/tour-a --size 320x180 | tee evidence/live/tour-a.txt
+          grep -q "LIVE_TOUR_OK" evidence/live/tour-a.txt
+          grep -q "saved=1 loaded=1 roundtrip=1" evidence/live/tour-a.txt
+          ./build/src/app/worldseed --live-tour evidence/live/tour-b --size 320x180 >/dev/null
+          for f in evidence/live/tour-a/step-*.ppm; do
+            b=$(basename "$f")
+            cmp "$f" "evidence/live/tour-b/$b" \
+              || { echo "live tour $b not reproducible"; exit 1; }
+          done
+
       - name: Soundscape audio evidence
         run: |
           # The P9 soundscape is our own C17 synthesis, not a recorded track.
@@ -379,6 +398,28 @@ jobs:
           $a = (Select-String -Path evidence/audio/audio.txt -Pattern "sha256=([0-9a-f]+)").Matches[0].Groups[1].Value
           $b = (Select-String -Path evidence/audio/audio-repeat.txt -Pattern "sha256=([0-9a-f]+)").Matches[0].Groups[1].Value
           if ($a -eq "" -or $a -ne $b) { Write-Error "soundscape not reproducible"; exit 1 }
+
+      - name: Live application evidence
+        shell: pwsh
+        run: |
+          # P11: the interactive application. Drive the real headless live loop
+          # and the deterministic tour, then prove two tours agree frame-for-frame
+          # (the observer is read-only). This runs the same code path as the
+          # windowed application, minus the Win32 presentation.
+          $exe = "build/src/app/${{ matrix.build_type }}/worldseed.exe"
+          New-Item -ItemType Directory -Force -Path evidence/live/tour-a,evidence/live/tour-b | Out-Null
+          & $exe --live-headless 2 --size 320x180 | Tee-Object -FilePath evidence/live/headless.txt
+          if (-not (Select-String -Path evidence/live/headless.txt -Pattern "LIVE_HEADLESS_OK" -Quiet)) { exit 1 }
+          & $exe --live-tour evidence/live/tour-a --size 320x180 | Tee-Object -FilePath evidence/live/tour-a.txt
+          if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "LIVE_TOUR_OK" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }
+          & $exe --live-tour evidence/live/tour-b --size 320x180 | Out-Null
+          Get-ChildItem evidence/live/tour-a/step-*.ppm | ForEach-Object {
+            $b = Join-Path "evidence/live/tour-b" $_.Name
+            if ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $b).Hash) {
+              Write-Error "live tour $($_.Name) not reproducible"; exit 1
+            }
+          }
 
       - name: Upload evidence
         if: always()
