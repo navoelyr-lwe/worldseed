@@ -82,13 +82,18 @@ static int test_tour_run(void)
     if (mf != NULL) {
         char line[128];
         int saw_roundtrip = 0;
+        int saw_shadows = 0;
         while (fgets(line, sizeof(line), mf) != NULL) {
             if (strstr(line, "save_load_roundtrip=1") != NULL) {
                 saw_roundtrip = 1;
             }
+            if (strstr(line, "shadows_verified=1") != NULL) {
+                saw_shadows = 1;
+            }
         }
         fclose(mf);
         WS_CHECK(saw_roundtrip == 1);
+        WS_CHECK(saw_shadows == 1);
     }
     return 1;
 }

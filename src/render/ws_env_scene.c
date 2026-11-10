@@ -1532,6 +1532,12 @@ ws_result ws_env_scene_create(ws_env_scene *e, const ws_env_scene_options *opts)
     e->scene.settings.sky_enabled = 1;
     e->scene.settings.tonemap = 1;
     e->scene.settings.exposure = 1.1;
+    /* Directional shadows are off by default in the environment scene; the live
+     * session turns them on for the user (docs/08). */
+    e->scene.settings.shadows_enabled = 0;
+    e->scene.settings.shadow_strength = 0.55;
+    e->scene.settings.shadow_bias = 0.0015;
+    e->scene.settings.shadow_map_size = 1024u;
     /* Exponential coefficient per metre: a clear day stays sharp for hundreds of
      * metres, humid weather closes in. Values are tuned to the region scale. */
     e->scene.settings.fog_density = 0.00025 + e->env.humidity * 0.00075;

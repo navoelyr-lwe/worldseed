@@ -67,6 +67,7 @@ struct ws_session {
     int paused;
     int help_visible;
     int stats_visible;
+    int shadows_visible;
     int speed_index;
     double time_of_day_s;
 
@@ -479,6 +480,9 @@ ws_result ws_session_apply_command(ws_session *s, int command, double arg)
     case WS_CMD_TOGGLE_STATS:
         s->stats_visible = !s->stats_visible;
         break;
+    case WS_CMD_TOGGLE_SHADOWS:
+        s->shadows_visible = !s->shadows_visible;
+        break;
     case WS_CMD_QUIT:
         break;
     default:
@@ -558,6 +562,7 @@ uint64_t ws_session_tick(const ws_session *s) { return s != NULL ? s->host.tick 
 uint64_t ws_session_steps(const ws_session *s) { return s != NULL ? s->steps : 0u; }
 int ws_session_help_visible(const ws_session *s) { return s != NULL ? s->help_visible : 0; }
 int ws_session_stats_visible(const ws_session *s) { return s != NULL ? s->stats_visible : 0; }
+int ws_session_shadows_visible(const ws_session *s) { return s != NULL ? s->shadows_visible : 0; }
 uint64_t ws_session_seed(const ws_session *s) { return s != NULL ? s->config.seed : 0u; }
 
 double ws_session_perf_last_ms(const ws_session *s) { return s != NULL ? s->last_frame_ms : 0.0; }
@@ -919,6 +924,9 @@ ws_result ws_session_render(ws_session *s, ws_framebuffer *fb, float *depth)
     /* Day/night follows the session clock. */
     ws_environment_update(&s->env.env, s->time_of_day_s,
                           s->env.terrain.config.base_height);
+    /* The user toggles directional shadows with T; off by default so the live
+     * view matches the golden references unless asked otherwise. */
+    s->env.scene.settings.shadows_enabled = s->shadows_visible ? 1 : 0;
     return ws_render_scene(&s->env.scene, fb, depth, 32u, NULL);
 }
 

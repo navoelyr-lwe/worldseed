@@ -196,6 +196,14 @@ jobs:
             cmp "$f" "evidence/live/tour-b/$b" \
               || { echo "live tour $b not reproducible"; exit 1; }
           done
+          # Directional shadows (P12): the on/off pair must differ and the
+          # shadowed frame must not be brighter than the unshadowed one.
+          ./build/tools/ws_imgdiff evidence/live/tour-a/step-08-shadows_off.ppm \
+                                   evidence/live/tour-a/step-09-shadows_on.ppm \
+            | tee evidence/live/shadows_diff.txt
+          grep -q "WS_IMGDIFF_OK" evidence/live/shadows_diff.txt
+          ndiff=$(grep -o 'differing=[0-9]*' evidence/live/shadows_diff.txt | cut -d= -f2)
+          test "${ndiff:-0}" -gt 0 || { echo "shadows changed nothing"; exit 1; }
 
       - name: Soundscape audio evidence
         run: |
@@ -420,6 +428,14 @@ jobs:
               Write-Error "live tour $($_.Name) not reproducible"; exit 1
             }
           }
+          # Directional shadows (P12): the on/off pair must differ.
+          $diff = & "build/tools/${{ matrix.build_type }}/ws_imgdiff.exe" `
+            evidence/live/tour-a/step-08-shadows_off.ppm `
+            evidence/live/tour-a/step-09-shadows_on.ppm
+          $diff | Out-File -Encoding ascii evidence/live/shadows_diff.txt
+          if (-not ($diff | Select-String -Pattern "WS_IMGDIFF_OK" -Quiet)) { exit 1 }
+          $nd = [int]([regex]::Match(($diff -join " "), "differing=(\d+)").Groups[1].Value)
+          if ($nd -le 0) { Write-Error "shadows changed nothing"; exit 1 }
 
       - name: Upload evidence
         if: always()

@@ -79,6 +79,29 @@ bu yüzden onların golden kareleri etkilenmez. `tests/golden/shadows.ppm` ve
 - **Test sonucu:** 18/18 test release ve ASan/UBSan altında geçer.
 - **Reproducibility:** `shadows` sahnesi iki koşuda bit-özdeş.
 
+### 4. Canlı üründe yönlü gölgeler (bu PR)
+
+Gölge eşlemesi artık yalnız bir golden sahne değil, çalışan uygulamada gerçek bir
+ürün özelliğidir:
+
+- **Anahtar:** Canlı uygulamada **T** yönlü gölgeleri açar/kapatır. Yardım
+  panelinde listelenir. Varsayılan **kapalı**'dır; böylece açılıştaki canlı
+  görünüm golden referanslarla uyumlu kalır ve kullanıcı isterse açar.
+- **Durum:** Oturum (`ws_session`) `WS_CMD_TOGGLE_SHADOWS` komutunu ve
+  `ws_session_shadows_visible()` sorgusunu kazanır. Render sırasında gölge
+  ayarı ortam sahnesinin ayarlarına yazılır; dünya durumu değişmez (gözlemci
+  salt-okunur kalır).
+- **Tur kanıtı:** Deterministik tur iki yeni kare üretir: `step-08-shadows_off`
+  ve `step-09-shadows_on` (aynı düşük sabah güneşi, aynı serbest görünüm). Tur,
+  ayrıca gölge açık/kapalı iki render'ın farklı olduğunu ve gölgeli karenin
+  daha parlak olmadığını doğrular (`shadows_verified=1`).
+- **Test:** `session_shadows_toggle` birimi gölgelerin varsayılan kapalı
+  olduğunu, açıldığında kareyi koyulaştırdığını ve kapatıldığında kareyi
+  bit-özdeş geri getirdiğini doğrular. `ws_imgdiff` tabanlı CI adımı gölge
+  çiftinin gerçekten farklı olduğunu kanıtlar.
+- **Değişmezlik:** Gölgeler kapalıyken canlı kare ve 16 golden sahne bit-özdeş
+  kalır; gölge yalnız eklemeli ve opt-in'dir.
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day`: ~150–194 ms (~5.5–6.7 FPS).

@@ -305,6 +305,49 @@ static int test_stats_and_demography(void)
     return 1;
 }
 
+static int test_shadows_toggle(void)
+{
+    ws_session *s = make(13ULL);
+    WS_CHECK(s != NULL);
+    /* Shadows are off by default so the live view matches the golden frames. */
+    WS_CHECK(ws_session_shadows_visible(s) == 0);
+    /* A low morning sun and a free overview give a visible shadow direction. */
+    (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_FREE, 0.0);
+    (void)ws_session_apply_command(s, WS_CMD_SET_TIME_OF_DAY, 8.0 * 3600.0);
+    run_seconds(s, 3.0);
+
+    ws_framebuffer a, b, c;
+    WS_CHECK(ws_framebuffer_create(&a, 200u, 120u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&b, 200u, 120u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&c, 200u, 120u) == WS_OK);
+    size_t bytes = (size_t)a.width * a.height * 4u;
+
+    WS_CHECK(ws_session_render(s, &a, NULL) == WS_OK);
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0);
+    WS_CHECK(ws_session_shadows_visible(s) == 1);
+    WS_CHECK(ws_session_render(s, &b, NULL) == WS_OK);
+    /* Shadows darken the frame: they must change the image and never brighten
+     * the mean luminance. */
+    WS_CHECK(memcmp(a.pixels, b.pixels, bytes) != 0);
+    double la = 0.0, lb = 0.0;
+    for (size_t i = 0; i < (size_t)a.width * a.height; ++i) {
+        la += a.pixels[i * 4u] + a.pixels[i * 4u + 1u] + a.pixels[i * 4u + 2u];
+        lb += b.pixels[i * 4u] + b.pixels[i * 4u + 1u] + b.pixels[i * 4u + 2u];
+    }
+    WS_CHECK(lb <= la);
+    /* Toggling back off restores the exact unshadowed frame. */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0);
+    WS_CHECK(ws_session_shadows_visible(s) == 0);
+    WS_CHECK(ws_session_render(s, &c, NULL) == WS_OK);
+    WS_CHECK(memcmp(a.pixels, c.pixels, bytes) == 0);
+
+    ws_framebuffer_free(&a);
+    ws_framebuffer_free(&b);
+    ws_framebuffer_free(&c);
+    ws_session_destroy(s);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -320,6 +363,7 @@ int main(void)
         {"session_render_signal", test_render_produces_signal},
         {"session_view_modes", test_view_modes_cycle},
         {"session_stats_demography", test_stats_and_demography},
+        {"session_shadows_toggle", test_shadows_toggle},
     };
     return ws_test_run("session", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

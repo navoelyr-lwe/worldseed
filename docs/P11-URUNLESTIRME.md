@@ -73,6 +73,7 @@ yardımcısı (POSIX `mkdir` / Win32 `_mkdir`). Simülasyon tarafından kullanı
 | `V` | Görünüm döngüsü (auto / free / follow / map) |
 | `N` / `P` | Sonraki / önceki canlıyı seç |
 | `G` | İstatistik panelini aç/kapa |
+| `T` | Yönlü gölgeleri aç/kapa |
 | `H` | Yardım katmanını aç/kapa |
 | Ok tuşları / `WASD` | Serbest kamerayı uçur |
 | Fare sürükle | Serbest görünümde bakış |
