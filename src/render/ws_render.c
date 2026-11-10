@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "../core/ws_math.h"
+#include "../core/ws_sched.h"
 
 typedef struct clip_vertex {
     double x, y, z, w;   /* clip space */
@@ -56,7 +57,31 @@ static double linear_to_srgb(double c)
     return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
 }
 
-static double encode_display(double linear, const ws_render_settings *s)
+/* Encode linear RGB to 8-bit display with a 4096-entry lookup table, linear
+ * within each table step. This replaces three pow() calls per channel per pixel
+ * with a table lookup and a short lerp. The table is fine enough that the
+ * quantised 8-bit result matches the exact sRGB encode for representable
+ * values. */
+#define ENCODE_LUT_BITS 12
+#define ENCODE_LUT_SIZE (1u << ENCODE_LUT_BITS)
+#define ENCODE_LUT_MAX 1.0
+
+static double g_encode_lut[ENCODE_LUT_SIZE + 1u];
+static int g_encode_lut_ready = 0;
+
+static void encode_lut_init(void)
+{
+    if (g_encode_lut_ready) {
+        return;
+    }
+    for (unsigned i = 0; i <= ENCODE_LUT_SIZE; ++i) {
+        double lin = (double)i / (double)ENCODE_LUT_SIZE * ENCODE_LUT_MAX;
+        g_encode_lut[i] = linear_to_srgb(lin) * 255.0;
+    }
+    g_encode_lut_ready = 1;
+}
+
+static unsigned char encode_display_u8(double linear, const ws_render_settings *s)
 {
     double v = linear * s->exposure;
     if (s->tonemap == 1) {
@@ -64,18 +89,23 @@ static double encode_display(double linear, const ws_render_settings *s)
     } else {
         v = ws_clamp_double(v, 0.0, 1.0);
     }
-    return linear_to_srgb(v) * 255.0;
-}
-
-static unsigned char to_u8(double v)
-{
     if (v <= 0.0) {
         return 0u;
     }
-    if (v >= 255.0) {
+    double x = v * (double)ENCODE_LUT_SIZE;
+    if (x >= (double)ENCODE_LUT_SIZE) {
         return 255u;
     }
-    return (unsigned char)(v + 0.5);
+    unsigned i = (unsigned)x;
+    double t = x - (double)i;
+    double e = g_encode_lut[i] + (g_encode_lut[i + 1u] - g_encode_lut[i]) * t;
+    if (e <= 0.0) {
+        return 0u;
+    }
+    if (e >= 255.0) {
+        return 255u;
+    }
+    return (unsigned char)(e + 0.5);
 }
 
 static void linear3(const uint8_t srgb[3], double out[3])
@@ -187,64 +217,132 @@ static double ndc_to_linear_depth(double ndc_z, double near_z, double far_z)
     return (2.0 * near_z * far_z) / (far_z + near_z - (ndc_z * 2.0 - 1.0) * (far_z - near_z));
 }
 
+/* Scene-constant terms hoisted out of the per-pixel shading loop. The light
+ * colours and hemisphere ambient are sRGB constants, so decoding them with
+ * pow() once per frame instead of once per pixel removes the dominant cost of
+ * the inner loop without changing the result. */
+typedef struct render_ctx {
+    double light_color[3];
+    double sky[3];
+    double ground[3];
+    double amb_scale;
+    double light_intensity;
+    int use_fog;
+    double fog_lin[3];
+    double near_z;
+    double far_z;
+    double fog_density;
+} render_ctx;
+
+/* Per-material terms hoisted out of the per-pixel loop. */
+typedef struct mat_ctx {
+    double shininess;
+    double mat_diffuse;
+    double metallic;
+    double specular;
+} mat_ctx;
+
+static void render_ctx_build(render_ctx *ctx, const ws_scene *scene)
+{
+    const ws_light *light = &scene->light;
+    const ws_render_settings *s = &scene->settings;
+    linear3(light->color, ctx->light_color);
+    linear3(light->sky_color, ctx->sky);
+    linear3(light->ground_color, ctx->ground);
+    ctx->amb_scale = light->ambient_intensity;
+    ctx->light_intensity = light->intensity;
+    ctx->near_z = scene->camera.near_z;
+    ctx->far_z = scene->camera.far_z;
+    ctx->fog_density = s->fog_density;
+    ctx->use_fog = s->fog_density > 0.0;
+    if (ctx->use_fog) {
+        if (s->sky_enabled) {
+            linear3(light->sky_horizon, ctx->fog_lin);
+        } else {
+            ctx->fog_lin[0] = srgb_to_linear((double)scene->background[0]);
+            ctx->fog_lin[1] = srgb_to_linear((double)scene->background[1]);
+            ctx->fog_lin[2] = srgb_to_linear((double)scene->background[2]);
+        }
+    } else {
+        ctx->fog_lin[0] = ctx->fog_lin[1] = ctx->fog_lin[2] = 0.0;
+    }
+}
+
+static mat_ctx mat_ctx_build(const ws_material *m)
+{
+    mat_ctx c;
+    c.metallic = ws_clamp_double(m->metallic, 0.0, 1.0);
+    c.mat_diffuse = 1.0 - c.metallic;
+    c.specular = m->specular;
+    if (m->specular > 0.0) {
+        double rough = ws_clamp_double(m->roughness, 0.02, 1.0);
+        c.shininess = 2.0 / (rough * rough) - 2.0;
+    } else {
+        c.shininess = 0.0;
+    }
+    return c;
+}
+
 /* Shade one pixel from interpolated surface attributes. Writes linear RGB. */
-static void shade_pixel(const ws_scene *scene, const ws_material *mat,
+static void shade_pixel(const ws_scene *scene, const render_ctx *ctx, const mat_ctx *mat,
                         ws_vec3 world_pos, ws_vec3 normal, const double albedo[3],
                         double out[3])
 {
     const ws_light *light = &scene->light;
-    ws_vec3 n = ws_vec3_normalize(normal);
-    if (ws_vec3_length(n) == 0.0) {
+    /* Normalise the interpolated normal and the view vector. Computing each
+     * length once (rather than through ws_vec3_length after normalising) saves
+     * a square root per shaded pixel, which matters at millions of pixels. */
+    ws_vec3 n;
+    double nlen2 = ws_vec3_dot(normal, normal);
+    if (nlen2 > 0.0) {
+        n = ws_vec3_scale(normal, 1.0 / sqrt(nlen2));
+    } else {
         n = ws_vec3_make(0.0, 1.0, 0.0);
     }
-    ws_vec3 view = ws_vec3_normalize(ws_vec3_sub(scene->camera.eye, world_pos));
+    ws_vec3 to_eye = ws_vec3_sub(scene->camera.eye, world_pos);
+    double vlen2 = ws_vec3_dot(to_eye, to_eye);
+    ws_vec3 view = vlen2 > 0.0 ? ws_vec3_scale(to_eye, 1.0 / sqrt(vlen2))
+                               : ws_vec3_make(0.0, 0.0, 0.0);
 
-    double lc[3];
-    linear3(light->color, lc);
     double diffuse = -ws_vec3_dot(n, light->direction);
     if (diffuse < 0.0) {
         diffuse = 0.0;
     }
-    diffuse *= light->intensity;
+    diffuse *= ctx->light_intensity;
 
-    double sky[3], ground[3];
-    linear3(light->sky_color, sky);
-    linear3(light->ground_color, ground);
     double up = 0.5 * (n.y + 1.0);
-    double amb_scale = light->ambient_intensity;
-
-    double mat_diffuse = 1.0 - ws_clamp_double(mat->metallic, 0.0, 1.0);
 
     double spec = 0.0;
     if (mat->specular > 0.0) {
         ws_vec3 h = ws_vec3_normalize(ws_vec3_sub(view, light->direction));
         double ndoth = ws_vec3_dot(n, h);
         if (ndoth > 0.0) {
-            double rough = ws_clamp_double(mat->roughness, 0.02, 1.0);
-            double shininess = 2.0 / (rough * rough) - 2.0;
-            spec = pow(ndoth, shininess) * mat->specular * light->intensity;
+            spec = pow(ndoth, mat->shininess) * mat->specular * ctx->light_intensity;
         }
     }
 
     for (int c = 0; c < 3; ++c) {
-        double amb = ws_lerp(ground[c], sky[c], up) * amb_scale;
+        double amb = ws_lerp(ctx->ground[c], ctx->sky[c], up) * ctx->amb_scale;
         double base = albedo[c];
-        double diff = base * mat_diffuse * (amb + diffuse * lc[c]);
-        double spec_tint = ws_lerp(1.0, base, ws_clamp_double(mat->metallic, 0.0, 1.0));
-        out[c] = diff + spec * spec_tint * lc[c];
+        double diff = base * mat->mat_diffuse * (amb + diffuse * ctx->light_color[c]);
+        double spec_tint = ws_lerp(1.0, base, mat->metallic);
+        out[c] = diff + spec * spec_tint * ctx->light_color[c];
     }
 }
 
-static void raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *depth,
-                            const ws_scene *scene, const ws_material *mat,
-                            unsigned tile, ws_render_stats *stats)
+/* Rasterise one screen triangle, but only the rows inside [band_y0, band_y1).
+ * Returns the number of pixels actually shaded, so the caller can count drawn
+ * triangles and shaded pixels without the bands stepping on each other. */
+static uint64_t raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *depth,
+                                const ws_scene *scene, const render_ctx *ctx, const mat_ctx *mat,
+                                unsigned tile, int band_y0, int band_y1)
 {
     int w = (int)fb->width;
     int h = (int)fb->height;
 
     double area = edge(v[0].x, v[0].y, v[1].x, v[1].y, v[2].x, v[2].y);
     if (area == 0.0) {
-        return;
+        return 0u;
     }
 
     double min_x = v[0].x, max_x = v[0].x, min_y = v[0].y, max_y = v[0].y;
@@ -259,32 +357,23 @@ static void raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *d
     int x1 = (int)max_x + 1; if (x1 > w - 1) { x1 = w - 1; }
     int y0 = (int)min_y; if (y0 < 0) { y0 = 0; }
     int y1 = (int)max_y + 1; if (y1 > h - 1) { y1 = h - 1; }
+    /* Restrict to the caller's row band so parallel bands never overlap. */
+    if (y0 < band_y0) { y0 = band_y0; }
+    if (y1 > band_y1 - 1) { y1 = band_y1 - 1; }
     if (x0 > x1 || y0 > y1) {
-        return;
+        return 0u;
     }
 
     unsigned tile_size = tile == 0u ? (unsigned)((w > h ? w : h) + 1) : tile;
     double inv_area = 1.0 / area;
     int inside_pos = area > 0.0;
-
-    if (stats != NULL) {
-        stats->triangles_drawn += 1u;
-    }
+    uint64_t shaded = 0u;
 
     const ws_render_settings *settings = &scene->settings;
-    int use_fog = settings->fog_density > 0.0;
-    double fog_lin[3];
-    if (use_fog) {
-        if (settings->sky_enabled) {
-            linear3(scene->light.sky_horizon, fog_lin);
-        } else {
-            fog_lin[0] = srgb_to_linear((double)scene->background[0]);
-            fog_lin[1] = srgb_to_linear((double)scene->background[1]);
-            fog_lin[2] = srgb_to_linear((double)scene->background[2]);
-        }
-    }
-    double near_z = scene->camera.near_z;
-    double far_z = scene->camera.far_z;
+    int use_fog = ctx->use_fog;
+    const double *fog_lin = ctx->fog_lin;
+    double near_z = ctx->near_z;
+    double far_z = ctx->far_z;
 
     for (int ty = y0; ty <= y1; ty += (int)tile_size) {
         int ty1 = ty + (int)tile_size - 1;
@@ -337,11 +426,11 @@ static void raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *d
                     albedo[2] = p0 * v[0].b + p1 * v[1].b + p2 * v[2].b;
 
                     double rgb[3];
-                    shade_pixel(scene, mat, world, normal, albedo, rgb);
+                    shade_pixel(scene, ctx, mat, world, normal, albedo, rgb);
 
                     if (use_fog) {
                         double dist = ndc_to_linear_depth(z, near_z, far_z);
-                        double f = 1.0 - exp(-settings->fog_density * dist);
+                        double f = 1.0 - exp(-ctx->fog_density * dist);
                         if (f < 0.0) { f = 0.0; }
                         if (f > 1.0) { f = 1.0; }
                         for (int c = 0; c < 3; ++c) {
@@ -350,21 +439,23 @@ static void raster_triangle(const screen_vertex *v, ws_framebuffer *fb, float *d
                     }
 
                     uint8_t *p = &fb->pixels[idx * 4u];
-                    p[0] = to_u8(encode_display(rgb[0], settings));
-                    p[1] = to_u8(encode_display(rgb[1], settings));
-                    p[2] = to_u8(encode_display(rgb[2], settings));
+                    p[0] = encode_display_u8(rgb[0], settings);
+                    p[1] = encode_display_u8(rgb[1], settings);
+                    p[2] = encode_display_u8(rgb[2], settings);
                     p[3] = 255u;
-                    if (stats != NULL) {
-                        stats->pixels_shaded += 1u;
-                    }
+                    shaded += 1u;
                 }
             }
         }
     }
+    return shaded;
 }
 
-/* Fill the framebuffer with a vertical gradient sky based on the camera ray. */
-static void draw_sky(const ws_scene *scene, ws_framebuffer *fb)
+/* Fill rows [y_begin, y_end) of the framebuffer with the vertical gradient sky.
+ * Rows are independent, so the bands can draw their own sky slice in parallel;
+ * together they cover the whole image exactly once. */
+static void draw_sky_band(const ws_scene *scene, ws_framebuffer *fb,
+                          uint32_t y_begin, uint32_t y_end)
 {
     const ws_camera *cam = &scene->camera;
     const ws_render_settings *settings = &scene->settings;
@@ -377,7 +468,10 @@ static void draw_sky(const ws_scene *scene, ws_framebuffer *fb)
     linear3(scene->light.sky_top, top);
     linear3(scene->light.sky_horizon, horizon);
 
-    for (uint32_t y = 0u; y < fb->height; ++y) {
+    if (y_end > fb->height) {
+        y_end = fb->height;
+    }
+    for (uint32_t y = y_begin; y < y_end; ++y) {
         double ndc_y = 1.0 - 2.0 * ((double)y + 0.5) / (double)fb->height;
         for (uint32_t x = 0u; x < fb->width; ++x) {
             double ndc_x = 2.0 * ((double)x + 0.5) / (double)fb->width - 1.0;
@@ -389,11 +483,134 @@ static void draw_sky(const ws_scene *scene, ws_framebuffer *fb)
             uint8_t *p = &fb->pixels[((size_t)y * fb->width + x) * 4u];
             for (int c = 0; c < 3; ++c) {
                 double lin = ws_lerp(horizon[c], top[c], t);
-                p[c] = to_u8(encode_display(lin, settings));
+                p[c] = encode_display_u8(lin, settings);
             }
             p[3] = 255u;
         }
     }
+}
+
+/* Render the scene's geometry into one horizontal band of rows [band_y0,
+ * band_y1). Because the bands partition the image and every pixel writes only
+ * to its own depth/colour slot, running the bands on different threads is
+ * bit-identical to a single-threaded pass; only wall-clock time changes. */
+typedef struct band_job {
+    const ws_scene *scene;
+    ws_framebuffer *fb;
+    float *depth;
+    unsigned tile;
+    ws_mat4 view_proj;
+    int band_y0;
+    int band_y1;
+    int count_triangles;  /* only band 0 counts triangle-level stats */
+    uint64_t triangles_drawn;
+    uint64_t pixels_shaded;
+    uint64_t triangles_clipped;
+    uint64_t triangles_submitted;
+} band_job;
+
+static void render_band(band_job *job)
+{
+    const ws_scene *scene = job->scene;
+    ws_framebuffer *fb = job->fb;
+    float *depth = job->depth;
+    unsigned tile = job->tile;
+    int band_y0 = job->band_y0;
+    int band_y1 = job->band_y1;
+    int w = (int)fb->width;
+    int h = (int)fb->height;
+
+    /* Background and depth for this band's rows: independent of other bands, so
+     * it runs in parallel with them. */
+    if (scene->settings.sky_enabled) {
+        draw_sky_band(scene, fb, (uint32_t)band_y0, (uint32_t)band_y1);
+    } else {
+        for (int y = band_y0; y < band_y1; ++y) {
+            uint8_t *row = &fb->pixels[(size_t)y * fb->width * 4u];
+            for (int x = 0; x < w; ++x) {
+                row[x * 4 + 0] = scene->background[0];
+                row[x * 4 + 1] = scene->background[1];
+                row[x * 4 + 2] = scene->background[2];
+                row[x * 4 + 3] = 255u;
+            }
+        }
+    }
+    if (depth != NULL) {
+        for (int y = band_y0; y < band_y1; ++y) {
+            float *drow = &depth[(size_t)y * fb->width];
+            for (int x = 0; x < w; ++x) {
+                drow[x] = 1.0e30f;
+            }
+        }
+    }
+
+    render_ctx ctx;
+    render_ctx_build(&ctx, scene);
+
+    for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
+        const ws_scene_object *obj = &scene->objects[oi];
+        if (obj->mesh == NULL || obj->mesh->vertices == NULL || obj->mesh->indices == NULL) {
+            continue;
+        }
+        ws_mat4 mvp = ws_mat4_multiply(job->view_proj, obj->transform);
+        ws_mat3 normal_mat = ws_mat4_normal_matrix(obj->transform);
+        const ws_mesh *mesh = obj->mesh;
+        mat_ctx mctx = mat_ctx_build(&obj->material);
+
+        for (uint32_t t = 0u; t + 3u <= mesh->index_count; t += 3u) {
+            clip_vertex poly[3];
+            for (int k = 0; k < 3; ++k) {
+                uint32_t idx = mesh->indices[t + (uint32_t)k];
+                if (idx >= mesh->vertex_count) {
+                    continue;
+                }
+                poly[k] = make_clip_vertex(obj, mvp, normal_mat, &mesh->vertices[idx]);
+            }
+            if (job->count_triangles) {
+                job->triangles_submitted += 1u;
+            }
+
+            clip_vertex clipped[4];
+            int cn = clip_near(poly, 3, clipped);
+            if (cn < 3) {
+                if (job->count_triangles) {
+                    job->triangles_clipped += 1u;
+                }
+                continue;
+            }
+
+            screen_vertex scr[4];
+            for (int k = 0; k < cn; ++k) {
+                to_screen(&clipped[k], w, h, &scr[k]);
+            }
+            for (int k = 1; k + 1 < cn; ++k) {
+                screen_vertex tri[3] = {scr[0], scr[k], scr[k + 1]};
+                /* "Drawn" is the image-wide bounding-box test, so it is
+                 * band-invariant and only band 0 counts it. */
+                if (job->count_triangles) {
+                    double mnx = tri[0].x, mxx = tri[0].x, mny = tri[0].y, mxy = tri[0].y;
+                    for (int e = 1; e < 3; ++e) {
+                        if (tri[e].x < mnx) { mnx = tri[e].x; }
+                        if (tri[e].x > mxx) { mxx = tri[e].x; }
+                        if (tri[e].y < mny) { mny = tri[e].y; }
+                        if (tri[e].y > mxy) { mxy = tri[e].y; }
+                    }
+                    if ((int)mnx <= w - 1 && (int)mxx + 1 >= 0 &&
+                        (int)mny <= h - 1 && (int)mxy + 1 >= 0) {
+                        job->triangles_drawn += 1u;
+                    }
+                }
+                job->pixels_shaded += raster_triangle(tri, fb, depth, scene, &ctx, &mctx,
+                                                      tile, band_y0, band_y1);
+            }
+        }
+    }
+}
+
+static void band_body(void *vctx, uint32_t index)
+{
+    band_job *jobs = (band_job *)vctx;
+    render_band(&jobs[index]);
 }
 
 ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
@@ -409,17 +626,7 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
         memset(stats, 0, sizeof(*stats));
     }
 
-    if (scene->settings.sky_enabled) {
-        draw_sky(scene, fb);
-    } else {
-        ws_framebuffer_clear(fb, scene->background[0], scene->background[1], scene->background[2], 255u);
-    }
-    if (depth != NULL) {
-        size_t count = (size_t)fb->width * (size_t)fb->height;
-        for (size_t i = 0; i < count; ++i) {
-            depth[i] = 1.0e30f;
-        }
-    }
+    encode_lut_init();
 
     const ws_camera *cam = &scene->camera;
     ws_mat4 view = ws_mat4_look_at(cam->eye, cam->target, cam->up);
@@ -427,45 +634,69 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
     ws_mat4 proj = ws_mat4_perspective(cam->fov_y_radians, aspect, cam->near_z, cam->far_z);
     ws_mat4 view_proj = ws_mat4_multiply(proj, view);
 
-    for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
-        const ws_scene_object *obj = &scene->objects[oi];
-        if (obj->mesh == NULL || obj->mesh->vertices == NULL || obj->mesh->indices == NULL) {
-            continue;
+    /* Split the image into row bands, one per worker. Triangle setup is
+     * recomputed per band (cheap relative to shading) so bands share no mutable
+     * state; the split is the same for every frame, so the result is
+     * deterministic. */
+    enum { MAX_BANDS = 64 };
+    ws_sched *sched = NULL;
+    (void)ws_sched_create_default(&sched);
+    uint32_t band_count = 1u;
+    if (sched != NULL) {
+        band_count = ws_sched_worker_count(sched) + 1u;
+    }
+    if (band_count > MAX_BANDS) {
+        band_count = MAX_BANDS;
+    }
+    if (band_count > fb->height) {
+        band_count = fb->height > 0u ? fb->height : 1u;
+    }
+
+    band_job jobs[MAX_BANDS];
+    uint32_t rows_per_band = (fb->height + band_count - 1u) / band_count;
+    uint32_t active = 0u;
+    for (uint32_t b = 0u; b < band_count; ++b) {
+        uint32_t y0 = b * rows_per_band;
+        uint32_t y1 = y0 + rows_per_band;
+        if (y0 >= fb->height) {
+            break;
         }
-        ws_mat4 mvp = ws_mat4_multiply(view_proj, obj->transform);
-        ws_mat3 normal_mat = ws_mat4_normal_matrix(obj->transform);
-        const ws_mesh *mesh = obj->mesh;
+        if (y1 > fb->height) {
+            y1 = fb->height;
+        }
+        band_job *j = &jobs[active];
+        j->scene = scene;
+        j->fb = fb;
+        j->depth = depth;
+        j->tile = tile;
+        j->view_proj = view_proj;
+        j->band_y0 = (int)y0;
+        j->band_y1 = (int)y1;
+        j->count_triangles = (active == 0u);
+        j->triangles_drawn = 0u;
+        j->pixels_shaded = 0u;
+        j->triangles_clipped = 0u;
+        j->triangles_submitted = 0u;
+        active++;
+    }
 
-        for (uint32_t t = 0u; t + 3u <= mesh->index_count; t += 3u) {
-            clip_vertex poly[3];
-            for (int k = 0; k < 3; ++k) {
-                uint32_t idx = mesh->indices[t + (uint32_t)k];
-                if (idx >= mesh->vertex_count) {
-                    continue;
-                }
-                poly[k] = make_clip_vertex(obj, mvp, normal_mat, &mesh->vertices[idx]);
-            }
-            if (stats != NULL) {
-                stats->triangles_submitted += 1u;
-            }
+    if (sched != NULL && active > 1u) {
+        ws_sched_parallel_for(sched, 0u, active, band_body, jobs);
+    } else {
+        for (uint32_t i = 0u; i < active; ++i) {
+            render_band(&jobs[i]);
+        }
+    }
+    ws_sched_destroy(sched);
 
-            clip_vertex clipped[4];
-            int cn = clip_near(poly, 3, clipped);
-            if (cn < 3) {
-                if (stats != NULL) {
-                    stats->triangles_clipped += 1u;
-                }
-                continue;
-            }
-
-            screen_vertex scr[4];
-            for (int k = 0; k < cn; ++k) {
-                to_screen(&clipped[k], (int)fb->width, (int)fb->height, &scr[k]);
-            }
-            for (int k = 1; k + 1 < cn; ++k) {
-                screen_vertex tri[3] = {scr[0], scr[k], scr[k + 1]};
-                raster_triangle(tri, fb, depth, scene, &obj->material, tile, stats);
-            }
+    if (stats != NULL) {
+        /* Triangle-level counters come from band 0 alone (they are image-wide);
+         * shaded pixels are partitioned across the bands and simply summed. */
+        stats->triangles_submitted = jobs[0].triangles_submitted;
+        stats->triangles_clipped = jobs[0].triangles_clipped;
+        stats->triangles_drawn = jobs[0].triangles_drawn;
+        for (uint32_t i = 0u; i < active; ++i) {
+            stats->pixels_shaded += jobs[i].pixels_shaded;
         }
     }
     return WS_OK;
