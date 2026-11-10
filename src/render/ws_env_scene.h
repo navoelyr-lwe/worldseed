@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 #include "../core/ws_result.h"
+#include "../cinema/ws_director.h"
 #include "../life/ws_agent.h"
 #include "../life/ws_creature.h"
 #include "../life/ws_ecology.h"
@@ -64,9 +65,19 @@
  * focus region shown at full detail, so the streaming and level structure are
  * visible and reproducible. */
 #define WS_ENV_SCENE_WORLD_STREAM 7
+/* 8 (director_shot) runs the P9 cinematic observer over the ecosystem's real
+ * life events and renders the animal the director chose, from the camera the
+ * director planned and then drove under its motion limits. The picture is the
+ * director's decision, not a scripted pose. */
+#define WS_ENV_SCENE_DIRECTOR 8
+/* 9 (soundscape) runs the P9 procedural sound: real life events trigger voices,
+ * the audio is mixed and hashed, and the scene renders each voice kind as a
+ * meter bar, so the soundscape produced by the run is visible and reproducible. */
+#define WS_ENV_SCENE_SOUNDSCAPE 9
 
 #define WS_ENV_MAX_CREATURES 8u
 #define WS_ENV_MAX_STREAM_TILES 64u
+#define WS_ENV_MAX_AUDIO_BARS 8u
 
 typedef struct ws_env_scene_options {
     uint64_t seed;
@@ -164,6 +175,35 @@ typedef struct ws_env_scene {
     uint64_t stream_extinctions;
     double stream_time_s;
     char stream_digest[65];
+
+    /* Director scene (scene kind 8): the P9 cinematic observer's chosen subject
+     * and the camera it drove, plus a run summary for evidence. */
+    struct ws_rendered_creature director_subject;
+    int director_has_subject;
+    int director_shot_type;
+    uint8_t director_event_kind;
+    uint64_t director_event_sequence;
+    uint64_t director_events_seen;
+    uint32_t director_cuts;
+    double director_track_error_max;
+    double director_speed_max;
+    double director_turn_rate_max;
+    char director_shot_desc[64];
+    /* Director camera in the ground-relative frame, lifted onto the terrain. */
+    ws_vec3 director_eye;
+    ws_vec3 director_target;
+
+    /* Soundscape scene (scene kind 9): per-kind voice bar heights from a real
+     * run, plus the PCM hash for evidence. */
+    struct ws_audio_bar {
+        int kind;      /* ws_life_event_kind */
+        float level;   /* 0..1, mean amplitude observed for this kind */
+        uint32_t hits; /* events of this kind in the run */
+    } audio_bars[WS_ENV_MAX_AUDIO_BARS];
+    uint32_t audio_bar_count;
+    uint64_t audio_events_played;
+    uint64_t audio_samples;
+    char audio_digest[65];
 
     ws_scene_object *objects;
     uint32_t object_capacity;

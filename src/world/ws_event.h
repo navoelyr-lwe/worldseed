@@ -24,6 +24,11 @@ typedef enum ws_event_type {
     WS_EVENT_ENTITY_CREATED = 3,
     WS_EVENT_ENTITY_DESTROYED = 4,
     WS_EVENT_ENTITY_MOVED = 5,
+    /* Life events (birth, death, kill, forage, hunt). Payload[0] is a
+     * ws_life_event_kind (src/life/ws_life_event.h), so the cinematic director
+     * can tell a life event apart from a WS_EVENT_CUSTOM host event, whose
+     * payload[0] is a ws_host_event_kind. */
+    WS_EVENT_LIFE = 6,
     WS_EVENT_CUSTOM = 255
 } ws_event_type;
 

@@ -29,12 +29,14 @@
 
 #include "../core/ws_result.h"
 #include "../core/ws_rng.h"
+#include "../world/ws_event.h"
 #include "ws_species.h"
 
 #define WS_ECOLOGY_VERSION 1u
 #define WS_ECOLOGY_MAX_AGENTS 512u
 #define WS_ECOLOGY_MAX_CELLS 64u
 #define WS_ECOLOGY_MAX_SAMPLES 256u
+#define WS_ECOLOGY_MAX_EVENTS 1024u
 
 typedef struct ws_eco_config {
     uint64_t seed;
@@ -105,6 +107,16 @@ typedef struct ws_ecology {
     uint32_t sample_head;
     uint32_t sample_count;
     float pop_series[WS_ECOLOGY_MAX_SAMPLES][WS_SPECIES_COUNT];
+
+    /* Life event log: discrete, observable things the simulation actually
+     * produced (ate, drank, born, died, killed). The cinematic director reads
+     * this and never invents an event (docs/09). A fixed ring keeps the most
+     * recent events; the director also gets a running total. */
+    ws_event events[WS_ECOLOGY_MAX_EVENTS];
+    uint32_t event_count;
+    uint64_t next_event_sequence;
+    uint64_t events_dropped;
+    uint64_t events_total;
 } ws_ecology;
 
 /* Initialise and seed the founder population. Allocates the plant grid; the
@@ -124,5 +136,19 @@ double ws_ecology_plant_biomass(const ws_ecology *e);
 
 /* Peak plant capacity given the shock multiplier (for budget checks). */
 double ws_ecology_plant_capacity_total(const ws_ecology *e);
+
+/* --- life event log (P9) -------------------------------------------------- */
+
+/* Number of life events retained in the ring (oldest first via _at). */
+uint32_t ws_ecology_event_count(const ws_ecology *e);
+
+/* Read a retained life event by age: index 0 is the oldest retained. */
+ws_result ws_ecology_event_at(const ws_ecology *e, uint32_t index, ws_event *out);
+
+/* Total life events produced since init (including ones aged out of the ring). */
+uint64_t ws_ecology_events_total(const ws_ecology *e);
+
+/* Number of events overwritten since init. */
+uint64_t ws_ecology_events_dropped(const ws_ecology *e);
 
 #endif /* WS_LIFE_ECOLOGY_H */

@@ -101,6 +101,7 @@ const char *ws_event_type_name(uint16_t type)
     case WS_EVENT_ENTITY_CREATED:    return "ENTITY_CREATED";
     case WS_EVENT_ENTITY_DESTROYED:  return "ENTITY_DESTROYED";
     case WS_EVENT_ENTITY_MOVED:      return "ENTITY_MOVED";
+    case WS_EVENT_LIFE:              return "LIFE";
     case WS_EVENT_CUSTOM:            return "CUSTOM";
     default:                         return "UNKNOWN";
     }

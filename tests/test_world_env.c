@@ -7,6 +7,8 @@
 #include "ws_test.h"
 
 #include "core/ws_noise.h"
+#include "cinema/ws_director.h"
+#include "life/ws_life_event.h"
 #include "render/ws_catalog.h"
 #include "render/ws_env_scene.h"
 #include "world/ws_environment.h"
@@ -528,6 +530,91 @@ static int test_env_scene_world_stream(void)
     return 1;
 }
 
+/* The director_shot scene must run the P9 observer over the ecosystem's real
+ * life events: it plans a shot, drives the camera under its motion limits, and
+ * renders the animal it chose from the camera it drove. The same seed must
+ * reproduce the same shot, the same subject position and the same summary. */
+static int test_env_scene_director(void)
+{
+    ws_env_scene_options o = ws_env_scene_options_default(20260101ULL);
+    o.scene_kind = WS_ENV_SCENE_DIRECTOR;
+    ws_env_scene a;
+    ws_env_scene b;
+    WS_CHECK(ws_env_scene_create(&a, &o) == WS_OK);
+    WS_CHECK(ws_env_scene_create(&b, &o) == WS_OK);
+
+    /* The director observed real events and chose a real subject to follow. */
+    WS_CHECK(a.director_events_seen > 0u);
+    WS_CHECK(a.director_has_subject == 1);
+    WS_CHECK(a.director_event_kind <= WS_LIFE_EV_KILLED);
+    WS_CHECK(a.director_shot_type >= WS_SHOT_WIDE &&
+             a.director_shot_type <= WS_SHOT_TRACKING);
+    WS_CHECK(a.director_subject.body_count > 0u);
+
+    /* The driven camera obeyed the documented motion caps. */
+    ws_director_config cfg = ws_director_config_default();
+    WS_CHECK(a.director_speed_max <= cfg.max_speed * 1.05 + 1e-6);
+    WS_CHECK(a.director_turn_rate_max <= cfg.max_turn_rate * 1.05 + 1e-6);
+
+    /* Deterministic: same seed, same decision, same subject pose. */
+    WS_CHECK(a.director_events_seen == b.director_events_seen);
+    WS_CHECK(a.director_event_sequence == b.director_event_sequence);
+    WS_CHECK(a.director_event_kind == b.director_event_kind);
+    WS_CHECK(a.director_shot_type == b.director_shot_type);
+    WS_CHECK(a.director_subject.body_count == b.director_subject.body_count);
+    WS_CHECK(a.director_subject.z == b.director_subject.z);
+    WS_CHECK(a.director_eye.x == b.director_eye.x);
+    WS_CHECK(a.director_eye.z == b.director_eye.z);
+    for (uint32_t i = 0; i < a.director_subject.body_count; ++i) {
+        WS_CHECK(a.director_subject.bodies[i].px ==
+                 b.director_subject.bodies[i].px);
+        WS_CHECK(a.director_subject.bodies[i].angle ==
+                 b.director_subject.bodies[i].angle);
+    }
+    ws_env_scene_free(&a);
+    ws_env_scene_free(&b);
+    return 1;
+}
+
+/* The soundscape scene must run the P9 audio on the ecosystem's real events:
+ * each event kind that occurred becomes a bar, the mix is hashed, and the same
+ * seed reproduces the same bars, digest and counters. */
+static int test_env_scene_soundscape(void)
+{
+    ws_env_scene_options o = ws_env_scene_options_default(20260101ULL);
+    o.scene_kind = WS_ENV_SCENE_SOUNDSCAPE;
+    ws_env_scene a;
+    ws_env_scene b;
+    WS_CHECK(ws_env_scene_create(&a, &o) == WS_OK);
+    WS_CHECK(ws_env_scene_create(&b, &o) == WS_OK);
+
+    WS_CHECK(a.audio_bar_count >= 1u);
+    WS_CHECK(a.audio_bar_count <= WS_ENV_MAX_AUDIO_BARS);
+    WS_CHECK(a.audio_events_played > 0u);
+    WS_CHECK(a.audio_samples > 0u);
+    WS_CHECK(a.audio_digest[0] != '\0');
+    for (uint32_t i = 0; i < a.audio_bar_count; ++i) {
+        WS_CHECK(a.audio_bars[i].kind >= 0 &&
+                 a.audio_bars[i].kind < (int)WS_ENV_MAX_AUDIO_BARS);
+        WS_CHECK(a.audio_bars[i].hits > 0u);
+        WS_CHECK(a.audio_bars[i].level > 0.0f &&
+                 a.audio_bars[i].level <= 1.0f);
+    }
+
+    /* Deterministic: same seed, same bars, same digest. */
+    WS_CHECK(a.audio_bar_count == b.audio_bar_count);
+    WS_CHECK(a.audio_events_played == b.audio_events_played);
+    WS_CHECK(a.audio_samples == b.audio_samples);
+    WS_CHECK(strcmp(a.audio_digest, b.audio_digest) == 0);
+    for (uint32_t i = 0; i < a.audio_bar_count; ++i) {
+        WS_CHECK(a.audio_bars[i].kind == b.audio_bars[i].kind);
+        WS_CHECK(a.audio_bars[i].hits == b.audio_bars[i].hits);
+    }
+    ws_env_scene_free(&a);
+    ws_env_scene_free(&b);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -550,6 +637,8 @@ int main(void)
         {"env scene organism forage", test_env_scene_organism},
         {"env scene ecosystem", test_env_scene_ecosystem},
         {"env scene world stream", test_env_scene_world_stream},
+        {"env scene director", test_env_scene_director},
+        {"env scene soundscape", test_env_scene_soundscape},
         {"catalog builds all scenes", test_catalog_builds_all},
     };
     return ws_test_run("world_env", cases, (int)(sizeof(cases) / sizeof(cases[0])));
