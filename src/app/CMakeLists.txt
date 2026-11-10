@@ -5,7 +5,9 @@
 add_executable(worldseed_app
   main.c
   ws_app.c
-  ws_app_platform.c)
+  ws_app_platform.c
+  ws_live.c
+  ws_live_platform.c)
 
 target_link_libraries(worldseed_app PRIVATE worldseed_core)
 

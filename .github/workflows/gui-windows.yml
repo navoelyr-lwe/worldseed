@@ -84,6 +84,39 @@ jobs:
           if (-not $proc.HasExited) { $proc.Kill() }
           if (-not (Test-Path "evidence/gui/app/window.png")) { Write-Error "no window screenshot produced"; exit 1 }
 
+      - name: Live application window and screenshot
+        shell: pwsh
+        run: |
+          # P11: launch the real interactive live world in its Win32 window, let
+          # it present several frames, capture the desktop, then close it. This
+          # exercises the windowed presentation path (Win32 + GDI blit) that the
+          # headless evidence cannot: a real window, a real GDI-presented frame.
+          $exe = "build-gui/src/app/Release/worldseed.exe"
+          $proc = Start-Process -FilePath $exe -ArgumentList "--live","--size","1280x720" -PassThru
+          Start-Sleep -Seconds 8
+          Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+          $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $gfx = [System.Drawing.Graphics]::FromImage($bmp)
+          $gfx.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bmp.Save("evidence/gui/app/live-window.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $gfx.Dispose(); $bmp.Dispose()
+          if (-not $proc.HasExited) { $proc.CloseMainWindow() | Out-Null; Start-Sleep -Seconds 2 }
+          if (-not $proc.HasExited) { $proc.Kill() }
+          if (-not (Test-Path "evidence/gui/app/live-window.png")) { Write-Error "no live window screenshot produced"; exit 1 }
+
+      - name: Live headless evidence on isolated runner
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path evidence/gui/live | Out-Null
+          & build-gui/src/app/Release/worldseed.exe --live-headless 2 --size 640x360 |
+            Tee-Object -FilePath evidence/gui/live/headless.txt
+          if (-not (Select-String -Path evidence/gui/live/headless.txt -Pattern "LIVE_HEADLESS_OK" -Quiet)) { exit 1 }
+          & build-gui/src/app/Release/worldseed.exe --live-tour evidence/gui/live/tour --size 640x360 |
+            Tee-Object -FilePath evidence/gui/live/tour.txt
+          if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "LIVE_TOUR_OK" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "save_load_roundtrip=1" -Quiet)) { exit 1 }
+
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
