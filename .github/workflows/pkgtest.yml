@@ -3,7 +3,8 @@ name: Package test (temporary)
 # TEMPORARY: validates tools/package-windows.ps1 on the isolated self-hosted
 # Windows runner without publishing anything. Removed before PR merge.
 on:
-  workflow_dispatch:
+  push:
+    branches: [feat/p12-release-resilience]
 
 permissions:
   contents: read
