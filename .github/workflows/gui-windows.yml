@@ -119,6 +119,18 @@ jobs:
           # shadows_verified is written to the tour manifest, not stdout.
           if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "shadows_verified=1" -Quiet)) { exit 1 }
 
+      - name: Replay evidence on isolated runner
+        shell: pwsh
+        run: |
+          # P11 replay (docs/17 item 8): re-observe recorded history. The newest
+          # recorded sample must reproduce the live digest exactly and leaving
+          # replay must restore the live world.
+          & build-gui/src/app/Release/worldseed.exe --live-replay evidence/gui/live/replay --size 640x360 |
+            Tee-Object -FilePath evidence/gui/live/replay.txt
+          if (-not (Select-String -Path evidence/gui/live/replay.txt -Pattern "LIVE_REPLAY_OK" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/gui/live/replay/replay-manifest.txt -Pattern "newest_matches_live=1" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/gui/live/replay/replay-manifest.txt -Pattern "live_restored=1" -Quiet)) { exit 1 }
+
       - name: Directional shadows evidence on isolated runner
         shell: pwsh
         run: |

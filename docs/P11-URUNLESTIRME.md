@@ -80,6 +80,20 @@ sayısında özet bit-özdeş kalır.
 Tur çıktı dizinlerini oluşturmak için platform izoleli, küçük `ws_fs_make_dirs`
 yardımcısı (POSIX `mkdir` / Win32 `_mkdir`). Simülasyon tarafından kullanılmaz.
 
+### Replay — `src/ui/ws_session.{h,c}`, `src/ui/ws_hud.c`
+
+`docs/17` madde 8'in uygulaması. Oturum, dünyayı periyodik olarak tam-durum
+checkpoint'i biçiminde sınırlı bir halka tamponda (en fazla 24 örnek; her örnek
+yaklaşık 108 KB) saklar. `session_serialize` / `session_deserialize` yardımcıları
+kaydedilen örnekleri ve dosya checkpoint'ini aynı bit biçiminde üretir, böylece
+replay gerçek kayıtlı durumu yeniden oynatır. `R` replay'i açar: canlı durum
+yedeklenir, "şimdi" kayıt kenarı olarak örneklenir ve en eski saklanan örneğe
+dönülür; `,` / `.` örnekler arasında adımlar; `WS_CMD_REPLAY_SEEK` normalize konumu
+(0..1) doğrudan gösterir; `WS_CMD_REPLAY_LIVE` canlı durumu bit-özdeş geri yükler.
+Replay etkinken dünya ilerlemez. HUD, kayıt zamanı, canlı zaman ve imleç konumunu
+gösteren bir replay paneli çizer; gözlemci salt okunurdur (aynı tohum ve tick
+sayısında özet bit-özdeş kalır).
+
 ## Kontroller (kullanıcıya görünür)
 
 | Tuş | İşlev |
@@ -96,6 +110,8 @@ yardımcısı (POSIX `mkdir` / Win32 `_mkdir`). Simülasyon tarafından kullanı
 | Fare sürükle | Serbest görünümde bakış |
 | `[` / `]` | Günün saati −/+ 1 saat |
 | `S` / `L` | Kaydet / yükle |
+| `R` | Replay (kaydedilmiş geçmişi gözlemle) aç/kapa |
+| `,` / `.` | (replay'de) önceki / sonraki örnek |
 | `F11` | Tam ekran aç/kapa |
 | `Esc` / `Q` | Çık |
 
@@ -132,18 +148,25 @@ yardımcısı (POSIX `mkdir` / Win32 `_mkdir`). Simülasyon tarafından kullanı
   `roundtrip=1`, checkpoint kaydedildikten sonra dünyanın ilerletilip geri
   yüklendiğinde SHA-256 özetinin birebir aynı olduğunu kanıtlar.
 
+- **Replay kanıtı** — `worldseed.exe --live-replay <dizin> --size WxH`: dünya
+  bir süre ilerletilir, replay'e girilir, en eski örnek, adımlanmış örnek ve en
+  yeni örnek gerçek PPM karesi olarak yazılır; canlı dünya geri yüklendikten sonra
+  devam ettiği doğrulanır. Manifest `newest_matches_live=1` (en yeni kayıtlı örnek
+  canlı dünyayı bit-özdeş yeniden üretir) ve `live_restored=1` (replay'den çıkış
+  canlı dünyayı bit-özdeş geri yükler) yazar. `LIVE_REPLAY_OK` çıktısı CI kapısıdır.
+
 - **Tur tekrarlanabilirliği** — Aynı parametrelerle iki tur karesi bit-özdeş olur
   (`cmp` her `step-*.ppm` için başarılı). Bu, "gözlemci salt okunurdur" kuralını
   gerçek çıktı üzerinden doğrular; CI bu karşılaştırmayı zorunlu kapı yapar.
 
 - **Birim testleri** — `tests/test_font.c`, `tests/test_hud.c`, `tests/test_session.c`,
-  `tests/test_live.c`, `tests/test_settings.c` (toplam 24 test): font çizimi/metrikleri,
-  HUD salt-okunurluk ve panel çizimi (istatistik + ayar panelleri dahil), oturum
+  `tests/test_live.c`, `tests/test_settings.c` (toplam 42 test): font çizimi/metrikleri,
+  HUD salt-okunurluk ve panel çizimi (istatistik + ayar + replay panelleri dahil), oturum
   yaşam döngüsü, duraklatma, gözlemci salt-okunurluğu, tohum determinizmi,
   kare-hızı bağımsızlığı, seçim/inceleme, zaman çizelgesi/harita, kaydet/yükle,
-  istatistik/demografi, görünüm kipleri, canlı uygulama seçenek ayrıştırma +
-  headless/tur koşuları, ayar ayrıştırma/biçimlendirme/kaydet-yükle ve CLI↔dosya
-  önceliği.
+  istatistik/demografi, görünüm kipleri, replay (giriş/arama/adımlama/çıkış ve
+  salt-okunurluk), canlı uygulama seçenek ayrıştırma + headless/tur/replay koşuları,
+  ayar ayrıştırma/biçimlendirme/kaydet-yükle ve CLI↔dosya önceliği.
 
 - **Kanıt manifesti aracı** — `tools/ws_manifest.c`: paketteki her dosya için
   SHA-256 ve boyut yazar; eksik dosya varsa sıfırdan farklı çıkış verir, böylece
@@ -158,8 +181,8 @@ yardımcısı (POSIX `mkdir` / Win32 `_mkdir`). Simülasyon tarafından kullanı
   karşılaştırması. Kanıtlar artefakt olarak yüklenir.
 - `gui-windows.yml`: izole Windows runner'da gerçek canlı pencere açılır
   (`--live --size 1280x720`), masaüstü ekran görüntüsü alınır, pencere kapatılır;
-  ayrıca headless + tur kanıtı alınır. Bu, yalnız Windows'ta çalışan Win32/GDI
-  sunum yolunu gerçek pencerede sınar.
+  ayrıca headless + tur + replay kanıtı alınır. Bu, yalnız Windows'ta çalışan
+  Win32/GDI sunum yolunu gerçek pencerede sınar.
 - `release.yml`: paket artık canlı tur karelerini (`live/*.png`, `live/manifest.txt`)
   içerir; `worldseed.exe --version` ile sürüm bildirir; `tools/ws_manifest` ile
   `MANIFEST.txt` üretilir; sürüm notu P11 canlı uygulamasını ve kalan sınırlamaları

@@ -21,6 +21,7 @@ ws_live_options ws_live_options_default(void)
     o.fullscreen = 0;
     o.seconds = 0.0;
     o.tour = 0;
+    o.replay = 0;
     o.out_dir = NULL;
     o.capture_path = NULL;
     o.seed = 20260101ULL;
@@ -77,6 +78,14 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
             opts->enabled = 1;
             opts->headless = 1;
             opts->tour = 1;
+            opts->out_dir = argv[++i];
+        } else if (strcmp(a, "--live-replay") == 0) {
+            if (i + 1 >= argc) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
+            opts->enabled = 1;
+            opts->headless = 1;
+            opts->replay = 1;
             opts->out_dir = argv[++i];
         } else if (strcmp(a, "--live-capture") == 0) {
             if (i + 1 >= argc) {
@@ -497,6 +506,108 @@ static int run_tour(const ws_live_options *opts)
     return ok ? 0 : 1;
 }
 
+/* --- replay evidence (docs/17 item 8) ----------------------------------- */
+
+static int run_replay(const ws_live_options *opts)
+{
+    if (ws_fs_make_dirs(opts->out_dir) != WS_OK) {
+        fprintf(stderr, "live replay: cannot create %s\n", opts->out_dir);
+        return 1;
+    }
+    ws_session *s = NULL;
+    if (ws_live_make_session(opts, &s) != WS_OK) {
+        fprintf(stderr, "live replay: session create failed\n");
+        return 1;
+    }
+    ws_framebuffer fb;
+    if (ws_framebuffer_create(&fb, opts->width, opts->height) != WS_OK) {
+        ws_session_destroy(s);
+        return 1;
+    }
+    float *depth = malloc((size_t)opts->width * opts->height * sizeof(float));
+    if (depth == NULL) {
+        ws_framebuffer_free(&fb);
+        ws_session_destroy(s);
+        return 1;
+    }
+
+    int ok = 1;
+    int step = 0;
+    /* Let the world run so the replay ring holds real history. */
+    (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_AUTO, 0.0);
+    for (int i = 0; i < 240; ++i) { (void)ws_session_step(s, 0.05); }
+
+    char live_digest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, live_digest);
+
+    uint32_t samples = ws_session_replay_samples(s);
+    double span = ws_session_replay_span_s(s);
+    ok &= samples >= 2u;
+    ok &= span > 0.0;
+
+    /* Enter replay at the oldest retained sample. */
+    (void)ws_session_apply_command(s, WS_CMD_REPLAY_TOGGLE, 0.0);
+    int active = ws_session_replay_active(s);
+    ok &= active == 1;
+    ok &= capture_step(s, &fb, depth, opts, "replay_oldest", step); step++;
+
+    char oldest_digest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, oldest_digest);
+    ok &= strcmp(oldest_digest, live_digest) != 0;
+
+    /* Step forward through the history. */
+    for (int i = 0; i < 4; ++i) {
+        (void)ws_session_apply_command(s, WS_CMD_REPLAY_STEP_FORWARD, 0.0);
+    }
+    ok &= capture_step(s, &fb, depth, opts, "replay_stepped", step); step++;
+
+    /* Seek to the newest sample: the reconstructed world matches the live one. */
+    (void)ws_session_apply_command(s, WS_CMD_REPLAY_SEEK, 1.0);
+    char newest_digest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, newest_digest);
+    int newest_matches_live = strcmp(newest_digest, live_digest) == 0;
+    ok &= newest_matches_live;
+    ok &= capture_step(s, &fb, depth, opts, "replay_newest", step); step++;
+
+    /* Leave replay: the live world is restored bit-exactly and resumes. */
+    (void)ws_session_apply_command(s, WS_CMD_REPLAY_TOGGLE, 0.0);
+    ok &= ws_session_replay_active(s) == 0;
+    char after_digest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, after_digest);
+    int restored = strcmp(after_digest, live_digest) == 0;
+    ok &= restored;
+    uint64_t step_before = ws_session_steps(s);
+    for (int i = 0; i < 40; ++i) { (void)ws_session_step(s, 0.05); }
+    ok &= ws_session_steps(s) > step_before;
+
+    char manifest[512];
+    snprintf(manifest, sizeof(manifest), "%s/replay-manifest.txt", opts->out_dir);
+    FILE *mf = fopen(manifest, "w");
+    if (mf != NULL) {
+        fprintf(mf, "# Worldseed Engine P11 replay manifest\n");
+        fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
+        fprintf(mf, "size=%ux%u\n", opts->width, opts->height);
+        fprintf(mf, "samples=%u\n", samples);
+        fprintf(mf, "span_seconds=%.1f\n", span);
+        fprintf(mf, "newest_matches_live=%d\n", newest_matches_live);
+        fprintf(mf, "live_restored=%d\n", restored);
+        fprintf(mf, "live_digest=%s\n", live_digest);
+        fprintf(mf, "newest_digest=%s\n", newest_digest);
+        fprintf(mf, "steps=%d\n", step);
+        fclose(mf);
+    }
+
+    free(depth);
+    ws_framebuffer_free(&fb);
+    ws_session_destroy(s);
+    if (ok) {
+        printf("LIVE_REPLAY_OK samples=%u span=%.1f newest_matches_live=%d "
+               "live_restored=%d steps=%d dir=%s\n",
+               samples, span, newest_matches_live, restored, step, opts->out_dir);
+    }
+    return ok ? 0 : 1;
+}
+
 int ws_live_run(const ws_live_options *opts)
 {
     if (opts == NULL || !opts->enabled) {
@@ -506,6 +617,9 @@ int ws_live_run(const ws_live_options *opts)
      * so the windowed and headless paths drive exactly the same product. */
     if (opts->tour) {
         return run_tour(opts);
+    }
+    if (opts->replay) {
+        return run_replay(opts);
     }
     if (opts->headless) {
         return run_headless(opts);

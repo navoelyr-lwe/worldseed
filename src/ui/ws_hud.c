@@ -381,6 +381,49 @@ static void draw_settings_panel(ws_framebuffer *fb, const ws_session *s, int sca
     ws_font_draw(fb, x, cy, "config file to change directly.", scale, COL_TEXT);
 }
 
+/* --- replay panel (docs/17 item 8) -------------------------------------- */
+
+static void draw_replay_panel(ws_framebuffer *fb, const ws_session *s, int scale)
+{
+    uint32_t line_h = WS_FONT_GLYPH_H * (uint32_t)scale + 3u;
+    uint32_t w = 300u * (uint32_t)scale;
+    uint32_t h = line_h * 6u + 8u;
+    int x = ((int)fb->width - (int)w) / 2;
+    int y = (int)fb->height - (int)h - (int)(line_h * 3u + 12u);
+    panel(fb, x - 3, y - 3, w, h);
+
+    char buf[256];
+    int cx = x;
+    int cy = y;
+    ws_font_draw(fb, cx, cy, "REPLAY", scale, COL_WARN);
+    cy += (int)line_h;
+
+    double pos = ws_session_replay_position(s);
+    int bar_w = (int)w - 16;
+    ws_font_fill_rect(fb, cx, cy + 4, (uint32_t)bar_w, 5u, COL_DIM);
+    int fill = (int)(pos * (double)bar_w);
+    if (fill > bar_w) { fill = bar_w; }
+    ws_font_fill_rect(fb, cx, cy + 4, (uint32_t)fill, 5u, COL_ACCENT);
+    cy += (int)line_h;
+
+    char clock[8];
+    char live_clock[8];
+    clock_string(ws_session_replay_time_s(s), clock, sizeof(clock));
+    clock_string(ws_session_replay_live_time_s(s), live_clock, sizeof(live_clock));
+    snprintf(buf, sizeof(buf), "recorded %s / live %s", clock, live_clock);
+    ws_font_draw(fb, cx, cy, buf, scale, COL_TEXT);
+    cy += (int)line_h;
+
+    snprintf(buf, sizeof(buf), "history %.0fs  %u samples",
+             ws_session_replay_span_s(s), ws_session_replay_samples(s));
+    ws_font_draw(fb, cx, cy, buf, scale, COL_DIM);
+    cy += (int)line_h;
+
+    ws_font_draw(fb, cx, cy, ", / .  step back / forward", scale, COL_TEXT);
+    cy += (int)line_h;
+    ws_font_draw(fb, cx, cy, "R leave replay (back to live)", scale, COL_TEXT);
+}
+
 /* --- help overlay ------------------------------------------------------- */
 
 static const char *HELP_LINES[] = {
@@ -397,6 +440,8 @@ static const char *HELP_LINES[] = {
     "  Mouse drag look (free view)",
     "  [ / ]      time of day -/+ 1 hour",
     "  S / L      save / load checkpoint",
+    "  R          toggle replay of recorded history",
+    "  , / .      (in replay) step back / forward",
     "  H          toggle this help",
     "  Esc / Q    quit",
     "",
@@ -438,6 +483,9 @@ void ws_hud_draw(ws_framebuffer *fb, const ws_session *s, const ws_hud_options *
     }
     if (o.show_settings || ws_session_settings_visible(s)) {
         draw_settings_panel(fb, s, scale);
+    }
+    if (ws_session_replay_active(s)) {
+        draw_replay_panel(fb, s, scale);
     }
     if (ws_session_view_mode(s) == WS_VIEW_MAP) {
         draw_map(fb, s, scale);

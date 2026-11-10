@@ -40,6 +40,7 @@ typedef struct ws_live_options {
     int fullscreen;     /* start full-screen (windowed mode) */
     double seconds;     /* headless/tour simulated duration */
     int tour;           /* run the scripted evidence tour */
+    int replay;         /* run the replay evidence mode */
     const char *out_dir; /* directory for tour captures (NULL = none) */
     const char *capture_path; /* single capture path (NULL = none) */
     uint64_t seed;
