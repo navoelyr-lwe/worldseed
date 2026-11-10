@@ -116,7 +116,8 @@ jobs:
             Tee-Object -FilePath evidence/gui/live/tour.txt
           if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "LIVE_TOUR_OK" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }
-          if (-not (Select-String -Path evidence/gui/live/tour.txt -Pattern "shadows_verified=1" -Quiet)) { exit 1 }
+          # shadows_verified is written to the tour manifest, not stdout.
+          if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "shadows_verified=1" -Quiet)) { exit 1 }
 
       - name: Directional shadows evidence on isolated runner
         shell: pwsh
