@@ -139,7 +139,7 @@ jobs:
             evidence/preview/*.png
             evidence/preview/selftest.txt
             evidence/preview/perf.txt
-            evidence/live/*.png
+            evidence/live/tour-a/*.png
             evidence/live/headless.txt
             evidence/live/tour-a.txt
 
@@ -216,8 +216,8 @@ jobs:
             evidence/preview/world_stream.png \
             evidence/preview/director_shot.png \
             evidence/preview/soundscape.png \
-            evidence/live/*.png \
-            evidence/live/manifest.txt \
+            evidence/live/tour-a/*.png \
+            evidence/live/tour-a/manifest.txt \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md
