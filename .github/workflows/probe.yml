@@ -3,7 +3,11 @@ on:
   push:
   workflow_dispatch:
 jobs:
-  hello:
-    runs-on: ubuntu-24.04
+  latest:
+    runs-on: ubuntu-latest
     steps:
-      - run: echo "runner ok"
+      - run: echo "runner ok latest"
+  v2204:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo "runner ok 22"
