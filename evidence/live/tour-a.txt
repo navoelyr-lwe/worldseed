@@ -1,0 +1,12 @@
+tour step=00 name=auto_day path=evidence/live/tour-a/step-00-auto_day.ppm sha256=52f137d10af375118d75c29ca26a3be527abd1c46bae10afe7577f2c42a34c1c coverage=1.0000
+tour step=01 name=free_overview path=evidence/live/tour-a/step-01-free_overview.ppm sha256=c8c5cc9ea5e59591bdb447deeda5f7815a9a53cf70901a720be6b46d6699089e coverage=1.0000
+tour step=02 name=follow_deer path=evidence/live/tour-a/step-02-follow_deer.ppm sha256=b8def2d5f420e20f88177f0a8d53896fa18250ec2243f510bb7f575e44c41dfe coverage=1.0000
+tour step=03 name=map_overview path=evidence/live/tour-a/step-03-map_overview.ppm sha256=778d133867e7466bd1a6e6efaaeb1929c08467c2cd57b9ccf16debec95458211 coverage=1.0000
+tour step=04 name=auto_dusk path=evidence/live/tour-a/step-04-auto_dusk.ppm sha256=4aef5a2ad0275e71a881b79db36d71e4fac30fb36b44c2aeac727f1bd4c8683f coverage=1.0000
+tour step=05 name=follow_fox path=evidence/live/tour-a/step-05-follow_fox.ppm sha256=18d07a6705d45320717bc90fa7b0761ab7f0f0ef283f7b72e31dd91d7938bbcf coverage=1.0000
+tour step=06 name=auto_night path=evidence/live/tour-a/step-06-auto_night.ppm sha256=8eab601be02b8b2849b1b16ef56262b6db501b0d14d94a24178545c0d761ad7c coverage=1.0000
+tour save_load saved=1 loaded=1 roundtrip=1
+tour step=07 name=reload_check path=evidence/live/tour-a/step-07-reload_check.ppm sha256=385c424e7aae869fea8171170f4d18f29cfa15b13946b4ee96c0a29974470628 coverage=1.0000
+tour step=08 name=shadows_off path=evidence/live/tour-a/step-08-shadows_off.ppm sha256=1c5cfc17fc1930f3ca8c1eeb4c93e919ba02317acf232758aa15fc94c0d40e28 coverage=1.0000
+tour step=09 name=shadows_on path=evidence/live/tour-a/step-09-shadows_on.ppm sha256=7eb15f46cd16df11b90c90582484712ccea921d643308e1733c3eb5ca30a74d2 coverage=1.0000
+LIVE_TOUR_OK steps=10 dir=evidence/live/tour-a

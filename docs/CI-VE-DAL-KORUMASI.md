@@ -8,7 +8,7 @@ Bu belge ilk görevde kurulan geliştirme altyapısını ve tespit edilen erişi
 |---|---|---|
 | `ci.yml` | Derleme + birim testleri (GCC/Clang × Debug/Release × sanitizer), MSVC Windows derleme/test, plan bütünlüğü, README bağlantı kontrolü | GitHub-hosted (ubuntu, windows) |
 | `gui-windows.yml` | Gerçek Windows GUI/headless smoke + tur yeniden üretimi + yönlü gölge farkı (P12); izole, secretsiz, allowlist'li self-hosted runner | Self-hosted `worldseed-gui` (yalnız `main` ve aynı depo PR'ları) |
-| `release.yml` | Plan kapısı + Windows x64 paketleme + prerelease yayını | GitHub-hosted + release |
+| `release.yml` | Plan kapısı + Windows x64 paketleme (hosted birincil, self-hosted Windows yedek; aynı `tools/package-windows.ps1`) + prerelease yayını | GitHub-hosted + release; yedek yol self-hosted `worldseed-gui` |
 
 ## Zorunlu kapılar
 
@@ -87,5 +87,9 @@ Sonuç ve güvenli alternatif: hosted kapılar (derleme, birim testleri, MSVC,
 plan bütünlüğü, README bağlantıları, P12 gölge farkı) kodda aynen korunur ve
 erişim geri geldiğinde otomatik çalışır. P12 gölge kanıt kapısı ayrıca **gerçekten
 çalışan** izole Windows self-hosted işine eklendi; böylece şu an bile otomatik
-kanıt üretiliyor. Bu sınır kullanıcı adına saklanmaz; yönetici erişimi
+kanıt üretiliyor. Aynı şekilde release paketleme, hosted Windows işi
+başarısız olduğunda aynı `tools/package-windows.ps1` betiğini izole self-hosted
+Windows koşucusunda çalıştıran bir yedek yola sahiptir; paket bütünlüğü ve
+SHA-256'sı bu koşucuda doğrulandı (`worldseed-windows-x64.zip`,
+`PKG_TEST_OK`). Bu sınır kullanıcı adına saklanmaz; yönetici erişimi
 gerektirdiği için `AGENTS.md` uyarınca raporlanır.
