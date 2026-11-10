@@ -194,6 +194,19 @@ ws_mat4 ws_mat4_perspective(double fov_y_radians, double aspect, double near_z, 
     return r;
 }
 
+ws_mat4 ws_mat4_ortho(double left, double right, double bottom, double top,
+                      double near_z, double far_z)
+{
+    ws_mat4 r = ws_mat4_identity();
+    r.m[0] = 2.0 / (right - left);
+    r.m[5] = 2.0 / (top - bottom);
+    r.m[10] = -2.0 / (far_z - near_z);
+    r.m[12] = -(right + left) / (right - left);
+    r.m[13] = -(top + bottom) / (top - bottom);
+    r.m[14] = -(far_z + near_z) / (far_z - near_z);
+    return r;
+}
+
 int ws_aabb3_is_empty(ws_aabb3 box)
 {
     return box.min.x > box.max.x || box.min.y > box.max.y || box.min.z > box.max.z;

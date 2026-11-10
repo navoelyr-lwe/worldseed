@@ -66,12 +66,12 @@ jobs:
         run: |
           # Launch the actual Win32 window, let it present a frame, capture the
           # desktop, then close it. This is a real GUI test, not a headless one.
-          # Scene 14 is the P9 director_shot result: the cinematic observer runs
+          # Scene 15 is the P9 director_shot result: the cinematic observer runs
           # over the ecosystem's real life events, plans and drives a camera, and
           # the window shows the animal the director chose, not a pose.
           New-Item -ItemType Directory -Force -Path evidence/gui/app | Out-Null
           $exe = "build-gui/src/app/Release/worldseed.exe"
-          $proc = Start-Process -FilePath $exe -ArgumentList "--scene","14","--size","1280x720" -PassThru
+          $proc = Start-Process -FilePath $exe -ArgumentList "--scene","15","--size","1280x720" -PassThru
           Start-Sleep -Seconds 5
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
           $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen

@@ -15,6 +15,7 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../core/ws_math.h"
@@ -217,6 +218,222 @@ static double ndc_to_linear_depth(double ndc_z, double near_z, double far_z)
     return (2.0 * near_z * far_z) / (far_z + near_z - (ndc_z * 2.0 - 1.0) * (far_z - near_z));
 }
 
+/* --- Directional shadow map ---------------------------------------------
+ *
+ * One orthographic depth map rendered from the light's point of view. The
+ * world-space bounds of the scene (from the object AABBs) define the light
+ * frustum, so it needs no per-frame tuning. Sampling is a 3x3 PCF and is a pure
+ * function of the stored depths, so the result is deterministic and identical
+ * across the parallel render bands. This is the mandatory CPU shadow reference;
+ * a GPU variant can mirror it. */
+typedef struct shadow_map {
+    const float *depth;      /* size*size, 1.0 = empty (no occluder) */
+    unsigned size;
+    double strength;         /* 0..1 how dark full shadow is */
+    double bias;             /* light-space depth bias to fight acne */
+    ws_mat4 light_view_proj;
+    int ready;
+} shadow_map;
+
+static void scene_world_bounds(const ws_scene *scene, ws_vec3 *lo, ws_vec3 *hi)
+{
+    double mn[3] = {1.0e30, 1.0e30, 1.0e30};
+    double mx[3] = {-1.0e30, -1.0e30, -1.0e30};
+    for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
+        const ws_scene_object *obj = &scene->objects[oi];
+        if (obj->mesh == NULL || obj->mesh->vertices == NULL) {
+            continue;
+        }
+        ws_aabb3 b = ws_mesh_bounds(obj->mesh);
+        for (int ci = 0; ci < 8; ++ci) {
+            ws_vec3 c = ws_vec3_make((ci & 1) ? b.max.x : b.min.x,
+                                     (ci & 2) ? b.max.y : b.min.y,
+                                     (ci & 4) ? b.max.z : b.min.z);
+            ws_vec4 w = ws_mat4_mul_vec4(obj->transform, ws_vec4_make(c.x, c.y, c.z, 1.0));
+            double p[3] = {w.x, w.y, w.z};
+            for (int k = 0; k < 3; ++k) {
+                if (p[k] < mn[k]) { mn[k] = p[k]; }
+                if (p[k] > mx[k]) { mx[k] = p[k]; }
+            }
+        }
+    }
+    if (mn[0] > mx[0]) {
+        mn[0] = mn[1] = mn[2] = -1.0;
+        mx[0] = mx[1] = mx[2] = 1.0;
+    }
+    *lo = ws_vec3_make(mn[0], mn[1], mn[2]);
+    *hi = ws_vec3_make(mx[0], mx[1], mx[2]);
+}
+
+/* Light view-projection covering the scene bounds. The light sits one scene
+ * radius behind the centre along the light direction and looks at the centre. */
+static ws_mat4 shadow_light_matrix(const ws_scene *scene, ws_vec3 lo, ws_vec3 hi)
+{
+    ws_vec3 center = ws_vec3_scale(ws_vec3_add(lo, hi), 0.5);
+    double radius = 0.5 * ws_vec3_length(ws_vec3_sub(hi, lo));
+    if (radius < 1.0e-4) {
+        radius = 1.0;
+    }
+    ws_vec3 dir = ws_vec3_normalize(scene->light.direction);
+    ws_vec3 eye = ws_vec3_add(center, ws_vec3_scale(dir, -2.0 * radius));
+    ws_vec3 up = (fabs(dir.y) > 0.99) ? ws_vec3_make(0.0, 0.0, 1.0)
+                                      : ws_vec3_make(0.0, 1.0, 0.0);
+    ws_mat4 view = ws_mat4_look_at(eye, center, up);
+    ws_mat4 proj = ws_mat4_ortho(-radius, radius, -radius, radius, 0.0, 4.0 * radius);
+    return ws_mat4_multiply(proj, view);
+}
+
+static clip_vertex make_depth_clip_vertex(ws_mat4 mvp, const ws_vertex *v)
+{
+    clip_vertex out;
+    ws_vec4 clip = ws_mat4_mul_vec4(mvp,
+                                    ws_vec4_make(v->position.x, v->position.y, v->position.z, 1.0));
+    out.x = clip.x;
+    out.y = clip.y;
+    out.z = clip.z;
+    out.w = clip.w;
+    out.wx = out.wy = out.wz = 0.0;
+    out.nx = out.ny = out.nz = 0.0;
+    out.r = out.g = out.b = 0.0;
+    return out;
+}
+
+/* Rasterise one light-space triangle writing the nearest depth (smaller wins). */
+static void shadow_raster(const screen_vertex *v, float *depth, unsigned size)
+{
+    int w = (int)size;
+    int h = (int)size;
+    double area = edge(v[0].x, v[0].y, v[1].x, v[1].y, v[2].x, v[2].y);
+    if (area == 0.0) {
+        return;
+    }
+    double min_x = v[0].x, max_x = v[0].x, min_y = v[0].y, max_y = v[0].y;
+    for (int i = 1; i < 3; ++i) {
+        if (v[i].x < min_x) { min_x = v[i].x; }
+        if (v[i].x > max_x) { max_x = v[i].x; }
+        if (v[i].y < min_y) { min_y = v[i].y; }
+        if (v[i].y > max_y) { max_y = v[i].y; }
+    }
+    int x0 = (int)min_x; if (x0 < 0) { x0 = 0; }
+    int x1 = (int)max_x + 1; if (x1 > w - 1) { x1 = w - 1; }
+    int y0 = (int)min_y; if (y0 < 0) { y0 = 0; }
+    int y1 = (int)max_y + 1; if (y1 > h - 1) { y1 = h - 1; }
+    if (x0 > x1 || y0 > y1) {
+        return;
+    }
+    double inv_area = 1.0 / area;
+    int inside_pos = area > 0.0;
+    for (int y = y0; y <= y1; ++y) {
+        double py = (double)y + 0.5;
+        for (int x = x0; x <= x1; ++x) {
+            double px = (double)x + 0.5;
+            double w0 = edge(v[1].x, v[1].y, v[2].x, v[2].y, px, py);
+            double w1 = edge(v[2].x, v[2].y, v[0].x, v[0].y, px, py);
+            double w2 = edge(v[0].x, v[0].y, v[1].x, v[1].y, px, py);
+            int inside = inside_pos ? (w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0)
+                                    : (w0 <= 0.0 && w1 <= 0.0 && w2 <= 0.0);
+            if (!inside) {
+                continue;
+            }
+            double l0 = w0 * inv_area;
+            double l1 = w1 * inv_area;
+            double l2 = w2 * inv_area;
+            double z = l0 * v[0].z + l1 * v[1].z + l2 * v[2].z;
+            size_t idx = (size_t)y * (size_t)w + (size_t)x;
+            if (z < (double)depth[idx]) {
+                depth[idx] = (float)z;
+            }
+        }
+    }
+}
+
+static void shadow_render_pass(const ws_scene *scene, ws_mat4 light_vp,
+                               float *depth, unsigned size)
+{
+    size_t count = (size_t)size * (size_t)size;
+    for (size_t i = 0; i < count; ++i) {
+        depth[i] = 1.0f;
+    }
+    for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
+        const ws_scene_object *obj = &scene->objects[oi];
+        if (obj->mesh == NULL || obj->mesh->vertices == NULL || obj->mesh->indices == NULL) {
+            continue;
+        }
+        ws_mat4 mvp = ws_mat4_multiply(light_vp, obj->transform);
+        const ws_mesh *mesh = obj->mesh;
+        for (uint32_t t = 0u; t + 3u <= mesh->index_count; t += 3u) {
+            clip_vertex poly[3];
+            int ok = 1;
+            for (int k = 0; k < 3; ++k) {
+                uint32_t idx = mesh->indices[t + (uint32_t)k];
+                if (idx >= mesh->vertex_count) {
+                    ok = 0;
+                    break;
+                }
+                poly[k] = make_depth_clip_vertex(mvp, &mesh->vertices[idx]);
+            }
+            if (!ok) {
+                continue;
+            }
+            clip_vertex clipped[4];
+            int cn = clip_near(poly, 3, clipped);
+            if (cn < 3) {
+                continue;
+            }
+            screen_vertex scr[4];
+            for (int k = 0; k < cn; ++k) {
+                to_screen(&clipped[k], (int)size, (int)size, &scr[k]);
+            }
+            for (int k = 1; k + 1 < cn; ++k) {
+                screen_vertex tri[3] = {scr[0], scr[k], scr[k + 1]};
+                shadow_raster(tri, depth, size);
+            }
+        }
+    }
+}
+
+/* Fraction of the direct light reaching `world`: 1 in light, lower in shadow. */
+static double shadow_factor(const shadow_map *sm, ws_vec3 world)
+{
+    if (sm == NULL || !sm->ready) {
+        return 1.0;
+    }
+    ws_vec4 c = ws_mat4_mul_vec4(sm->light_view_proj, ws_vec4_make(world.x, world.y, world.z, 1.0));
+    if (c.w == 0.0) {
+        return 1.0;
+    }
+    double ndc_x = c.x / c.w;
+    double ndc_y = c.y / c.w;
+    double ndc_z = c.z / c.w;
+    if (ndc_x < -1.0 || ndc_x > 1.0 || ndc_y < -1.0 || ndc_y > 1.0 ||
+        ndc_z < -1.0 || ndc_z > 1.0) {
+        return 1.0; /* outside the light frustum: treat as lit */
+    }
+    double u = ndc_x * 0.5 + 0.5;
+    double v = 1.0 - (ndc_y * 0.5 + 0.5);
+    double ref = ndc_z * 0.5 + 0.5;
+    double texel = 1.0 / (double)sm->size;
+    double lit = 0.0;
+    int samples = 0;
+    for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+            int sx = (int)((u + (double)dx * texel) * (double)sm->size);
+            int sy = (int)((v + (double)dy * texel) * (double)sm->size);
+            if (sx < 0 || sy < 0 || sx >= (int)sm->size || sy >= (int)sm->size) {
+                continue;
+            }
+            double stored = (double)sm->depth[(size_t)sy * sm->size + (size_t)sx];
+            lit += (ref - sm->bias > stored) ? 0.0 : 1.0;
+            samples += 1;
+        }
+    }
+    if (samples == 0) {
+        return 1.0;
+    }
+    lit /= (double)samples;
+    return 1.0 - sm->strength * (1.0 - lit);
+}
+
 /* Scene-constant terms hoisted out of the per-pixel shading loop. The light
  * colours and hemisphere ambient are sRGB constants, so decoding them with
  * pow() once per frame instead of once per pixel removes the dominant cost of
@@ -232,6 +449,7 @@ typedef struct render_ctx {
     double near_z;
     double far_z;
     double fog_density;
+    const shadow_map *shadow; /* NULL when shadows are off */
 } render_ctx;
 
 /* Per-material terms hoisted out of the per-pixel loop. */
@@ -242,7 +460,8 @@ typedef struct mat_ctx {
     double specular;
 } mat_ctx;
 
-static void render_ctx_build(render_ctx *ctx, const ws_scene *scene)
+static void render_ctx_build(render_ctx *ctx, const ws_scene *scene,
+                             const shadow_map *shadow)
 {
     const ws_light *light = &scene->light;
     const ws_render_settings *s = &scene->settings;
@@ -255,6 +474,7 @@ static void render_ctx_build(render_ctx *ctx, const ws_scene *scene)
     ctx->far_z = scene->camera.far_z;
     ctx->fog_density = s->fog_density;
     ctx->use_fog = s->fog_density > 0.0;
+    ctx->shadow = shadow;
     if (ctx->use_fog) {
         if (s->sky_enabled) {
             linear3(light->sky_horizon, ctx->fog_lin);
@@ -319,6 +539,15 @@ static void shade_pixel(const ws_scene *scene, const render_ctx *ctx, const mat_
         if (ndoth > 0.0) {
             spec = pow(ndoth, mat->shininess) * mat->specular * ctx->light_intensity;
         }
+    }
+
+    /* Shadowing attenuates only the direct light; the hemisphere ambient term is
+     * left intact. With shadows off this is exactly 1.0, so the multiply is a
+     * no-op and the direct-only path stays bit-identical. */
+    if (ctx->shadow != NULL) {
+        double s = shadow_factor(ctx->shadow, world_pos);
+        diffuse *= s;
+        spec *= s;
     }
 
     for (int c = 0; c < 3; ++c) {
@@ -500,6 +729,7 @@ typedef struct band_job {
     float *depth;
     unsigned tile;
     ws_mat4 view_proj;
+    const shadow_map *shadow;
     int band_y0;
     int band_y1;
     int count_triangles;  /* only band 0 counts triangle-level stats */
@@ -545,7 +775,7 @@ static void render_band(band_job *job)
     }
 
     render_ctx ctx;
-    render_ctx_build(&ctx, scene);
+    render_ctx_build(&ctx, scene, job->shadow);
 
     for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
         const ws_scene_object *obj = &scene->objects[oi];
@@ -634,6 +864,38 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
     ws_mat4 proj = ws_mat4_perspective(cam->fov_y_radians, aspect, cam->near_z, cam->far_z);
     ws_mat4 view_proj = ws_mat4_multiply(proj, view);
 
+    /* Optional directional shadow pass: build the light-space depth map once,
+     * before the parallel image pass, so every band samples the same data. */
+    shadow_map shadow;
+    float *shadow_depth = NULL;
+    shadow.depth = NULL;
+    shadow.size = 0u;
+    shadow.strength = 0.0;
+    shadow.bias = 0.0;
+    shadow.light_view_proj = ws_mat4_identity();
+    shadow.ready = 0;
+    const shadow_map *shadow_ptr = NULL;
+    if (scene->settings.shadows_enabled) {
+        ws_vec3 lo, hi;
+        scene_world_bounds(scene, &lo, &hi);
+        ws_mat4 light_vp = shadow_light_matrix(scene, lo, hi);
+        unsigned ssize = scene->settings.shadow_map_size ? scene->settings.shadow_map_size : 1024u;
+        size_t scount = (size_t)ssize * (size_t)ssize;
+        shadow_depth = (float *)malloc(scount * sizeof(float));
+        if (shadow_depth != NULL) {
+            shadow_render_pass(scene, light_vp, shadow_depth, ssize);
+            shadow.depth = shadow_depth;
+            shadow.size = ssize;
+            shadow.strength = ws_clamp_double(scene->settings.shadow_strength, 0.0, 1.0);
+            shadow.bias = scene->settings.shadow_bias;
+            shadow.light_view_proj = light_vp;
+            shadow.ready = 1;
+            shadow_ptr = &shadow;
+        }
+        /* Allocation failure falls back to unshadowed shading rather than
+         * failing the frame. */
+    }
+
     /* Split the image into row bands, one per worker. Triangle setup is
      * recomputed per band (cheap relative to shading) so bands share no mutable
      * state; the split is the same for every frame, so the result is
@@ -670,6 +932,7 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
         j->depth = depth;
         j->tile = tile;
         j->view_proj = view_proj;
+        j->shadow = shadow_ptr;
         j->band_y0 = (int)y0;
         j->band_y1 = (int)y1;
         j->count_triangles = (active == 0u);
@@ -699,5 +962,6 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
             stats->pixels_shaded += jobs[i].pixels_shaded;
         }
     }
+    free(shadow_depth);
     return WS_OK;
 }
