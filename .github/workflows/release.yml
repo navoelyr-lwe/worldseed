@@ -55,7 +55,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path evidence/preview | Out-Null
           $exe = "build/src/app/Release/worldseed.exe"
-          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage"
+          $scenes = "orbit","lowlight","spheres","materials","textured","sky","terrain_day","terrain_dusk","terrain_weather","terrain_physics","creature_walk","organism_forage","ecosystem"
           for ($i = 0; $i -lt $scenes.Count; $i++) {
             $s = $scenes[$i]
             & $exe --capture "evidence/preview/$s.ppm" --scene $i --size 1280x720
@@ -69,11 +69,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$stage/preview" | Out-Null
           Copy-Item evidence/preview/*.png "$stage/preview/"
           @(
-            "Worldseed Engine preview (P6 - organizma ve davranis).",
-            "Calistirma: worldseed.exe --scene 11 --size 1280x720",
+            "Worldseed Engine preview (P7 - ekosistem ve temsili turler).",
+            "Calistirma: worldseed.exe --scene 12 --size 1280x720",
             "Sahneler: worldseed.exe --list",
             "Kanit: preview/*.png (CPU referans renderer ciktilari) ve CI artefaktlari.",
-            "Bu bir onizleme surumudur; tam ekosistem simulasyonu ve etkilesim sonraki asamalardadir."
+            "Bu bir onizleme surumudur; kalici cok olcekli dunya ve sinematik yonetmen sonraki asamalardadir."
           ) | Set-Content -Path "$stage/README.txt"
           Compress-Archive -Path "$stage/*" -DestinationPath "worldseed-windows-x64.zip" -Force
           Get-FileHash worldseed-windows-x64.zip -Algorithm SHA256 |
@@ -108,7 +108,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P6 - organizma ve davranis)." \
+            "Worldseed Engine onizleme surumu (P7 - ekosistem ve temsili turler)." \
             "" \
             "Bu paket, kendi C17 CPU referans renderer'imizle uretilen sabit sahneleri gosterir." \
             "worldseed.exe --list ile sahne listesini, --scene N ile secimi gorursunuz." \
@@ -118,11 +118,13 @@ jobs:
             "renderer, prosedurel arazi/su/habitat/bitki/atmosfer, kendi C17 fizik cekirdegi" \
             "(yercekimi, temas, surtunme, restitusyon, ruzgar, kaldirma), terrain_physics" \
             "golden sahnesi, P5 referans canli biyomekanigi (artikule beden, kapali-cevrim" \
-            "yuruyus kontrolcusu, creature_walk golden sahnesi) ve P6 organizma/davranis:" \
-            "kendi C17 algisi (menzil/gorus alani), ic durum ve ihtiyac homeostazi, fayda" \
-            "tabanli davranis (dinlenme, besin/su arama, kacma, gezinme), sinirli ogrenme ve" \
-            "organism_forage golden sahnesi; golden-scene kaniti ve determinizm testleri." \
-            "Bu surumde henuz olmayanlar: tam ekosistem simulasyonu, diger turler, etkilesim" \
+            "yuruyus kontrolcusu, creature_walk golden sahnesi), P6 organizma/davranis" \
+            "(algi, homeostaz, fayda tabanli davranis, sinirli ogrenme, organism_forage" \
+            "golden sahnesi) ve P7 ekosistem: kendi C17 populasyon/enerji modeli, besin agi," \
+            "ureme/olum, av-avci eslesmesi ve dordu birden kalici temsili tur (kizil geyik," \
+            "kizil tilki, Avrupa tavsani, yaban domuzu) icin ayri fiziksel beden ve tur-ozgu" \
+            "yuruyus; ecosystem golden sahnesi; golden-scene kaniti ve determinizm testleri." \
+            "Bu surumde henuz olmayanlar: kalici cok olcekli dunya, tam ekosistem etkilesimi" \
             "ve sinematik yonetmen (sonraki asamalar)." \
             "" \
             "Kanit: bu surumun ekleri (preview/*.png), sha256 dosyasi ve CI artefaktlari." \
@@ -136,6 +138,7 @@ jobs:
             evidence/preview/terrain_weather.png             evidence/preview/terrain_physics.png \
             evidence/preview/creature_walk.png \
             evidence/preview/organism_forage.png \
+            evidence/preview/ecosystem.png \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md

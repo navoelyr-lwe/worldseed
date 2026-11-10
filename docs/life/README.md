@@ -1,11 +1,13 @@
-# P5 — Canlı biyomekaniği model kartları
+# P5–P7 — Canlı biyomekaniği ve tür model kartları
 
-Bu dizin, `06-CANLI-BIYOMEKANIK.md` ve `02-BILIMSEL-MODELLEME.md` uyarınca
-referans tür için zorunlu model kartlarını içerir. Her kart; kimlik/sürüm,
-temsil edilen süreç, ölçek, durum değişkenleri, denklem/algoritma, varsayımlar,
-parametre kaynağı, sayısal yöntem, doğrulama planı, kabul eşikleri ve kanıt
-düzeyini kaydeder. Kanıt düzeyi D0–D4 arasındadır; D1 düzeyindeki bir model D3
-diye tanıtılmaz.
+Bu dizin, `06-CANLI-BIYOMEKANIK.md`, `02-BILIMSEL-MODELLEME.md` ve
+`07-BIYOLOJI-EKOLOJI.md` uyarınca zorunlu model kartlarını içerir. Her kart;
+kimlik/sürüm, temsil edilen süreç, ölçek, durum değişkenleri, denklem/algoritma,
+varsayımlar, parametre kaynağı, sayısal yöntem, doğrulama planı, kabul eşikleri
+ve kanıt düzeyini kaydeder. Kanıt düzeyi D0–D4 arasındadır; D1 düzeyindeki bir
+model D3 diye tanıtılmaz.
+
+## Süreç model kartları
 
 | Kart | Kapsam | Kanıt düzeyi |
 |---|---|---|
@@ -15,6 +17,18 @@ diye tanıtılmaz.
 | `MODEL-KARTI-ALGI.md` | Duyusal algı (menzil/görüş alanı, en yakın hedef) | D1 (sınır davranışı; ölçülmüş algı D3 kıyası yok) |
 | `MODEL-KARTI-HOMEOSTAZ.md` | İç durum ve ihtiyaç homeostazı | D2 (korunum ve kararlılık testleri geçti) |
 | `MODEL-KARTI-DAVRANIS.md` | Fayda tabanlı davranış ve sınırlı öğrenme | D2 (senaryo ve çok tohum testleri geçti) |
+| `MODEL-KARTI-EKOLOJI.md` | Popülasyon dinamiği, bitki üretimi, av-avcı, üreme/ölüm | D2 (korunum, sınır ve çok tohum testleri geçti) |
 
-Bilinen ortak sınır: model düzlemseldir (sagittal); lateral denge ve yaw torku
-henüz yoktur. Yürüyüş hattı zemin profili yürüyüş hattı boyunca örneklenir.
+## Tür kartları (P7)
+
+| Kart | Tür | Kanıt düzeyi |
+|---|---|---|
+| `TUR-KARTI-KIZIL-GEYIK.md` | Kızıl geyik (*Cervus elaphus*) | D2 (beden + ekoloji testleri; nicel D3 kıyası yok) |
+| `TUR-KARTI-KIZIL-TILKI.md` | Kızıl tilki (*Vulpes vulpes*) | D2 |
+| `TUR-KARTI-AVRUPA-TAVSANI.md` | Avrupa tavşanı (*Oryctolagus cuniculus*) | D2 |
+| `TUR-KARTI-YABAN-DOMUZU.md` | Yaban domuzu (*Sus scrofa*) | D2 |
+
+Bilinen ortak sınır: beden modelleri düzlemseldir (sagittal); lateral denge ve
+yaw torku henüz yoktur. Ekolojik oranlar kalibre edilmemiştir; besin ağı ilk
+release'te tek kenardır (tilki → tavşan).
+
