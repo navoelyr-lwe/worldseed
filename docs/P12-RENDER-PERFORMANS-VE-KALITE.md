@@ -47,8 +47,9 @@ eklendi:
   kare başına elle ayar gerekmez; ışık merkezin `2*yarıçap` gerisinden merkeze
   bakar ve `[-r, r]` ortografik kutu kullanılır (`ws_mat4_ortho`).
 - **Derinlik geçişi:** `shadow_render_pass` ışık uzayında üçgenleri rasterleyip
-  en yakın derinliği yazar. Gölge geçişi paralel görüntü geçişinden **önce**,
-  tek seferde koşar; bütün bantlar aynı veriyi örnekler.
+  en yakın derinliği yazar. Gölge geçişi paralel görüntü geçişinden **önce**
+  koşar; bütün görüntü bantları aynı haritayı örnekler. Kurulum da satır
+  bantlarına bölünerek aynı işçi havuzunda paralelleştirilir (bkz. §11).
 - **Örnekleme:** `shadow_factor` 3×3 PCF yapar; sonuç yalnız saklanan derinliğin
   saf fonksiyonudur, bu yüzden deterministik ve bantlar arası özdeştir. Acne'ye
   karşı ışık uzayı derinlik bias'ı uygulanır.
@@ -252,6 +253,48 @@ kaldırır:
 - **Gölge yalnız doğrudan ışığı azaltır** ilkesi korunur; yumuşak filtre
   ambient terime dokunmaz.
 
+### 11. Gölge geçişi paralelleştirme ve ertelenmiş gökyüzü (bu PR)
+
+Profil, gölgeli sahnelerde gölge eşleminin kare süresinin büyük kısmını
+tuttuğunu gösterdi: `shadows` sahnesi 1280×720'de gölge geçişi ≈25 ms
+(karenin ≈%75'i), çünkü geçiş **tek iş parçacığında** koşuyordu. İki bağımsız,
+bit-özdeş optimizasyon uygulandı:
+
+- **Gölge haritası paralel kurulumu:** Derinlik haritası, görüntü geçişindeki
+  gibi ayrık **satır bantlarına** bölünür ve her bant sahneyi yalnız kendi
+  satırlarına rasterler (`shadow_build`). Her piksel tam olarak bir banda ait
+  olduğundan ve üçgen yürüyüşü her bantta aynı olduğundan sonuç, bant sayısından
+  ve iş parçacığı çizelgesinden bağımsız olarak seri kurulumla **bit-özdeş**tir.
+  Kare başına tek bir işçi havuzu artık gölge ve görüntü geçişleri arasında
+  paylaşılır (önceden iki kez kurulup yıkılıyordu).
+- **Ertelenmiş gökyüzü (depth-masked sky):** Gökyüzü artık geometriden **önce**
+  bütün kareye çizilmez; derinlik tamponu varsa geometriden **sonra**, yalnız
+  derinlik göndericisinde kalan (hiç geometri görmemiş) piksellerde çizilir
+  (`draw_sky_band` derinlik maskesi). Örtülen pikseller artık iki kez
+  gölgelenmez. Boş bir piksele yazılan değer değişmediği için görüntü
+  **bit-özdeş**tir; bu saf bir optimizasyondur.
+
+**Sonuç (aynı makine, 4 çekirdek, 1920×1080, öncesi/sonrası):**
+
+- `terrain_day`: 154.9 ms → **136.5 ms** (~%12).
+- `ecosystem`: 100.0 ms → **80.1 ms** (~%20).
+- `sky`: 39.1 ms → **34.1 ms** (~%13).
+- `world_stream`: 79.4 ms → **73.4 ms** (~%8).
+- `shadows`: 71.2 ms → **70.6 ms** (gölge eşlemi kurulumu küçüktür; asıl
+  gölge maliyeti zaten paralel örneklemedir).
+- **Canlı ürün sahnesi** (`--live-headless 8`): 1920×1080 `avg_ms` 117.6 → **103.4**
+  (`p95` 133.2 → **119.8**); 1280×720 `avg_ms` 55.2 → **48.5** (`p95` 65.8 → **56.9**).
+- **Bit-özdeşlik:** 17 golden sahnenin tamamı öncesi/sonrası birebir aynı
+  (`cmp`); canlı ürün `world_digest` değeri iki build'de de aynı
+  (`8322137f…`), yani simülasyon durumu değişmedi. (`frame_sha256` duvar-saati
+  bağımlı yakalama zamanı içerdiğinden koşular arasında değişir; bu önceki
+  build'de de böyledir ve determinizm kapısı `world_digest`'tir.)
+- **Yeni birim testleri:** `render shadow parallel build identical` (gölge
+  haritası 1 bant ile 2…17 bant arasında bit-özdeş) ve
+  `render sky deferred matches sky first` (ertelenmiş gökyüzünde örtülen
+  piksel gökyüzü-kapalı render'la, boş piksel saf gökyüzü render'ıyla birebir
+  aynı). Test sayısı 41 → 43.
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):
@@ -263,17 +306,22 @@ kaldırır:
   `sha256` değerleri önce/sonra birebir aynı; yalnız `render_ms` değişir.
 - **Kalan büyük maliyet:** Piksel başına `exp` (sis) ve `pow` (speküler)
   çağrıları; sis kapatıldığında 1080p ~156 → ~141 ms, sis+speküler kapatıldığında
-  ~101 ms. Bunlar sonraki dilimde (yaklaşım tabloları / GPU) hedeflenir.
+  ~101 ms. Bu dilimde gökyüzü ertelenerek örtülen piksellerin iki kez
+  gölgelenmesi kaldırıldı ve gölge kurulumu paralelleştirildi; kalan `exp`/`pow`
+  sıcak noktaları sonraki dilimde (yaklaşım tabloları / GPU) hedeflenir.
 - `raster_cpu` 1080p / 2048 üçgen: ~35.6 ms.
 - **Ürün görsel kalite kontrol listesi** (`ws_quality`, 640×360, seed 20260101,
   bu makine): altı referans sahnenin tamamı geçer; örnek metrikler:
   `terrain_day` geom_cov=1.00 stddev=18.0 sat=0.25 variety=37 sky_grad=0.84;
   `terrain_dusk` stddev=35.0; `organism_forage` sky_grad=15.4;
   `ecosystem` objects=718. Aynı seed iki koşuda bit-özdeş (`reproducible=1`).
-- **Canlı ürün sahnesi kare zamanı** (`--live-headless 5`, bu makine, 4 çekirdek,
-  CPU referans yolu; render + HUD, kamera/dünya/ekoloji dâhil):
-  - 1280×720: `avg_ms≈57.8`, `p50≈57.5`, `p95≈65.2`, `p99≈74.6` (~17 FPS).
-  - 1920×1080: `avg_ms≈123.2`, `p50≈123.2`, `p95≈140.6`, `p99≈150.4` (~8 FPS).
+- **Canlı ürün sahnesi kare zamanı** (`--live-headless 8`, bu makine, 4 çekirdek,
+  CPU referans yolu; render + HUD, kamera/dünya/ekoloji dâhil; bu dilim
+  sonrası):
+  - 1280×720: `avg_ms≈48.5`, `p50≈48.2`, `p95≈56.9`, `p99≈65.0` (~21 FPS).
+  - 1920×1080: `avg_ms≈103.4`, `p50≈102.9`, `p95≈119.8`, `p99≈138.0` (~10 FPS).
+  - Önceki dilimde aynı komutla 1280×720 `avg_ms≈57.8` / 1080p `avg_ms≈123.2`
+    idi; ertelenmiş gökyüzü ve paralel gölge kurulumu bunları düşürdü.
   - Bu, test üçgeni çekirdeği değil gerçek ürün sahnesidir; 1080p p95 hedefi
     (33,3 ms) CPU yolunda henüz tutulmuyor.
 - Zamanlayıcı: seri ~174 ms → paralel ~58 ms (`speedup≈3.0x`, `identical=1`).
@@ -298,16 +346,19 @@ kaldırır:
 - Gölge haritası **her karede** sahnenin güncel nesne listesinden yeniden
   kurulur, bu yüzden hareketli nesneler (canlı üründeki aktörler) gölgelerini
   doğru izler; bu davranış `render shadow follows moving occluder` testiyle
-  kilitlenir. Maliyeti kare başına ek bir geometri geçişidir; hareketli
-  sahnelerde gölge haritasını yalnız değişen nesneler için güncellemek (artımlı
-  yeniden kurma) sonraki dilimdir.
+  kilitlenir. Kurulum artık satır bantlarına bölünüp işçi havuzunda koşar
+  (`shadow_build`) ve görüntü geçişiyle **aynı** havuzu paylaşır; sonuç seri
+  kurulumla bit-özdeştir (`render shadow parallel build identical` testi).
+  Maliyeti kare başına ek bir geometri geçişidir; hareketli sahnelerde gölge
+  haritasını yalnız değişen nesneler için güncellemek (artımlı yeniden kurma)
+  sonraki dilimdir.
 - Yarı-gölge (penumbra) genişletildi (`shadow_softness`, sabit tam sayı disk);
   filtre gerçek bir yumuşak temas gölgesi verir ve deterministiktir, ancak örnek
   sayısı yarıçapla kare olarak artar (yarıçap 8'de ≈197 örnek), bu yüzden gölge
   kullanan sahnelerde piksel maliyeti yükselir. Örnek konumları deterministik
   olduğu için mavi-gürültü/dönüşlü örnekleme ile daha az örnekle eşdeğer kalite
-  sonraki dilimdir; gölge haritasını kare başına güncellemek de (hareketli
-  nesneler) açık iştir.
+  sonraki dilimdir. (Gölge haritasını kare başına güncelleme ve bu kurulumu
+  paralelleştirme bu dilimde yapıldı.)
 - Döşemeli GPU yolu şu an bir **doğrulanmış ve kanıtlanmış raster ilkeli**dir;
   canlı gölgeli sahne hâlâ CPU yolundan çizilir. Döşemeli çekirdeği canlı
   gölgeli render'a bağlamak (renk + döşeme başına binlerce üçgeni GPU'ya
