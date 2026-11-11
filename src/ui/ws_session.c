@@ -1943,8 +1943,11 @@ ws_result ws_session_render(ws_session *s, ws_framebuffer *fb, float *depth)
     ws_environment_update(&s->env.env, s->time_of_day_s,
                           s->env.terrain.config.base_height);
     /* The user toggles directional shadows with T; off by default so the live
-     * view matches the golden references unless asked otherwise. */
+     * view matches the golden references unless asked otherwise. When on, a
+     * modest penumbra gives a soft contact shadow consistent with the product
+     * shadow reference scene. */
     s->env.scene.settings.shadows_enabled = s->shadows_visible ? 1 : 0;
+    s->env.scene.settings.shadow_softness = s->shadows_visible ? 2.0 : 0.0;
     return ws_render_scene(&s->env.scene, fb, depth, 32u, NULL);
 }
 

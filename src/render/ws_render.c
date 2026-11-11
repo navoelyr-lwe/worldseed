@@ -260,6 +260,7 @@ typedef struct shadow_map {
     unsigned size;
     double strength;         /* 0..1 how dark full shadow is */
     double bias;             /* light-space depth bias to fight acne */
+    double softness;         /* penumbra radius in texels (0 = hard 3x3 PCF) */
     ws_mat4 light_view_proj;
     int ready;
 } shadow_map;
@@ -442,10 +443,26 @@ static double shadow_factor(const shadow_map *sm, ws_vec3 world)
     double v = 1.0 - (ndc_y * 0.5 + 0.5);
     double ref = ndc_z * 0.5 + 0.5;
     double texel = 1.0 / (double)sm->size;
+    /* Penumbra radius in texels. softness 0 keeps the hard 3x3 PCF: with rad=1
+     * the disc mask below admits all nine taps, so that path is unchanged. A
+     * larger radius widens the filter to a fixed integer disc, giving a soft
+     * contact shadow. The offsets are integers, so the tap set (and the result)
+     * is a pure function of the stored depths, independent of the render band
+     * or the thread that samples it. */
+    int rad = sm->softness > 0.0 ? (int)(sm->softness + 0.5) : 1;
+    if (rad < 1) {
+        rad = 1;
+    }
+    if (rad > 8) {
+        rad = 8;
+    }
     double lit = 0.0;
     int samples = 0;
-    for (int dy = -1; dy <= 1; ++dy) {
-        for (int dx = -1; dx <= 1; ++dx) {
+    for (int dy = -rad; dy <= rad; ++dy) {
+        for (int dx = -rad; dx <= rad; ++dx) {
+            if (dx * dx + dy * dy > rad * rad + rad) {
+                continue; /* disc, not square, so the penumbra is round */
+            }
             int sx = (int)((u + (double)dx * texel) * (double)sm->size);
             int sy = (int)((v + (double)dy * texel) * (double)sm->size);
             if (sx < 0 || sy < 0 || sx >= (int)sm->size || sy >= (int)sm->size) {
@@ -941,6 +958,8 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
             shadow.size = ssize;
             shadow.strength = ws_clamp_double(scene->settings.shadow_strength, 0.0, 1.0);
             shadow.bias = scene->settings.shadow_bias;
+            shadow.softness = scene->settings.shadow_softness > 0.0
+                                  ? scene->settings.shadow_softness : 0.0;
             shadow.light_view_proj = light_vp;
             shadow.ready = 1;
             shadow_ptr = &shadow;

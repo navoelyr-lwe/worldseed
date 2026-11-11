@@ -226,6 +226,32 @@ kapatır:
   tohumun farklı koşu üretmesi, referans yürüyüşün kontrol listesini geçip
   gerçekten ileri gitmesi). Test sayısı 36 → 39'a çıkar.
 
+### 10. Daha geniş yarı-gölge (penumbra) — yumuşak gölge (bu PR)
+
+Önceki dilimin bilinen sınırlaması "gölge yumuşatması 3×3 PCF ile sınırlıdır;
+daha geniş yarı-gölge (penumbra) sonraki dilimlerdedir" idi. Bu dilim o sınırı
+kaldırır:
+
+- **Yeni ayar:** `ws_render_settings.shadow_softness` (gölge eşlemi texel'i
+  cinsinden yarı-gölge yarıçapı). Varsayılan **0**'dır ve 3×3 PCF sabit yolu
+  korur; bu yüzden gölge kullanmayan bütün sahneler ve golden kareleri
+  **bit-özdeş** kalır (17 golden sahnenin tamamı doğrulandı).
+- **Yumuşak filtre:** `shadow_softness > 0` iken `shadow_factor` sabit bir
+  **tam sayı disk** örnekleme ızgarası (yarıçap = softness texel, en fazla 8)
+  kullanır. Örnek konumları tam sayı olduğu için sonuç render bandından ve
+  iş parçacığından **bağımsızdır**; filtre hâlâ saklanan derinliklerin saf bir
+  fonksiyonudur (deterministik, bantlar arası bit-özdeş).
+- **Ürün referans sahnesi:** `shadows` sahnesi artık `shadow_softness = 3.0`
+  seçer; ürün gölge referansı sert PCF kenarı yerine yumuşak temas gölgesi
+  gösterir. `tests/golden/shadows.ppm` ve `manifest.csv` satırı güncellendi.
+- **Birim testi:** `tests/test_render.c` yeni vaka `render shadow soft penumbra`
+  ekler: aynı sahnede sert (0) ve yumuşak (3) gölgenin görünür biçimde
+  farklılaştığını (penumbra gerçek), yumuşak render'ın bant-bağımsız
+  **deterministik** (iki koşu bit-özdeş) ve hiçbir pikseli tam tersine
+  çevirmediğini doğrular. Test sayısı 39 → 40'a çıkar.
+- **Gölge yalnız doğrudan ışığı azaltır** ilkesi korunur; yumuşak filtre
+  ambient terime dokunmaz.
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):
@@ -252,6 +278,11 @@ kapatır:
     (33,3 ms) CPU yolunda henüz tutulmuyor.
 - Zamanlayıcı: seri ~174 ms → paralel ~58 ms (`speedup≈3.0x`, `identical=1`).
 - `shadows` sahnesi 1920×1080: ~130 ms (gölge geçişi dâhil).
+- `shadows` sahnesi yumuşak gölge maliyeti (bu makine, 4 çekirdek, 1920×1080):
+  sert 3×3 PCF (`shadow_softness=0`) ~37 ms; yumuşak yarıçap 3 ~72 ms;
+  yarıçap 5 ~147 ms. Örnek sayısı yarıçapla kare olarak arttığı için maliyet de
+  öyle artar; bu yüzden `shadows` ürün referans sahnesi ölçülü bir yarıçap
+  (3.0) seçer.
 - Döşemeli OpenCL raster (pocl CPU aygıtı, bu ortamda GPU yok):
   - 640×480 / 3000 üçgen: referans 1393 ms → döşemeli 12.6 ms (**110x**),
     `bit_identical=1`.
@@ -266,8 +297,13 @@ kapatır:
   geometri geçişi maliyeti getirir; sahne başına opt-in'dir.
 - Gölge haritası sahne başına bir kez kurulur (statik sahne varsayımı); hareketli
   nesneler için gelecekte kare başına güncelleme gerekir.
-- Gölge yumuşatması 3×3 PCF ile sınırlıdır; daha geniş yarı-gölge (penumbra)
-  sonraki dilimlerdedir.
+- Yarı-gölge (penumbra) genişletildi (`shadow_softness`, sabit tam sayı disk);
+  filtre gerçek bir yumuşak temas gölgesi verir ve deterministiktir, ancak örnek
+  sayısı yarıçapla kare olarak artar (yarıçap 8'de ≈197 örnek), bu yüzden gölge
+  kullanan sahnelerde piksel maliyeti yükselir. Örnek konumları deterministik
+  olduğu için mavi-gürültü/dönüşlü örnekleme ile daha az örnekle eşdeğer kalite
+  sonraki dilimdir; gölge haritasını kare başına güncellemek de (hareketli
+  nesneler) açık iştir.
 - Döşemeli GPU yolu şu an bir **doğrulanmış ve kanıtlanmış raster ilkeli**dir;
   canlı gölgeli sahne hâlâ CPU yolundan çizilir. Döşemeli çekirdeği canlı
   gölgeli render'a bağlamak (renk + döşeme başına binlerce üçgeni GPU'ya

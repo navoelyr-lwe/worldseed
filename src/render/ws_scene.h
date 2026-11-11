@@ -69,6 +69,12 @@ typedef struct ws_render_settings {
     double shadow_strength; /* 0..1 how dark full shadow is (1 = black) */
     double shadow_bias;     /* depth bias in light space to fight acne */
     unsigned shadow_map_size; /* square shadow map edge in texels (0 = 1024) */
+    /* Penumbra width in shadow-map texels. 0 (the default) keeps the 3x3 PCF
+     * hard-edge filter, so every existing scene and golden frame is unchanged;
+     * a positive value widens the filter to a fixed disc of that radius, giving
+     * a soft contact shadow. The tap pattern is a fixed integer grid, so the
+     * result stays deterministic and identical across the parallel render bands. */
+    double shadow_softness;
 } ws_render_settings;
 
 typedef struct ws_scene {
