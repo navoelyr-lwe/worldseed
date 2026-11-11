@@ -23,6 +23,8 @@ compile_commands.json
 *.pgm
 *.tmp
 /evidence/tmp/
+/ws_live_*_test_out/
+/worldseed.cfg
 
 # Versioned golden-scene reference frames and generated primitive assets are
 # committed on purpose (visual-regression baseline and provenance record).

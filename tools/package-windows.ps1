@@ -118,7 +118,7 @@ Copy-Item evidence/live/export-a/frame-*.png "$stage/export/"
 Copy-Item evidence/live/export-a/soundscape.wav "$stage/export/"
 Copy-Item evidence/live/export-a/export-manifest.txt "$stage/export/"
 @(
-    "Worldseed Engine preview (P11 - fare ile menu secimi).",
+    "Worldseed Engine preview (P12 - CPU render performansi ve kalite kapisi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
     "Acilista dunya secim ekrani gelir: YENI dunya olustur, MEVCUT dunyayi yukle",
     "(kayit varsa) veya ORNEK dunyayi ac. Ok tuslari imleci tasir, Enter secer,",
@@ -130,6 +130,7 @@ Copy-Item evidence/live/export-a/export-manifest.txt "$stage/export/"
     "B varsayilanlar, O/Esc kapat). Menude fare ile secim de ayni sekilde calisir.",
     "Canli tuslar: O ayarlar, M dunya secimi, T yonlu golgeleri acar/kapatir (varsayilan kapali).",
     "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
+    "  cikti p50/p95/p99 kare zamanlarini icerir (yayin performans kapisi).",
     "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",
     "Kanit: preview/*.png (CPU referans renderer ciktilari), live/*.png (canli uygulama turu),",
     "select/*.png (dunya secimi), export/*.png + export/soundscape.wav (disa aktarma: zaman",

@@ -187,6 +187,11 @@ jobs:
           mkdir -p evidence/live/tour-a evidence/live/tour-b
           ./build/src/app/worldseed --live-headless 2 --size 320x180 | tee evidence/live/headless.txt
           grep -q "LIVE_HEADLESS_OK" evidence/live/headless.txt
+          # The product-scene performance gate reports p50/p95/p99 frame times
+          # (docs/11): a single FPS sample is not accepted as the release metric.
+          grep -q "p50_ms=" evidence/live/headless.txt
+          grep -q "p95_ms=" evidence/live/headless.txt
+          grep -q "p99_ms=" evidence/live/headless.txt
           ./build/src/app/worldseed --live-tour evidence/live/tour-a --size 320x180 | tee evidence/live/tour-a.txt
           grep -q "LIVE_TOUR_OK" evidence/live/tour-a.txt
           grep -q "saved=1 loaded=1 roundtrip=1" evidence/live/tour-a.txt
@@ -461,6 +466,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path evidence/live/tour-a,evidence/live/tour-b | Out-Null
           & $exe --live-headless 2 --size 320x180 | Tee-Object -FilePath evidence/live/headless.txt
           if (-not (Select-String -Path evidence/live/headless.txt -Pattern "LIVE_HEADLESS_OK" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/live/headless.txt -Pattern "p95_ms=" -Quiet)) { exit 1 }
           & $exe --live-tour evidence/live/tour-a --size 320x180 | Tee-Object -FilePath evidence/live/tour-a.txt
           if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "LIVE_TOUR_OK" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }

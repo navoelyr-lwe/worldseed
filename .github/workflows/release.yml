@@ -148,32 +148,26 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P11 - disa aktarma: kare dizisi + ses)." \
+            "Worldseed Engine onizleme surumu (P12 - CPU render performansi ve kalite kapisi)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
             "istatistikleri gorur, kaydedip geri yuklersiniz. Dunya, yonetmen ve ses kendi" \
-            "C17 kodumuzdadir. Bu surumun ana yeniligi DISA AKTARMA: canli urun artik" \
-            "zaman damgali bir kare dizisi ve karelerle hizalanan bir ses dosyasi uretir." \
-            "worldseed.exe --live-export <dizin> [--live-export-seconds <s>] sabit 1/30 s" \
-            "kare araligiyla kosar, her kareyi kendi CPU referans renderer'imizla cizip" \
-            "HUD'i bindirerek frame-NNNNN.ppm olarak yazar ve ayni aralik icin canli" \
-            "prosedurel ses manzarasini tek bir soundscape.wav (48 kHz, stereo) olarak" \
-            "karistirir. WAV gercek yasam olaylarindan surulur (sabit kayit degil);" \
-            "boylece duydugunuz bir olay onu gosteren kareyle ayni zaman dilimindedir." \
-            "frames-index.txt her karenin dunya zamanini, tick'ini ve SHA-256'sini;" \
-            "export-manifest.txt kare sayisini, araligi, ses ornekleme hizini/kare sayisini" \
-            "ve dunyanin SHA-256 ozetini kaydeder. Ses karistirma yalniz ses durumunu" \
-            "ilerletir, dunyayi degistirmez; ayni tohumla iki kosu bit-ozdes kare dizisi ve" \
-            "bit-ozdes WAV uretir. MP4/H.264 gibi sikistirilmis video ilk release zorunlulugu" \
-            "degildir; kare dizisi + WAV hedeflenen bicimdir." \
+            "C17 kodumuzdadir. Bu surumun ana yeniligi RENDER PERFORMANSI: CPU referans" \
+            "renderer GORUNTUYU BIT-OZDES biraka hizlandirildi. Kare basina kose hazirligi" \
+            "(prepass) bir kez yapilip butun goruntu bantlarinca paylasilir; yakin duzlemin" \
+            "onundeki ucgenler icin hizli yol vardir; bandin satir araligina degmeyen" \
+            "ucgenler o bantta atlanir; goruntu daha ince bantlara bolunerek yuk dengelenir." \
+            "Golden 17 sahnenin tamaminda goruntu, derinlik, istatistik ve SHA-256 degerleri" \
+            "birebir ayni kalir; yalniz sure degisir. Ayrica canli urun sahnesinin kare" \
+            "zamanlari artik yuzdelik olarak raporlanir (--live-headless cikisinda p50/p95/" \
+            "p99_ms) ve CI bu p95 kapisini zorunlu tutar; tek bir FPS orneklemesi yayin" \
+            "olcutu sayilmaz." \
             "" \
-            "Onceki surumlerin ozellikleri korunur: kamera yer/su carpismasi ve agac" \
-            "kacinma (serbest kamera artik agaclarin icinden gecmez; goz gordurulen agac" \
-            "govdelerinin disina yatay itilir), ayarlar menusundeki 'Camera collision'" \
-            "satiri ve P12 render isleri (CPU referans renderer GORUNTUYU BIT-OZDES biraka" \
-            "hizlandirildi, 1080p terrain_day 543.78 ms -> ~88 ms; yonlu golge eslemesi" \
-            "opt-in ve eklemeli, canli pencerede T tusuyla)." \
+            "Onceki surumlerin ozellikleri korunur: disa aktarma (zaman damgali kare dizisi" \
+            "+ WAV), kamera yer/su carpismasi ve agac kacinma, ayarlar menusu (fare" \
+            "destekli), dunya secim ekrani ve opt-in yonlu golge eslemesi (canli pencerede" \
+            "T tusuyla)." \
             "" \
             "Canli uygulama (Windows):" \
             "  worldseed.exe --live               pencere modunda canli dunya" \
@@ -181,37 +175,30 @@ jobs:
             "  Tuslar: Space duraklat, +/- hiz, V kip (auto/free/follow/map), N/P canli sec," \
             "  G istatistik, O ayarlar, M dunya secimi, T yonlu golge, H yardim, [ ] saat, S/L kaydet/yukle, ok/WASD serbest kamera, Esc cikis." \
             "" \
-            "Kamera carpismasi ve dunya secimi: serbest kamera artik yere gomulmez" \
-            "(asagidaki yenilik); uygulama acildiginda" \
-            "secim ekrani gosterilir - YENI dunya olustur, MEVCUT dunyayi yukle (kayit" \
-            "varsa) veya ORNEK dunyayi ac. Ok tuslari imleci tasir, Enter secer, M/Esc" \
-            "vazgecer. Bir satira FAREYLE tiklamak imleci o satira tasir; vurgulanan satira" \
-            "ikinci tiklama satiri klavyedeki Enter gibi acar. Ayni fare secimi ayar menusunde" \
-            "de calisir. Ornek dunya sabit bir tohumla acilir ve bit-ozdes yeniden uretilir;" \
-            "mevcut dunya secimi checkpoint'i bit-ozdes geri yukler; yeni dunya sifir tick ile" \
-            "baslar. Secim ekrani gozlemci salt-okunurdur: dunyayi degistirmez." \
+            "Kamera carpismasi ve dunya secimi: serbest kamera yere/suya gomulmez ve" \
+            "gorulen agac govdelerinin disina yatay itilir; uygulama acildiginda secim" \
+            "ekrani gosterilir - YENI dunya olustur, MEVCUT dunyayi yukle (kayit varsa)" \
+            "veya ORNEK dunyayi ac. Bir satira FAREYLE tiklamak imleci o satira tasir;" \
+            "vurgulanan satira ikinci tiklama satiri klavyedeki Enter gibi acar. Ornek" \
+            "dunya sabit bir tohumla acilir ve bit-ozdes yeniden uretilir; mevcut dunya" \
+            "secimi checkpoint'i bit-ozdes geri yukler. Secim ekrani gozlemci salt-okunurdur." \
             "" \
             "Kalici ayarlar: seciminiz worldseed.cfg dosyasina" \
             "yazilir ve sonraki acilista geri yuklenir - cozunurluk, ic render olcegi," \
             "baslangic gorunumu/saati, golge, tam ekran, metin boyutu, ana ses duzeyi," \
-            "kamera hizi ve fare hassasiyeti. Pencerede O tusu artik ETKILESIMLI bir ayar" \
+            "kamera hizi ve fare hassasiyeti. Pencerede O tusu ETKILESIMLI bir ayar" \
             "menusu acar: up/down (veya W/S) imleci tasir, left/right (veya A/D) secili" \
             "satiri degistirir, Enter uygular, B varsayilanlara doner, O/Esc kapatir." \
-            "Cozunurluk satiri pencereyi yeniden boyutlandirir (tam ekranda degil), metin" \
-            "boyutu HUD olcegini surer, ses duzeyi kendi C17 ses karistiricimizin ana" \
-            "kazancini olcekler, kamera hizi/fare hassasiyeti serbest kamerayi etkiler." \
             "Acik komut satiri bayragi dosyayi gecersiz kilar; kanit kosulari" \
             "(headless/tur) ayar dosyasini okumaz/yazmaz, boylece olcumler sabit kalir." \
             "Ayar uygulamak yalnizca gozlemciyi degistirir, dunyayi degistirmez." \
             "" \
             "Kanit (penceresiz, her makinede calisir):" \
-            "  worldseed.exe --live-headless 3 --size 1280x720  kare zamanlamasi + dunya ozeti" \
+            "  worldseed.exe --live-headless 3 --size 1280x720  kare zamanlamasi (p50/p95/p99) + dunya ozeti" \
             "  worldseed.exe --live-tour cikti --size 1280x720 deterministik tur (gorunum/kayit-yukle)" \
             "  worldseed.exe --live-select cikti --size 1280x720 dunya secimi kaniti (yeni/yukle/ornek)" \
             "  worldseed.exe --live-export cikti --size 1280x720 disa aktarma kaniti (kare dizisi + WAV)" \
             "  live/*.png turun gercek kareleri, live/manifest.txt tur ozetini icerir." \
-            "  select/*.png dunya secim ekranini ve secilen dunyalari gosterir." \
-            "  export/*.png ve export/soundscape.wav disa aktarmayi gosterir." \
             "" \
             "Sabit referans sahneler de duruyor: worldseed.exe --list, --scene N." \
             "preview/*.png her sahnenin gercek CPU referans render ciktisidir." \
@@ -228,25 +215,14 @@ jobs:
             "near/mid/far, kamera disi ilerleme, checkpoint, journal, deterministik replay);" \
             "olay-tabanli sinematik yonetmen ve prosedurel ses manzarasi; GPU icin OpenCL C 1.2" \
             "kernel + CPU fallback ve deterministik cok cekirdekli zamanlayici. GPU yalniz" \
-            "gercek kazanc oldugunda kullanilir (ADR-001). Bu surum serbest kameraya" \
-            "agac kacinma ekler (goz agac govdelerinin disina itilir; onceki yer/su" \
-            "carpismasi ve ayar menusundeki 'Camera collision' satiri korunur) ve dunya" \
-            "secim ekranini" \
-            "FAREYLE tiklama destegiyle birlikte sunar (acilista yeni / mevcut / ornek dunya," \
-            "fare veya klavye ile sec); onceki kalici ayarlar ve ayar paneli" \
-            "(worldseed.cfg), P12 CPU render hizlandirmasi ve" \
-            "opt-in yonlu golgeler korunur. Bu surum ayrica DISA AKTARMA ekler: canli urun" \
-            "zaman damgali kare dizisi (frame-NNNNN.ppm + frames-index.txt) ve karelerle" \
-            "hizalanan tek bir soundscape.wav uretir; ayni tohumla iki kosu bit-ozdes cikti" \
-            "verir ve ses karistirma dunyayi degistirmez." \
+            "gercek kazanc oldugunda kullanilir (ADR-001)." \
             "" \
             "Bilinen sinirlamalar: 4K/30 FPS referans donanim hedefi henuz olculup gecilemedi;" \
+            "CPU referans yolunda kalan buyuk maliyet piksel basina sis (exp) ve spekuler" \
+            "(pow) cagrilaridir; bunlari ve tam sahne GPU yolunu baglamak sonraki dilimdir." \
             "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
-            "olceklendirilir; ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir);" \
-            "fareyle tiklayarak secme artik calisir (ayar menusu ve dunya secim ekrani);" \
-            "kamera carpismasi yukseklik-alani tabanli yere/suya ek olarak gorulen agac" \
-            "govdelerine yatay itme yapar; kayalarin ve canli hayvanlarin govdesine gore" \
-            "itme henuz yoktur." \
+            "olceklendirilir; gercek GPU donaniminda olcum bu ortamda yoktur ve acik blokaj" \
+            "olarak kayitlidir. Ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir)." \
             "" \
             "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + select/ + export/ + MANIFEST.txt)," \
             "sha256 dosyasi, ekteki PNG kareleri ve CI artefaktlari." \

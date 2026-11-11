@@ -69,6 +69,31 @@ static int test_headless_run(void)
     return 1;
 }
 
+/* The frame-time gate reports p50/p95/p99 (docs/11). The helper must order the
+ * samples, stay inside the array at both ends, and treat an empty set as 0. */
+static int test_frame_percentiles(void)
+{
+    double s[10] = {9.0, 1.0, 8.0, 2.0, 7.0, 3.0, 6.0, 4.0, 5.0, 10.0};
+    WS_CHECK(ws_live_percentile_ms(s, 10u, 0.0) == 1.0);   /* minimum */
+    WS_CHECK(ws_live_percentile_ms(s, 10u, 1.0) == 10.0);  /* maximum */
+    WS_CHECK(ws_live_percentile_ms(s, 10u, 0.50) == 5.0);  /* nearest-rank of 10 */
+    WS_CHECK(ws_live_percentile_ms(s, 10u, 0.95) == 9.0);
+    WS_CHECK(ws_live_percentile_ms(s, 10u, 0.99) == 9.0);
+    /* Monotone and bounded at any percentile. */
+    double prev = -1.0;
+    for (int i = 0; i <= 20; ++i) {
+        double p = (double)i / 20.0;
+        double v = ws_live_percentile_ms(s, 10u, p);
+        WS_CHECK(v >= prev);
+        WS_CHECK(v >= 1.0 && v <= 10.0);
+        prev = v;
+    }
+    /* Degenerate inputs. */
+    WS_CHECK(ws_live_percentile_ms(s, 0u, 0.5) == 0.0);
+    WS_CHECK(ws_live_percentile_ms(NULL, 10u, 0.5) == 0.0);
+    return 1;
+}
+
 static int test_tour_run(void)
 {
     const char *const argv[] = {"worldseed", "--live-tour", "ws_live_test_out", "--size", "160x90"};
@@ -278,6 +303,7 @@ int main(void)
         {"live_parse_flags", test_parse_live_flags},
         {"live_parse_rejects_bad", test_parse_rejects_bad},
         {"live_headless_run", test_headless_run},
+        {"live_frame_percentiles", test_frame_percentiles},
         {"live_tour_run", test_tour_run},
         {"live_settings_precedence", test_settings_file_precedence},
         {"live_replay_run", test_replay_run},
