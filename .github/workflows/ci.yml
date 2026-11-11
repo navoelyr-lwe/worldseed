@@ -297,6 +297,7 @@ jobs:
           grep -q "WS_GPU_CHECK_OK" evidence/gpu/gpu_check.txt
           grep -q "gpu=available" evidence/gpu/gpu_check.txt
           grep -q "semantic_match=ok" evidence/gpu/gpu_check.txt
+          grep -q "tiled bit_identical=1" evidence/gpu/gpu_check.txt
           grep -q "device_loss_recovered=1" evidence/gpu/gpu_check.txt
 
       - name: Performance and scaling evidence
@@ -305,6 +306,7 @@ jobs:
           ./build/tools/ws_perf --quick | tee evidence/perf/perf.txt
           grep -q "WS_PERF_OK" evidence/perf/perf.txt
           grep -q "identical=1" evidence/perf/perf.txt
+          grep -q "raster_gpu_tiled" evidence/perf/perf.txt
 
       - name: Upload evidence
         uses: actions/upload-artifact@v4

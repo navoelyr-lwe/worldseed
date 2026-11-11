@@ -45,6 +45,18 @@ ws_result ws_opencl_raster(ws_opencl *cl,
                            uint32_t width, uint32_t height,
                            uint8_t *pixels, float *depth);
 
+/* Tile-binned variant of ws_opencl_raster (P12). Same inputs and the same
+ * bit-identical output image, but the host builds a screen-space tile bin
+ * (ws_tilebin) and each pixel work-item only visits its tile's triangle list.
+ * This removes the pixel x triangle blow-up of the reference kernel so the path
+ * scales to a full scene. `tile_size` is the bin tile edge in pixels (0 = the
+ * default). Returns the same codes as ws_opencl_raster. */
+ws_result ws_opencl_raster_tiled(ws_opencl *cl,
+                                 const float *vx, const float *vy, const float *vz,
+                                 const uint8_t *color, uint32_t triangle_count,
+                                 uint32_t width, uint32_t height, uint32_t tile_size,
+                                 uint8_t *pixels, float *depth);
+
 /* Test-only: simulate a device loss by dropping the live handles and marking
  * the backend lost, so recovery/fallback behaviour can be exercised without a
  * physical GPU removal. No-op when cl is NULL. */

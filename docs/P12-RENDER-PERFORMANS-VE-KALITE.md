@@ -102,6 +102,33 @@ Gölge eşlemesi artık yalnız bir golden sahne değil, çalışan uygulamada g
 - **Değişmezlik:** Gölgeler kapalıyken canlı kare ve 16 golden sahne bit-özdeş
   kalır; gölge yalnız eklemeli ve opt-in'dir.
 
+### 5. Döşemeli (tile-binned) OpenCL C 1.2 raster çekirdeği (bu PR)
+
+Referans GPU çekirdeği (`kernels/ws_raster.cl`) her piksel iş öğesinin bütün
+üçgen listesini dolaşmasını gerektirir; maliyet piksel × üçgen olarak büyür ve
+tam sahneye ölçeklenmez. Ölçüm: 1280×720, 20 000 üçgen → **63.7 s** tek karede.
+Bu, P12'nin asıl darboğazıdır.
+
+- **Ana bilgisayar tarafı ikili ayıklama:** Yeni `src/gpu/ws_tilebin.{h,c}` (ISO
+  C17) ekran uzayında bir döşeme ızgarası ve döşeme başına, ekran sınır kutusu o
+  döşemeye değen üçgen indekslerini üretir. Liste üçgen sırasına göre artan
+  tutulur. Bu bir **filtredir**: kutu değen üçgen tutulur, kesin kenar testini
+  çekirdek yine yapar.
+- **Yeni çekirdek:** `kernels/ws_raster_tiled.cl` (OpenCL C 1.2; yalnız çekirdek
+  çekirdek özellikleri, atomik yok). Piksel başına bir iş öğesi kendi döşemesinin
+  listesini dolaşır. Aynı kenar-fonksiyonu testi, aynı float barycentric renk/
+  derinlik interpolasyonu ve aynı "küçük derinlik kazanır, eşit derinlik üzerine
+  yazmaz" kuralı kullanılır.
+- **Bit-özdeşlik:** İki çekirdek aynı girdi için **birebir aynı** görüntü ve
+  derinlik üretir (testte doğrulandı). Bu, ADR-001'in CPU/GPU semantik
+  karşılaştırma güvencesidir.
+- **Gömme:** Çekirdek kaynağı hâlâ yapılandırma zamanında gömülür (ADR-001);
+  ancak tek C dizesi C99'un 4095 karakter güvencesini aştığı için gömme artık
+  satır başına bir dize parçası üretir ve ana bilgisayar bunları tek
+  `clCreateProgramWithSource` çağrısında birleştirir.
+- **Ana bilgisayar API:** `ws_opencl_raster_tiled(...)` eklendi; aygıt kaybı
+  yine CPU geri dönüşüne yol açar (davranış `ws_opencl_raster` ile aynı).
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day`: ~150–194 ms (~5.5–6.7 FPS).
@@ -109,6 +136,13 @@ Gölge eşlemesi artık yalnız bir golden sahne değil, çalışan uygulamada g
 - `raster_cpu` 1080p / 2048 üçgen: ~35.6 ms.
 - Zamanlayıcı: seri ~174 ms → paralel ~58 ms (`speedup≈3.0x`, `identical=1`).
 - `shadows` sahnesi 1920×1080: ~130 ms (gölge geçişi dâhil).
+- Döşemeli OpenCL raster (pocl CPU aygıtı, bu ortamda GPU yok):
+  - 640×480 / 3000 üçgen: referans 1393 ms → döşemeli 12.6 ms (**110x**),
+    `bit_identical=1`.
+  - 1280×720 / 20 000 üçgen: referans 65 372 ms → döşemeli 103 ms (**635x**),
+    `bit_identical=1`.
+  - `ws_perf` 1920×1080 / 2048 üçgen: `raster_gpu_tiled` 22.9 ms,
+    referansa göre 269x, `identical=1`, karar `use_tiled`.
 
 ## Bilinen sınırlamalar
 
@@ -118,4 +152,10 @@ Gölge eşlemesi artık yalnız bir golden sahne değil, çalışan uygulamada g
   nesneler için gelecekte kare başına güncelleme gerekir.
 - Gölge yumuşatması 3×3 PCF ile sınırlıdır; daha geniş yarı-gölge (penumbra)
   sonraki dilimlerdedir.
+- Döşemeli GPU yolu şu an bir **doğrulanmış ve kanıtlanmış raster ilkeli**dir;
+  canlı gölgeli sahne hâlâ CPU yolundan çizilir. Döşemeli çekirdeği canlı
+  gölgeli render'a bağlamak (renk + döşeme başına binlerce üçgeni GPU'ya
+  aktarma) sonraki dilimdir. Bu dilimde çekirdek ürünün çizim koduna bağlı
+  değildir; burada kanıtlanan, darboğazın çözüldüğü ve çıktının bit-özdeş
+  kaldığıdır.
 - CPU yolu zorunlu referanstır; GPU (OpenCL C 1.2) varyantı sonraki iş.
