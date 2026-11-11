@@ -42,6 +42,7 @@ if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "saved=1 loaded=
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "shadows_verified=1" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "single_step_verified=1" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "settings_menu_verified=1" -Quiet)) { exit 1 }
+if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "world_select_verified=1" -Quiet)) { exit 1 }
 & $exe --live-tour evidence/live/tour-b --size 1280x720 | Out-Null
 Get-ChildItem evidence/live/tour-a/step-*.ppm | ForEach-Object {
     $b = Join-Path "evidence/live/tour-b" $_.Name
@@ -53,6 +54,18 @@ Get-ChildItem evidence/live/tour-a/step-*.ppm | ForEach-Object {
 # Distinct asset name: the release also ships the package MANIFEST.txt,
 # and release asset names are case-insensitive.
 Copy-Item evidence/live/tour-a/manifest.txt evidence/live/tour-a/tour-manifest.txt
+
+# P11 world selection (docs/17 "Ana deneyim"): prove new / load / sample on the
+# real build, then ship the evidence frames.
+New-Item -ItemType Directory -Force -Path evidence/live/select | Out-Null
+& $exe --live-select evidence/live/select --size 1280x720 | Tee-Object -FilePath evidence/live/select.txt
+if (-not (Select-String -Path evidence/live/select.txt -Pattern "LIVE_SELECT_OK" -Quiet)) { exit 1 }
+foreach ($k in @("can_load=1","sample_reproducible=1","load_restored=1","new_fresh=1","readonly=1")) {
+    if (-not (Select-String -Path evidence/live/select/select-manifest.txt -Pattern $k -Quiet)) { exit 1 }
+}
+Get-ChildItem evidence/live/select/*.ppm | ForEach-Object {
+    & tools/ppm2png.ps1 -In $_.FullName -Out ($_.FullName -replace '\.ppm$', '.png')
+}
 
 # P9 soundscape: our own C17 synthesis, rendered from a real ecology run, so
 # the preview ships a listenable WAV next to the frames.
@@ -72,17 +85,24 @@ Copy-Item evidence/preview/perf.txt "$stage/preview/"
 New-Item -ItemType Directory -Force -Path "$stage/live" | Out-Null
 Copy-Item evidence/live/tour-a/*.png "$stage/live/"
 Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
+New-Item -ItemType Directory -Force -Path "$stage/select" | Out-Null
+Copy-Item evidence/live/select/*.png "$stage/select/"
+Copy-Item evidence/live/select/select-manifest.txt "$stage/select/"
 @(
     "Worldseed Engine preview (P11 - dunya secimi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
+    "Acilista dunya secim ekrani gelir: YENI dunya olustur, MEVCUT dunyayi yukle",
+    "(kayit varsa) veya ORNEK dunyayi ac. Ok tuslari imleci tasir, Enter secer,",
+    "M/Esc vazgecer; canli gorunumde M ile yeniden acilir. Ornek dunya sabit tohumla",
+    "bit-ozdes uretilir; secim ekrani gozlemci salt-okunurdur.",
     "Kalici ayarlar: seciminiz worldseed.cfg dosyasina yazilir ve sonraki acilista geri yuklenir;",
     "pencerede O tusu etkilesimli ayar menusunu acar (up/down gez, left/right degistir, enter uygula,",
     "B varsayilanlar, O/Esc kapat). Acik komut satiri bayragi dosyayi gecersiz kilar.",
-    "Canli tuslar: O ayarlar, T yonlu golgeleri acar/kapatir (varsayilan kapali).",
+    "Canli tuslar: O ayarlar, M dunya secimi, T yonlu golgeleri acar/kapatir (varsayilan kapali).",
     "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
     "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",
     "Kanit: preview/*.png (CPU referans renderer ciktilari), live/*.png (canli uygulama turu),",
-    "preview/perf.txt (donanim/olcum) ve manifest.txt (SHA-256) ile CI artefaktlari.",
+    "select/*.png (dunya secimi), preview/perf.txt (donanim/olcum) ve manifest.txt (SHA-256).",
     "CPU referans renderer bit-ozdes kalarak hizlandirildi; golgeler opt-in ve eklemeli.",
     "GPU yalniz gercek kazanc oldugunda kullanilir; OpenCL cihazi yoksa CPU fallback calisir."
 ) | Set-Content -Path "$stage/README.txt"
@@ -92,6 +112,7 @@ Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
 $mfFiles = @("$stage/worldseed.exe")
 $mfFiles += Get-ChildItem "$stage/preview/*.png" | ForEach-Object { $_.FullName }
 $mfFiles += Get-ChildItem "$stage/live/*.png" | ForEach-Object { $_.FullName }
+$mfFiles += Get-ChildItem "$stage/select/*.png" | ForEach-Object { $_.FullName }
 $mfFiles += "$stage/preview/soundscape.wav"
 $mfFiles += "$stage/preview/perf.txt"
 & $mfExe --out "MANIFEST.txt" --version "$Version" @mfFiles

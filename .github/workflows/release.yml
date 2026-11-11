@@ -73,6 +73,9 @@ jobs:
             evidence/live/tour-a/tour-manifest.txt
             evidence/live/headless.txt
             evidence/live/tour-a.txt
+            evidence/live/select/*.png
+            evidence/live/select/select-manifest.txt
+            evidence/live/select.txt
 
   # Resilient path: build the identical package on the isolated self-hosted
   # Windows runner when the hosted pool is unavailable. The publish job consumes
@@ -114,6 +117,9 @@ jobs:
             evidence/live/tour-a/tour-manifest.txt
             evidence/live/headless.txt
             evidence/live/tour-a.txt
+            evidence/live/select/*.png
+            evidence/live/select/select-manifest.txt
+            evidence/live/select.txt
 
   publish:
     name: publish prerelease
@@ -134,7 +140,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P11 - etkilesimli ayar menusu)." \
+            "Worldseed Engine onizleme surumu (P11 - dunya secimi)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
@@ -178,7 +184,9 @@ jobs:
             "Kanit (penceresiz, her makinede calisir):" \
             "  worldseed.exe --live-headless 3 --size 1280x720  kare zamanlamasi + dunya ozeti" \
             "  worldseed.exe --live-tour cikti --size 1280x720 deterministik tur (gorunum/kayit-yukle)" \
+            "  worldseed.exe --live-select cikti --size 1280x720 dunya secimi kaniti (yeni/yukle/ornek)" \
             "  live/*.png turun gercek kareleri, live/manifest.txt tur ozetini icerir." \
+            "  select/*.png dunya secim ekranini ve secilen dunyalari gosterir." \
             "" \
             "Sabit referans sahneler de duruyor: worldseed.exe --list, --scene N." \
             "preview/*.png her sahnenin gercek CPU referans render ciktisidir." \
@@ -195,14 +203,15 @@ jobs:
             "near/mid/far, kamera disi ilerleme, checkpoint, journal, deterministik replay);" \
             "olay-tabanli sinematik yonetmen ve prosedurel ses manzarasi; GPU icin OpenCL C 1.2" \
             "kernel + CPU fallback ve deterministik cok cekirdekli zamanlayici. GPU yalniz" \
-            "gercek kazanc oldugunda kullanilir (ADR-001). Bu surum kalici ayarlari ve" \
-            "ayar panelini ekler (worldseed.cfg); onceki P12 CPU render hizlandirmasi ve" \
+            "gercek kazanc oldugunda kullanilir (ADR-001). Bu surum dunya secim ekranini ekler" \
+            "(acilista yeni / mevcut / ornek dunya); onceki kalici ayarlar ve ayar paneli" \
+            "(worldseed.cfg), P12 CPU render hizlandirmasi ve" \
             "opt-in yonlu golgeler korunur." \
             "" \
             "Bilinen sinirlamalar: 4K/30 FPS referans donanim hedefi henuz olculup gecilemedi;" \
             "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
             "olceklendirilir; ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir);" \
-            "fareyle tiklayarak secme ve dunya secim menusu sonraki dilimdedir." \
+            "fareyle tiklayarak secme sonraki dilimdedir; dunya secim menusu klavyeyle tam calisir." \
             "" \
             "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + MANIFEST.txt)," \
             "sha256 dosyasi, ekteki PNG kareleri ve CI artefaktlari." \
@@ -224,6 +233,8 @@ jobs:
             evidence/preview/soundscape.png \
             evidence/live/tour-a/*.png \
             evidence/live/tour-a/tour-manifest.txt \
+            evidence/live/select/*.png \
+            evidence/live/select/select-manifest.txt \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md

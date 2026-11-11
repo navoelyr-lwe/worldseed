@@ -144,6 +144,15 @@ jobs:
           if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "single_step_verified=1" -Quiet)) { exit 1 }
           # interactive settings menu (docs/17 item 9) is proven in the same manifest.
           if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "settings_menu_verified=1" -Quiet)) { exit 1 }
+          # world-selection screen (docs/17 "Ana deneyim") is proven in the same manifest.
+          if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "world_select_verified=1" -Quiet)) { exit 1 }
+          # The world-selection evidence mode proves new / load / sample choices.
+          & build-gui/src/app/Release/worldseed.exe --live-select evidence/gui/live/select --size 640x360 |
+            Tee-Object -FilePath evidence/gui/live/select.txt
+          if (-not (Select-String -Path evidence/gui/live/select.txt -Pattern "LIVE_SELECT_OK" -Quiet)) { exit 1 }
+          foreach ($k in @("can_load=1","sample_reproducible=1","load_restored=1","new_fresh=1","readonly=1")) {
+            if (-not (Select-String -Path evidence/gui/live/select/select-manifest.txt -Pattern $k -Quiet)) { exit 1 }
+          }
 
       - name: Replay evidence on isolated runner
         shell: pwsh
