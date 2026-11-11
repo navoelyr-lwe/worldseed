@@ -213,6 +213,35 @@ static double edge(double ax, double ay, double bx, double by, double px, double
     return (px - ax) * (by - ay) - (py - ay) * (bx - ax);
 }
 
+/* Conservative per-band triangle rejection. Each band otherwise clips and
+ * viewport-maps every triangle even though a small triangle touches one band
+ * only. The prepass already gives us the projected vertices, so this reports
+ * "disjoint" when the triangle's screen-space row range cannot reach rows
+ * [band_y0, band_y1). Near-plane clipping only removes area inside the
+ * projected triangle, so the unclipped row range is a superset of the
+ * rasterised range; a disjoint verdict therefore never drops a pixel, and the
+ * image stays bit-identical. Band 0 (which owns the image-wide counters) never
+ * rejects. */
+static int tri_band_disjoint(const clip_vertex *poly, int fb_h, int band_y0, int band_y1)
+{
+    double ymin = 1.0e30, ymax = -1.0e30;
+    for (int k = 0; k < 3; ++k) {
+        if (poly[k].w <= 0.0) {
+            return 0; /* behind/at the eye plane: keep, let the clipper decide */
+        }
+        double sy = (1.0 - (poly[k].y / poly[k].w * 0.5 + 0.5)) * (double)fb_h;
+        if (sy < ymin) { ymin = sy; }
+        if (sy > ymax) { ymax = sy; }
+    }
+    if ((int)ymax + 1 < band_y0) {
+        return 1;
+    }
+    if ((int)ymin > band_y1 - 1) {
+        return 1;
+    }
+    return 0;
+}
+
 static double ndc_to_linear_depth(double ndc_z, double near_z, double far_z)
 {
     return (2.0 * near_z * far_z) / (far_z + near_z - (ndc_z * 2.0 - 1.0) * (far_z - near_z));
@@ -730,6 +759,9 @@ typedef struct band_job {
     unsigned tile;
     ws_mat4 view_proj;
     const shadow_map *shadow;
+    const clip_vertex *prep;    /* per-frame vertex prepass (shared, read-only) */
+    const screen_vertex *prep_scr; /* prepass screen coords (viewport-mapped) */
+    const uint32_t *obj_base;   /* prep[] offset of each object's first vertex */
     int band_y0;
     int band_y1;
     int count_triangles;  /* only band 0 counts triangle-level stats */
@@ -786,32 +818,53 @@ static void render_band(band_job *job)
         ws_mat3 normal_mat = ws_mat4_normal_matrix(obj->transform);
         const ws_mesh *mesh = obj->mesh;
         mat_ctx mctx = mat_ctx_build(&obj->material);
+        const clip_vertex *prepv =
+            job->prep != NULL ? &job->prep[job->obj_base[oi]] : NULL;
+        int band_may_reject = !job->count_triangles && prepv != NULL;
 
         for (uint32_t t = 0u; t + 3u <= mesh->index_count; t += 3u) {
             clip_vertex poly[3];
+            int have_all = 1;
             for (int k = 0; k < 3; ++k) {
                 uint32_t idx = mesh->indices[t + (uint32_t)k];
                 if (idx >= mesh->vertex_count) {
+                    have_all = 0;
                     continue;
                 }
-                poly[k] = make_clip_vertex(obj, mvp, normal_mat, &mesh->vertices[idx]);
+                poly[k] = prepv != NULL ? prepv[idx]
+                                        : make_clip_vertex(obj, mvp, normal_mat, &mesh->vertices[idx]);
+            }
+            if (band_may_reject && have_all && tri_band_disjoint(poly, h, band_y0, band_y1)) {
+                continue;
             }
             if (job->count_triangles) {
                 job->triangles_submitted += 1u;
             }
 
             clip_vertex clipped[4];
-            int cn = clip_near(poly, 3, clipped);
-            if (cn < 3) {
-                if (job->count_triangles) {
-                    job->triangles_clipped += 1u;
-                }
-                continue;
-            }
-
+            int cn;
             screen_vertex scr[4];
-            for (int k = 0; k < cn; ++k) {
-                to_screen(&clipped[k], w, h, &scr[k]);
+            if (prepv != NULL && have_all &&
+                poly[0].w + poly[0].z >= 0.0 && poly[1].w + poly[1].z >= 0.0 &&
+                poly[2].w + poly[2].z >= 0.0) {
+                /* Fast path: no vertex is behind the near plane, so clipping is
+                 * the identity and the screen coords come straight from the
+                 * prepass (identical to_screen arithmetic). */
+                cn = 3;
+                scr[0] = job->prep_scr[job->obj_base[oi] + mesh->indices[t + 0u]];
+                scr[1] = job->prep_scr[job->obj_base[oi] + mesh->indices[t + 1u]];
+                scr[2] = job->prep_scr[job->obj_base[oi] + mesh->indices[t + 2u]];
+            } else {
+                cn = clip_near(poly, 3, clipped);
+                if (cn < 3) {
+                    if (job->count_triangles) {
+                        job->triangles_clipped += 1u;
+                    }
+                    continue;
+                }
+                for (int k = 0; k < cn; ++k) {
+                    to_screen(&clipped[k], w, h, &scr[k]);
+                }
             }
             for (int k = 1; k + 1 < cn; ++k) {
                 screen_vertex tri[3] = {scr[0], scr[k], scr[k + 1]};
@@ -896,16 +949,69 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
          * failing the frame. */
     }
 
-    /* Split the image into row bands, one per worker. Triangle setup is
-     * recomputed per band (cheap relative to shading) so bands share no mutable
-     * state; the split is the same for every frame, so the result is
+    /* Per-frame vertex prepass: each vertex's clip transform, world position,
+     * normal and albedo are computed once here and shared read-only by every
+     * band. This is the same arithmetic make_clip_vertex would run inside each
+     * band, so the shaded result is bit-identical; it removes the per-band
+     * duplication that dominated setup for high-vertex-count meshes. */
+    clip_vertex *prep = NULL;
+    screen_vertex *prep_scr = NULL;
+    uint32_t *obj_base = NULL;
+    size_t prep_count = 0u;
+    for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
+        const ws_scene_object *obj = &scene->objects[oi];
+        if (obj->mesh != NULL && obj->mesh->vertices != NULL) {
+            prep_count += obj->mesh->vertex_count;
+        }
+    }
+    if (prep_count > 0u) {
+        prep = (clip_vertex *)malloc(prep_count * sizeof(clip_vertex));
+        prep_scr = (screen_vertex *)malloc(prep_count * sizeof(screen_vertex));
+        obj_base = (uint32_t *)malloc((size_t)scene->object_count * sizeof(uint32_t));
+    }
+    if (prep != NULL && prep_scr != NULL && obj_base != NULL) {
+        size_t cursor = 0u;
+        for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
+            const ws_scene_object *obj = &scene->objects[oi];
+            obj_base[oi] = (uint32_t)cursor;
+            if (obj->mesh == NULL || obj->mesh->vertices == NULL) {
+                continue;
+            }
+            ws_mat4 mvp = ws_mat4_multiply(view_proj, obj->transform);
+            ws_mat3 normal_mat = ws_mat4_normal_matrix(obj->transform);
+            const ws_mesh *mesh = obj->mesh;
+            for (uint32_t vi = 0u; vi < mesh->vertex_count; ++vi) {
+                clip_vertex c = make_clip_vertex(obj, mvp, normal_mat, &mesh->vertices[vi]);
+                prep[cursor + vi] = c;
+                /* Viewport map once, shared by every band. Equal to the per-band
+                 * to_screen() arithmetic, so the image is unchanged. */
+                to_screen(&c, (int)fb->width, (int)fb->height, &prep_scr[cursor + vi]);
+            }
+            cursor += mesh->vertex_count;
+        }
+    } else {
+        free(prep);
+        prep = NULL;
+        free(prep_scr);
+        prep_scr = NULL;
+        free(obj_base);
+        obj_base = NULL;
+    }
+
+    /* Split the image into row bands, one per worker. Vertex setup is shared
+     * across bands (see the prepass above) and every band writes only its own
+     * rows, so the split is the same for every frame and the result is
      * deterministic. */
     enum { MAX_BANDS = 64 };
     ws_sched *sched = NULL;
     (void)ws_sched_create_default(&sched);
     uint32_t band_count = 1u;
     if (sched != NULL) {
-        band_count = ws_sched_worker_count(sched) + 1u;
+        /* Many narrow bands give the scheduler enough work items to balance
+         * the uneven per-row cost (near rows shade far more pixels than far
+         * rows). Vertex setup is shared via the prepass, so extra bands are
+         * cheap. */
+        band_count = (ws_sched_worker_count(sched) + 1u) * 8u;
     }
     if (band_count > MAX_BANDS) {
         band_count = MAX_BANDS;
@@ -933,6 +1039,9 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
         j->tile = tile;
         j->view_proj = view_proj;
         j->shadow = shadow_ptr;
+        j->prep = prep;
+        j->prep_scr = prep_scr;
+        j->obj_base = obj_base;
         j->band_y0 = (int)y0;
         j->band_y1 = (int)y1;
         j->count_triangles = (active == 0u);
@@ -951,6 +1060,10 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
         }
     }
     ws_sched_destroy(sched);
+
+    free(prep);
+    free(prep_scr);
+    free(obj_base);
 
     if (stats != NULL) {
         /* Triangle-level counters come from band 0 alone (they are image-wide);
