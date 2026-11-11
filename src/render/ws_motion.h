@@ -37,6 +37,8 @@ typedef struct ws_motion_metrics {
 /* Per-scene reference thresholds. A metric equal to its threshold passes. */
 typedef struct ws_motion_spec {
     const char *scene_id;        /* reference scene the motion belongs to */
+    int species;                 /* ws_species_kind the run drives (see
+                                  * src/life/ws_species.h) */
     double min_forward_m;        /* the body must actually travel forward */
     double min_speed_mps;        /* lower bound on mean forward speed */
     double max_speed_mps;        /* upper bound (a walk, not a launch) */
@@ -58,14 +60,18 @@ typedef struct ws_motion_spec {
 /* Tool-level: the same seed did not reproduce identical metrics. */
 #define WS_MOTION_FAIL_DETERMINISM 0x80u
 
-/* Drive the reference quadruped for a fixed simulated interval from a
- * seed-varied start and measure its motion. Deterministic: the same seed
- * reproduces identical metrics. `seconds` is the simulated interval to measure
- * after the body has settled. */
-ws_result ws_motion_measure(uint64_t seed, double seconds, ws_motion_metrics *out);
+/* Drive a species' reference quadruped for a fixed simulated interval from a
+ * seed-varied start and measure its motion. `species` is a ws_species_kind
+ * (src/life/ws_species.h); each species uses its own body profile and gait.
+ * Deterministic: the same species and seed reproduce identical metrics.
+ * `seconds` is the simulated interval to measure after the body has settled. */
+ws_result ws_motion_measure(int species, uint64_t seed, double seconds,
+                            ws_motion_metrics *out);
 
 /* The product reference scenes that carry a motion claim, and their
- * thresholds. Currently the P5 reference quadruped scene (creature_walk). */
+ * thresholds: the P5 reference quadruped scene (creature_walk, red deer) plus
+ * the other three representative species (fox, rabbit, boar), so the whole
+ * four-species body/gait catalogue is covered by the same model standard. */
 size_t ws_motion_spec_count(void);
 const ws_motion_spec *ws_motion_spec_at(size_t index);
 

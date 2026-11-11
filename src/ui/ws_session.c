@@ -249,18 +249,25 @@ static void actor_init(ws_session *s, ws_actor *a, int species, uint32_t agent_i
     a->species = species;
     a->agent_index = agent_index;
     a->terrain = &s->env.terrain;
-    (void)ws_creature_init(&a->body, 1.0 / 500.0, 9.80665, 30, 0.2,
-                           a->storage.bodies, 8u, a->storage.joints, 8u,
-                           a->storage.feet, 4u);
     const ws_species_info *si = ws_species_get((ws_species_kind)species);
     const ws_species_profile *sp = &si->body;
+    /* Per-species integration step (fixed steps per gait cycle) and gait
+     * init: a small, fast-stepping species is under-resolved at the deer's
+     * 1/500 s step and its walk goes unstable (NaN poses). The deer keeps
+     * 1/500 s exactly. */
+    double dt = (1.0 / 500.0) * (1.4 / sp->gait_freq);
+    (void)ws_creature_init(&a->body, dt, 9.80665, 30, 0.2,
+                           a->storage.bodies, 8u, a->storage.joints, 8u,
+                           a->storage.feet, 4u);
     ws_quadruped_build(&a->body, &a->storage, sp, 0.0, &a->parts);
-    ws_gait_state_init(&a->gait);
+    ws_gait_state_init_for(&a->gait, sp);
     /* Settle on flat ground so the animal starts standing, then it will follow
      * the real terrain as the agent moves. */
+    double bal_kp, bal_kd;
+    ws_quadruped_default_balance(sp, &bal_kp, &bal_kd);
     ws_creature_set_ground(&a->body, actor_ground_cb, a);
     for (int i = 0; i < 200; ++i) {
-        ws_quadruped_balance(&a->body, a->parts.torso, 4000.0, 500.0, 0.0);
+        ws_quadruped_balance(&a->body, a->parts.torso, bal_kp, bal_kd, 0.0);
         ws_creature_step(&a->body);
     }
     a->active = 1;
@@ -314,13 +321,15 @@ static void step_actors(ws_session *s, double dt)
         a->heading = ag->heading;
         const ws_species_info *si = ws_species_get((ws_species_kind)a->species);
         double speed = ws_species_walk_speed((ws_species_kind)a->species);
+        double bal_kp, bal_kd;
+        ws_quadruped_default_balance(&si->body, &bal_kp, &bal_kd);
         int sub = (int)(dt / a->body.dt);
         if (sub < 1) {
             sub = 1;
         }
         for (int i = 0; i < sub; ++i) {
             ws_quadruped_walk(&a->body, &a->parts, &si->body, &a->gait, speed);
-            ws_quadruped_balance(&a->body, a->parts.torso, 4000.0, 500.0, 0.0);
+            ws_quadruped_balance(&a->body, a->parts.torso, bal_kp, bal_kd, 0.0);
             ws_creature_step(&a->body);
         }
     }

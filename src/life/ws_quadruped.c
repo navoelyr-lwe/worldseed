@@ -87,23 +87,51 @@ ws_result ws_quadruped_build(ws_creature *c, ws_quad_storage *st,
     const double hl_up = l1 * 0.5;
     const double hl_lo = l2 * 0.5;
 
+    /* Scale every proportion and mass/strength budget from the species
+     * profile, not from a fixed deer-sized template. The reference deer
+     * (shoulder 1.05 m, mass 110 kg) maps to scale 1.0 and density 1.0, so its
+     * geometry, mass, inertia and joint torques are unchanged bit-for-bit; the
+     * smaller species get a body that is actually their size, with a joint
+     * torque budget that scales with their mass and limb length. Without this,
+     * a 1.8 kg rabbit drove a 110 kg-torso with deer-scale torque limits and
+     * the run exploded (docs/19 §4.3). */
+    const double scale = p->shoulder_h / 1.05;
+    double mass_scale = p->total_mass / 110.0;
+    if (mass_scale <= 0.0) {
+        mass_scale = 1.0;
+    }
+    /* Body density: mass_scale / scale^3 makes the integrated link mass match
+     * the species' total mass. The reference deer gives exactly 1.0. */
+    const double density_scale = mass_scale / (scale * scale * scale);
+    /* Joint torque, stiffness and the torso balance torque all scale with
+     * mass x length, so every species' muscles hold its own weight. The
+     * lighter, faster-stepping species need proportionally more constraint
+     * iterations for the fixed step to converge (ws_creature_iterations_for);
+     * scaling stiffness down instead let the legs sag, and scaling it up made
+     * the small species oscillate above the solver's stable band. */
+    const double torque_scale = mass_scale * scale;
+
     ws_cbody *bd = st->bodies;
 
-    /* Torso (index 0): horizontal, 1.1 m long. */
+    /* Torso (index 0): horizontal, body length scaled from the profile. */
     const uint8_t torso_c[3] = {120u, 88u, 62u};
-    ws_cbody_make_box(&bd[0], 0.55, 0.22, 0.20, 310.0, torso_c);
+    const double torso_half = 0.55 * scale;
+    ws_cbody_make_box(&bd[0], torso_half, 0.22 * scale, 0.20 * scale,
+                      310.0 * density_scale, torso_c);
     bd[0].px = 0.0;
     bd[0].py = H;
     bd[0].angle = 0.0;
 
     /* Neck (index 1) and head (index 2). */
     const uint8_t neck_c[3] = {132u, 100u, 70u};
-    ws_cbody_make_box(&bd[1], 0.25, 0.09, 0.10, 700.0, neck_c);
+    ws_cbody_make_box(&bd[1], 0.25 * scale, 0.09 * scale, 0.10 * scale,
+                      700.0 * density_scale, neck_c);
     const double neck_ang = 0.45; /* forward and up */
-    place_link(&bd[1], 0.50, H + 0.10, neck_ang);
+    place_link(&bd[1], 0.50 * scale, H + 0.10 * scale, neck_ang);
 
     const uint8_t head_c[3] = {140u, 108u, 78u};
-    ws_cbody_make_box(&bd[2], 0.15, 0.10, 0.09, 700.0, head_c);
+    ws_cbody_make_box(&bd[2], 0.15 * scale, 0.10 * scale, 0.09 * scale,
+                      700.0 * density_scale, head_c);
     {
         double nx = bd[1].px + bd[1].half_len * cos(bd[1].angle);
         double ny = bd[1].py + bd[1].half_len * sin(bd[1].angle);
@@ -114,13 +142,17 @@ ws_result ws_quadruped_build(ws_creature *c, ws_quad_storage *st,
      * than the leg length so the knees are bent at rest; a straight leg sits on
      * the singular pose that cannot resist horizontal load. */
     const uint8_t leg_c[3] = {104u, 74u, 52u};
-    ws_cbody_make_box(&bd[3], hl_up, 0.05, 0.05, 1450.0, leg_c);
-    ws_cbody_make_box(&bd[4], hl_lo, 0.035, 0.035, 1490.0, leg_c);
+    ws_cbody_make_box(&bd[3], hl_up, 0.05 * scale, 0.05 * scale,
+                      1450.0 * density_scale, leg_c);
+    ws_cbody_make_box(&bd[4], hl_lo, 0.035 * scale, 0.035 * scale,
+                      1490.0 * density_scale, leg_c);
     place_leg_ik(&bd[3], &bd[4], half_stance, H, half_stance, ground_y,
                  l1, l2, 1.0);
 
-    ws_cbody_make_box(&bd[5], hl_up, 0.05, 0.05, 1450.0, leg_c);
-    ws_cbody_make_box(&bd[6], hl_lo, 0.035, 0.035, 1490.0, leg_c);
+    ws_cbody_make_box(&bd[5], hl_up, 0.05 * scale, 0.05 * scale,
+                      1450.0 * density_scale, leg_c);
+    ws_cbody_make_box(&bd[6], hl_lo, 0.035 * scale, 0.035 * scale,
+                      1490.0 * density_scale, leg_c);
     place_leg_ik(&bd[5], &bd[6], -half_stance, H, -half_stance, ground_y,
                  l1, l2, 1.0);
 
@@ -155,17 +187,19 @@ ws_result ws_quadruped_build(ws_creature *c, ws_quad_storage *st,
         memset(&j, 0, sizeof(j));
         j.a = jd[i].a;
         j.b = jd[i].b;
-        j.lax = jd[i].lax;
-        j.lay = jd[i].lay;
-        j.lbx = jd[i].lbx;
-        j.lby = jd[i].lby;
+        /* Anchor offsets are body-local, so they scale with the body. Joint
+         * angle limits are shape-independent (radians) and stay as defined. */
+        j.lax = jd[i].lax * scale;
+        j.lay = jd[i].lay * scale;
+        j.lbx = jd[i].lbx * scale;
+        j.lby = jd[i].lby * scale;
         j.min_angle = jd[i].lo;
         j.max_angle = jd[i].hi;
         j.motor_enabled = 1;
         j.motor_target = 0.0;
-        j.motor_max_torque = jd[i].tmax;
-        j.motor_kp = jd[i].kp;
-        j.motor_kd = jd[i].kd;
+        j.motor_max_torque = jd[i].tmax * torque_scale;
+        j.motor_kp = jd[i].kp * torque_scale;
+        j.motor_kd = jd[i].kd * torque_scale;
         if (ws_creature_add_joint(c, &j) != WS_OK) {
             return WS_ERR_CAPACITY;
         }
@@ -248,6 +282,27 @@ void ws_quadruped_balance(ws_creature *c, int torso, double kp, double kd,
     b->extra_torque = t;
 }
 
+void ws_quadruped_default_balance(const ws_species_profile *p,
+                                  double *out_kp, double *out_kd)
+{
+    /* Same mass x length scaling the builder applies to the joint torque
+     * budget. The reference deer (shoulder 1.05 m, mass 110 kg) maps to 1.0. */
+    double torque_scale = 1.0;
+    if (p != NULL) {
+        double scale = p->shoulder_h / 1.05;
+        double mass_scale = p->total_mass / 110.0;
+        if (mass_scale > 0.0 && scale > 0.0) {
+            torque_scale = mass_scale * scale;
+        }
+    }
+    if (out_kp != NULL) {
+        *out_kp = 4000.0 * torque_scale;
+    }
+    if (out_kd != NULL) {
+        *out_kd = 500.0 * torque_scale;
+    }
+}
+
 /* World joint angles for a two-link leg reaching from the hip to the foot.
  * `bend` selects the elbow side. Mirrors place_leg_ik, but returns angles. */
 static void ik_angles(double hip_x, double hip_y, double foot_x, double foot_y,
@@ -289,6 +344,36 @@ void ws_gait_state_init(ws_gait_state *g)
     g->foot_lift = 0.08;
     g->kv = 0.30;
     g->phase = 0.0;
+}
+
+void ws_gait_state_init_for(ws_gait_state *g, const ws_species_profile *p)
+{
+    if (g == NULL) {
+        return;
+    }
+    ws_gait_state_init(g);
+    if (p == NULL || p->shoulder_h <= 0.0) {
+        return;
+    }
+    /* Swing apex scales with body size; the reference deer (shoulder 1.05 m)
+     * maps to the default 0.08 m. The foot-placement gain kv is a time, but the
+     * offset it commands (kv * speed error) has to stay inside the leg's
+     * horizontal reach. A short-legged species integrated at the deer's default
+     * gain saturates its IK at startup and rocks instead of walking, so scale kv
+     * by the reach relative to the reference deer. The deer maps to exactly 1.0
+     * and keeps the default 0.08 m and 0.30 s. */
+    double scale = p->shoulder_h / 1.05;
+    g->foot_lift = 0.08 * scale;
+    double s = p->leg_upper + p->leg_lower;
+    double reach = (s > p->shoulder_h)
+                       ? sqrt(s * s - p->shoulder_h * p->shoulder_h)
+                       : 0.0;
+    /* Reference deer reach, computed the same way so the ratio is exactly 1.0
+     * for the deer and its default gain is reproduced bit-for-bit. */
+    const double deer_reach = sqrt(1.2 * 1.2 - 1.05 * 1.05);
+    if (reach > 0.0) {
+        g->kv = 0.30 * (reach / deer_reach);
+    }
 }
 
 void ws_quadruped_walk(ws_creature *c, const ws_quad_parts *parts,
@@ -384,7 +469,7 @@ ws_result ws_quadruped_walk_steer(ws_creature *c, const ws_quad_parts *parts,
         return WS_ERR_NULL_POINTER;
     }
     if (!g->initialised) {
-        ws_gait_state_init(g);
+        ws_gait_state_init_for(g, p);
     }
     ws_quadruped_walk(c, parts, p, g, v_des);
     g->yaw_rate = yaw_rate;
