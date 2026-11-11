@@ -409,6 +409,69 @@ static int test_soundscape_from_ecology(void)
     return 1;
 }
 
+/* Master volume (settings menu "Master volume") scales the mixed output and
+ * clamps to 0..1; at gain 0 the mix is silent. It never changes the voice
+ * state, so the same trigger set still produces the same voices. */
+static int test_master_volume(void)
+{
+    WS_CHECK(ws_audio_master_gain(NULL) == 1.0);
+
+    ws_audio a;
+    ws_audio_init(&a, WS_AUDIO_SAMPLE_RATE);
+    WS_CHECK(ws_audio_master_gain(&a) == 1.0);
+
+    /* Out-of-range gains clamp. */
+    ws_audio_set_master_gain(&a, -3.0);
+    WS_CHECK(ws_audio_master_gain(&a) == 0.0);
+    ws_audio_set_master_gain(&a, 9.0);
+    WS_CHECK(ws_audio_master_gain(&a) == 1.0);
+    ws_audio_set_master_gain(&a, 0.5);
+    WS_CHECK(ws_audio_master_gain(&a) == 0.5);
+    ws_audio_set_master_gain(NULL, 0.5); /* must not crash */
+
+    uint32_t frames = WS_AUDIO_SAMPLE_RATE / 4u;
+
+    /* Gain 1.0: real signal. */
+    ws_audio full;
+    ws_audio_init(&full, WS_AUDIO_SAMPLE_RATE);
+    (void)ws_audio_trigger_event(&full, WS_LIFE_EV_KILLED, 0.0, 0.0);
+    int16_t hi[WS_AUDIO_SAMPLE_RATE];
+    WS_CHECK(ws_audio_mix(&full, hi, frames) == WS_OK);
+    int hi_peak = 0;
+    for (uint32_t i = 0; i < frames * 2u; ++i) {
+        int v = hi[i] < 0 ? -hi[i] : hi[i];
+        if (v > hi_peak) { hi_peak = v; }
+    }
+    WS_CHECK(hi_peak > 0);
+
+    /* Gain 0.0: the same trigger, muted output. */
+    ws_audio mute;
+    ws_audio_init(&mute, WS_AUDIO_SAMPLE_RATE);
+    ws_audio_set_master_gain(&mute, 0.0);
+    (void)ws_audio_trigger_event(&mute, WS_LIFE_EV_KILLED, 0.0, 0.0);
+    WS_CHECK(ws_audio_active_voices(&mute) == 1u); /* voice still sounds */
+    int16_t lo[WS_AUDIO_SAMPLE_RATE];
+    WS_CHECK(ws_audio_mix(&mute, lo, frames) == WS_OK);
+    for (uint32_t i = 0; i < frames * 2u; ++i) {
+        WS_CHECK(lo[i] == 0);
+    }
+
+    /* A louder gain yields a strictly larger peak than a quieter one. */
+    ws_audio quiet;
+    ws_audio_init(&quiet, WS_AUDIO_SAMPLE_RATE);
+    ws_audio_set_master_gain(&quiet, 0.25);
+    (void)ws_audio_trigger_event(&quiet, WS_LIFE_EV_KILLED, 0.0, 0.0);
+    int16_t mid[WS_AUDIO_SAMPLE_RATE];
+    WS_CHECK(ws_audio_mix(&quiet, mid, frames) == WS_OK);
+    int mid_peak = 0;
+    for (uint32_t i = 0; i < frames * 2u; ++i) {
+        int v = mid[i] < 0 ? -mid[i] : mid[i];
+        if (v > mid_peak) { mid_peak = v; }
+    }
+    WS_CHECK(mid_peak < hi_peak);
+    return 1;
+}
+
 int main(void)
 {
     const ws_test_case cases[] = {
@@ -421,7 +484,8 @@ int main(void)
         {"occlusion lifts only camera", test_director_occlusion},
         {"soundscape deterministic", test_soundscape_event_linked_and_deterministic},
         {"soundscape produces signal", test_soundscape_produces_signal},
-        {"soundscape from ecology run", test_soundscape_from_ecology}
+        {"soundscape from ecology run", test_soundscape_from_ecology},
+        {"master volume scales output", test_master_volume}
     };
     return ws_test_run("cinema", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

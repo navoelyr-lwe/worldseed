@@ -39,6 +39,7 @@ typedef struct live_state {
     int have_cursor;
     POINT last_cursor;
     double last_time_s;
+    uint32_t want_w, want_h; /* last viewport the session asked for */
 } live_state;
 
 static void toggle_fullscreen(HWND hwnd, live_state *st)
@@ -59,6 +60,21 @@ static void toggle_fullscreen(HWND hwnd, live_state *st)
 static void handle_key(live_state *st, WPARAM key)
 {
     ws_session *s = st->session;
+    int menu = ws_session_settings_visible(s);
+    /* While the settings menu is open its navigation keys take over, so arrow
+     * keys and Enter drive the menu instead of the camera or the view. */
+    if (menu) {
+        switch (key) {
+        case VK_UP: case 'W': (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, -1.0); return;
+        case VK_DOWN: case 'S': (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0); return;
+        case VK_LEFT: case 'A': (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0); return;
+        case VK_RIGHT: case 'D': (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0); return;
+        case VK_RETURN: (void)ws_session_apply_command(s, WS_CMD_SETTINGS_APPLY, 0.0); return;
+        case 'B': (void)ws_session_apply_command(s, WS_CMD_SETTINGS_DEFAULTS, 0.0); return;
+        case VK_ESCAPE: case 'O': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0); return;
+        default: break;
+        }
+    }
     switch (key) {
     case VK_ESCAPE: st->running = 0; break;
     case 'Q': (void)ws_session_apply_command(s, WS_CMD_QUIT, 0.0); st->running = 0; break;
@@ -90,8 +106,29 @@ static void handle_key(live_state *st, WPARAM key)
     }
 }
 
+static void live_sync_window_size(HWND hwnd, live_state *st)
+{
+    if (st->fullscreen) {
+        return; /* full screen is the screen; the menu's resolution is windowed */
+    }
+    ws_settings v;
+    if (ws_session_get_settings(st->session, &v) != WS_OK) {
+        return;
+    }
+    if (v.width == st->want_w && v.height == st->want_h) {
+        return;
+    }
+    st->want_w = v.width;
+    st->want_h = v.height;
+    RECT rc = {0, 0, (LONG)v.width, (LONG)v.height};
+    (void)AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
+    (void)SetWindowPos(hwnd, NULL, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
+                       SWP_NOMOVE | SWP_NOZORDER);
+}
+
 static int live_frame(HWND hwnd, live_state *st)
 {
+    live_sync_window_size(hwnd, st);
     RECT rc;
     if (!GetClientRect(hwnd, &rc)) {
         return 0;
@@ -140,16 +177,19 @@ static int live_frame(HWND hwnd, live_state *st)
     if (dt > 0.25) { dt = 0.25; }
     if (dt < 0.0) { dt = 0.0; }
 
-    /* Keyboard camera movement for the free view. */
+    /* Keyboard camera movement for the free view. Suppressed while the settings
+     * menu is open, so the menu keys never also fly the camera. */
     double fwd = 0.0, right = 0.0, up = 0.0;
-    if (GetAsyncKeyState(VK_UP) & 0x8000) { fwd += 1.0; }
-    if (GetAsyncKeyState(VK_DOWN) & 0x8000) { fwd -= 1.0; }
-    if (GetAsyncKeyState(VK_LEFT) & 0x8000) { right -= 1.0; }
-    if (GetAsyncKeyState(VK_RIGHT) & 0x8000) { right += 1.0; }
-    if (GetAsyncKeyState('W') & 0x8000) { fwd += 1.0; }
-    if (GetAsyncKeyState('S') & 0x8000) { up += 1.0; }
-    if (GetAsyncKeyState('A') & 0x8000) { right -= 1.0; }
-    if (GetAsyncKeyState('D') & 0x8000) { right += 1.0; }
+    if (!ws_session_settings_visible(st->session)) {
+        if (GetAsyncKeyState(VK_UP) & 0x8000) { fwd += 1.0; }
+        if (GetAsyncKeyState(VK_DOWN) & 0x8000) { fwd -= 1.0; }
+        if (GetAsyncKeyState(VK_LEFT) & 0x8000) { right -= 1.0; }
+        if (GetAsyncKeyState(VK_RIGHT) & 0x8000) { right += 1.0; }
+        if (GetAsyncKeyState('W') & 0x8000) { fwd += 1.0; }
+        if (GetAsyncKeyState('S') & 0x8000) { up += 1.0; }
+        if (GetAsyncKeyState('A') & 0x8000) { right -= 1.0; }
+        if (GetAsyncKeyState('D') & 0x8000) { right += 1.0; }
+    }
     (void)ws_session_camera_input(st->session, fwd, right, up, 0.0, 0.0, dt);
 
     (void)ws_session_step(st->session, dt);
@@ -157,7 +197,11 @@ static int live_frame(HWND hwnd, live_state *st)
         return 0;
     }
     ws_hud_options ho = ws_hud_options_default();
-    ho.scale = (st->fb.width >= 1600u) ? 2 : 1;
+    /* Text size follows the user's saved choice (settings menu "Text size"),
+     * but never shrinks below a legible minimum on a large framebuffer. */
+    int want_scale = ws_session_hud_scale(st->session);
+    if (st->fb.width >= 1600u && want_scale < 2) { want_scale = 2; }
+    ho.scale = want_scale < 1 ? 1 : want_scale;
     ws_hud_draw(&st->fb, st->session, &ho);
 
     size_t count = (size_t)w * h;
@@ -223,7 +267,8 @@ static LRESULT CALLBACK live_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (st != NULL) { st->have_cursor = 0; }
         return 0;
     case WM_MOUSEMOVE:
-        if (st != NULL && st->have_cursor && (wp & MK_LBUTTON)) {
+        if (st != NULL && st->have_cursor && (wp & MK_LBUTTON) &&
+            !ws_session_settings_visible(st->session)) {
             int mx = GET_X_LPARAM(lp);
             int my = GET_Y_LPARAM(lp);
             double dx = (double)(mx - st->last_cursor.x);

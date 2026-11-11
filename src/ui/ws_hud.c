@@ -333,52 +333,38 @@ static void draw_stats_panel(ws_framebuffer *fb, const ws_session *s, int scale)
     ws_font_draw(fb, x, cy, buf, scale, COL_DIM);
 }
 
-/* --- settings panel (docs/17 item 9) ------------------------------------ */
+/* --- settings menu (docs/17 item 9) ------------------------------------- */
 
 static void draw_settings_panel(ws_framebuffer *fb, const ws_session *s, int scale)
 {
     uint32_t line_h = WS_FONT_GLYPH_H * (uint32_t)scale + 3u;
     int x = 6;
     int y = 6 + (int)(line_h * 12u + 8u) + 6;
-    uint32_t w = 250u * (uint32_t)scale;
-    uint32_t h = line_h * 10u + 8u;
+    uint32_t w = 320u * (uint32_t)scale;
+    uint32_t h = line_h * (uint32_t)(WS_SET_ITEM_COUNT + 3) + 10u;
     panel(fb, x - 3, y - 3, w, h);
 
-    struct ws_settings v;
-    if (ws_session_get_settings(s, &v) != WS_OK) {
-        return;
+    int cursor = ws_session_settings_cursor(s);
+    char label[64];
+    char value[48];
+    char buf[128];
+    int cy = y;
+    ws_font_draw(fb, x, cy, "SETTINGS  (up/down move, left/right change)", scale,
+                 COL_ACCENT);
+    cy += (int)line_h;
+
+    for (int i = 0; i < WS_SET_ITEM_COUNT; ++i) {
+        if (ws_session_settings_item(s, i, label, sizeof(label), value, sizeof(value)) != WS_OK) {
+            continue;
+        }
+        int sel = (i == cursor);
+        const uint8_t *col = sel ? COL_ACCENT : COL_TEXT;
+        snprintf(buf, sizeof(buf), "%c %-22s %s", sel ? '>' : ' ', label, value);
+        ws_font_draw(fb, x, cy, buf, scale, col);
+        cy += (int)line_h;
     }
 
-    char buf[256];
-    int cy = y;
-    ws_font_draw(fb, x, cy, "SETTINGS (persisted)", scale, COL_ACCENT);
-    cy += (int)line_h;
-
-    snprintf(buf, sizeof(buf), "resolution %ux%u", v.width, v.height);
-    ws_font_draw(fb, x, cy, buf, scale, COL_TEXT); cy += (int)line_h;
-
-    snprintf(buf, sizeof(buf), "render scale %s",
-             v.render_scale == 0 ? "auto" : "fixed");
-    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
-
-    snprintf(buf, sizeof(buf), "start view %s", ws_view_mode_name(v.view));
-    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
-
-    char clock[8];
-    clock_string(v.time_of_day_s, clock, sizeof(clock));
-    snprintf(buf, sizeof(buf), "start time %s", clock);
-    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
-
-    snprintf(buf, sizeof(buf), "shadows %s  fullscreen %s",
-             v.shadows ? "on" : "off", v.fullscreen ? "on" : "off");
-    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
-
-    snprintf(buf, sizeof(buf), "seed %llu", (unsigned long long)v.seed);
-    ws_font_draw(fb, x, cy, buf, scale, COL_DIM); cy += (int)line_h;
-
-    ws_font_draw(fb, x, cy, "Saved on clean exit; edit the", scale, COL_TEXT);
-    cy += (int)line_h;
-    ws_font_draw(fb, x, cy, "config file to change directly.", scale, COL_TEXT);
+    ws_font_draw(fb, x, cy, "O / Esc  close   B  reset defaults", scale, COL_DIM);
 }
 
 /* --- replay panel (docs/17 item 8) -------------------------------------- */
@@ -436,7 +422,8 @@ static const char *HELP_LINES[] = {
     "  N / P      select next / previous animal",
     "  G          toggle statistics panel",
     "  T          toggle directional shadows",
-    "  O          toggle settings panel",
+    "  O          toggle settings menu",
+    "  (menu) up/down move, left/right change, enter apply",
     "  Arrow keys / WASD  fly the free camera",
     "  Mouse drag look (free view)",
     "  [ / ]      time of day -/+ 1 hour",

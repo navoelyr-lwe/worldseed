@@ -82,7 +82,11 @@ typedef enum ws_session_command {
     WS_CMD_REPLAY_LIVE = 21,  /* leave replay and jump to the newest state */
     WS_CMD_REPLAY_STEP_BACK = 22,    /* show one older recorded sample */
     WS_CMD_REPLAY_STEP_FORWARD = 23, /* show one newer recorded sample */
-    WS_CMD_STEP_ONCE = 24            /* advance exactly one fixed world tick */
+    WS_CMD_STEP_ONCE = 24,           /* advance exactly one fixed world tick */
+    WS_CMD_SETTINGS_MOVE = 25,       /* arg = signed rows to move the menu cursor */
+    WS_CMD_SETTINGS_ADJUST = 26,     /* arg = signed delta on the selected row */
+    WS_CMD_SETTINGS_APPLY = 27,      /* apply the selected row's value */
+    WS_CMD_SETTINGS_DEFAULTS = 28    /* reset the menu selection to defaults */
 } ws_session_command;
 
 typedef struct ws_session_config {
@@ -157,6 +161,62 @@ double ws_session_replay_live_time_s(const ws_session *s);
 ws_result ws_session_apply_settings(ws_session *s, const struct ws_settings *settings);
 ws_result ws_session_get_settings(const ws_session *s, struct ws_settings *out);
 uint64_t ws_session_seed(const ws_session *s);
+
+/* --- interactive settings menu (docs/17 item 9) ------------------------- */
+
+/* Rows of the interactive settings menu, in draw order. */
+typedef enum ws_settings_item {
+    WS_SET_ITEM_WIDTH = 0,
+    WS_SET_ITEM_HEIGHT = 1,
+    WS_SET_ITEM_RENDER_SCALE = 2,
+    WS_SET_ITEM_VIEW = 3,
+    WS_SET_ITEM_TIME = 4,
+    WS_SET_ITEM_SPEED = 5,
+    WS_SET_ITEM_SHADOWS = 6,
+    WS_SET_ITEM_STATS = 7,
+    WS_SET_ITEM_HELP = 8,
+    WS_SET_ITEM_HUD_SCALE = 9,
+    WS_SET_ITEM_VOLUME = 10,
+    WS_SET_ITEM_CAM_SPEED = 11,
+    WS_SET_ITEM_LOOK_SENS = 12,
+    WS_SET_ITEM_SAVE = 13,
+    WS_SET_ITEM_RELOAD = 14,
+    WS_SET_ITEM_COUNT = 15
+} ws_settings_item;
+
+/* Row the cursor currently sits on (0 .. WS_SET_ITEM_COUNT-1). */
+int ws_session_settings_cursor(const ws_session *s);
+
+/* Label and formatted value of a menu row, for the HUD. Both strings are
+ * written into caller buffers (NUL-terminated). Returns WS_OK, or
+ * WS_ERR_INVALID_ARGUMENT for an out-of-range row. */
+ws_result ws_session_settings_item(const ws_session *s, int item,
+                                   char *label, size_t label_cap,
+                                   char *value, size_t value_cap);
+
+/* Value of a row as a stable integer token, for evidence/testing: e.g. the
+ * resolution width, the view id, the shadow flag. */
+int ws_session_settings_item_value(const ws_session *s, int item);
+
+/* Persist the current observer settings to the session's settings file (the
+ * "Save now" row and the WS_CMD_SETTINGS_APPLY on it). Returns WS_OK even when
+ * there is no settings path configured (a no-op), so the UI never fails. */
+ws_result ws_session_save_settings_file(ws_session *s);
+
+/* Set the settings file path used by the menu's save row. Copied; a NULL path
+ * disables persistence. Longer paths are rejected with WS_ERR_INVALID_ARGUMENT. */
+ws_result ws_session_set_settings_path(ws_session *s, const char *path);
+
+/* Current HUD/UI text scale (1 = small, 2 = large), the "Text size" row. */
+int ws_session_hud_scale(const ws_session *s);
+
+/* Current master audio volume percent (0..100), the "Master volume" row. */
+int ws_session_volume(const ws_session *s);
+
+/* Current free-camera move speed percent (25..400) and mouse-look sensitivity
+ * percent (25..400), the "Camera speed" and "Look sensitivity" rows. */
+int ws_session_camera_speed_pct(const ws_session *s);
+int ws_session_look_sensitivity_pct(const ws_session *s);
 
 /* Frames and wall time of the most recent render, for the performance HUD. */
 void ws_session_perf(const ws_session *s, double *out_last_frame_ms,

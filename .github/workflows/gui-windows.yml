@@ -120,6 +120,8 @@ jobs:
           if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "shadows_verified=1" -Quiet)) { exit 1 }
           # single-step time control (docs/17) is proven in the same manifest.
           if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "single_step_verified=1" -Quiet)) { exit 1 }
+          # interactive settings menu (docs/17 item 9) is proven in the same manifest.
+          if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "settings_menu_verified=1" -Quiet)) { exit 1 }
 
       - name: Replay evidence on isolated runner
         shell: pwsh

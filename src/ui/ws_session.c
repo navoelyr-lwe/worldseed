@@ -78,6 +78,12 @@ struct ws_session {
     int stats_visible;
     int shadows_visible;
     int settings_visible;
+    int settings_cursor;   /* interactive menu row (docs/17 item 9) */
+    int hud_scale;         /* HUD/UI text scale: 1 small, 2 large */
+    int render_scale;      /* windowed internal resolution divisor (0 = auto) */
+    int volume;            /* master audio volume percent 0..100 */
+    int cam_speed_pct;     /* free-camera move speed percent 25..400 */
+    int look_sens_pct;     /* mouse-look sensitivity percent 25..400 */
     int speed_index;
     double time_of_day_s;
 
@@ -92,6 +98,7 @@ struct ws_session {
     uint64_t frames;
 
     char save_path[512]; /* default checkpoint path for the S/L keys */
+    char settings_path[512]; /* settings file for the menu's save row */
     double tick_accumulator_s; /* leftover wall time carried between steps */
 
     /* Replay recording (docs/17 item 8): a ring of whole-world checkpoints. */
@@ -524,7 +531,13 @@ ws_result ws_session_create(ws_session **out, const ws_session_config *cfg)
     s->speed_index = 2; /* 1.0x */
     s->selected = -1;
     s->time_of_day_s = s->config.start_time_of_day_s;
+    s->hud_scale = 1;
+    s->volume = 70;
+    s->cam_speed_pct = 100;
+    s->look_sens_pct = 100;
+    s->settings_cursor = WS_SET_ITEM_WIDTH;
     snprintf(s->save_path, sizeof(s->save_path), "worldseed-checkpoint.wss");
+    s->settings_path[0] = '\0';
 
     ws_world_host_config hc = ws_world_host_config_default(s->config.seed, s->config.world_uid);
     if (ws_world_host_init(&s->host, &hc) != WS_OK) {
@@ -576,6 +589,89 @@ void ws_session_destroy(ws_session *s)
 }
 
 /* --- commands ----------------------------------------------------------- */
+
+static void settings_menu_clamp_cursor(ws_session *s)
+{
+    if (s->settings_cursor < 0) { s->settings_cursor = 0; }
+    if (s->settings_cursor >= WS_SET_ITEM_COUNT) {
+        s->settings_cursor = WS_SET_ITEM_COUNT - 1;
+    }
+}
+
+/* Change the value of the row the cursor is on by `delta` (used by the left and
+ * right keys, and by apply for the toggle rows). All of this is observer state:
+ * window/text options, view, clock, panel/shadow visibility, speed and
+ * save/load. None of it reaches the world, so the digest is unaffected. */
+static void settings_menu_adjust(ws_session *s, int delta)
+{
+    int step = delta < 0 ? -1 : (delta > 0 ? 1 : 0);
+    switch (s->settings_cursor) {
+    case WS_SET_ITEM_WIDTH:
+        if (step < 0) {
+            s->config.viewport_w = s->config.viewport_w > 1280u
+                                   ? s->config.viewport_w - 1280u : 1280u;
+        } else if (step > 0) {
+            s->config.viewport_w += 1280u;
+        }
+        break;
+    case WS_SET_ITEM_HEIGHT:
+        if (step < 0) {
+            s->config.viewport_h = s->config.viewport_h > 720u
+                                   ? s->config.viewport_h - 720u : 720u;
+        } else if (step > 0) {
+            s->config.viewport_h += 720u;
+        }
+        break;
+    case WS_SET_ITEM_RENDER_SCALE:
+        if (step < 0 && s->render_scale > 0) { s->render_scale -= 1; }
+        else if (step > 0 && s->render_scale < 4) { s->render_scale += 1; }
+        break;
+    case WS_SET_ITEM_VIEW:
+        s->view_mode = (s->view_mode + (step > 0 ? 1 : (step < 0 ? WS_VIEW_COUNT - 1 : 0)))
+                       % WS_VIEW_COUNT;
+        break;
+    case WS_SET_ITEM_TIME:
+        s->time_of_day_s += (double)step * 3600.0;
+        while (s->time_of_day_s < 0.0) { s->time_of_day_s += 86400.0; }
+        while (s->time_of_day_s >= 86400.0) { s->time_of_day_s -= 86400.0; }
+        break;
+    case WS_SET_ITEM_SPEED:
+        if (step < 0 && s->speed_index > 0) { s->speed_index -= 1; }
+        else if (step > 0 && s->speed_index + 1 < WS_SESSION_SPEEDS) { s->speed_index += 1; }
+        break;
+    case WS_SET_ITEM_SHADOWS:
+        if (step != 0) { s->shadows_visible = !s->shadows_visible; }
+        break;
+    case WS_SET_ITEM_STATS:
+        if (step != 0) { s->stats_visible = !s->stats_visible; }
+        break;
+    case WS_SET_ITEM_HELP:
+        if (step != 0) { s->help_visible = !s->help_visible; }
+        break;
+    case WS_SET_ITEM_HUD_SCALE:
+        if (step < 0 && s->hud_scale > 1) { s->hud_scale -= 1; }
+        else if (step > 0 && s->hud_scale < 2) { s->hud_scale += 1; }
+        break;
+    case WS_SET_ITEM_VOLUME:
+        s->volume += step * 10;
+        if (s->volume < 0) { s->volume = 0; }
+        if (s->volume > 100) { s->volume = 100; }
+        ws_audio_set_master_gain(&s->audio, (double)s->volume / 100.0);
+        break;
+    case WS_SET_ITEM_CAM_SPEED:
+        s->cam_speed_pct += step * 25;
+        if (s->cam_speed_pct < 25) { s->cam_speed_pct = 25; }
+        if (s->cam_speed_pct > 400) { s->cam_speed_pct = 400; }
+        break;
+    case WS_SET_ITEM_LOOK_SENS:
+        s->look_sens_pct += step * 25;
+        if (s->look_sens_pct < 25) { s->look_sens_pct = 25; }
+        if (s->look_sens_pct > 400) { s->look_sens_pct = 400; }
+        break;
+    default:
+        break;
+    }
+}
 
 ws_result ws_session_apply_command(ws_session *s, int command, double arg)
 {
@@ -636,6 +732,52 @@ ws_result ws_session_apply_command(ws_session *s, int command, double arg)
     case WS_CMD_TOGGLE_SETTINGS:
         s->settings_visible = !s->settings_visible;
         break;
+    case WS_CMD_SETTINGS_MOVE: {
+        int d = (int)(arg < 0.0 ? -1.0 : (arg > 0.0 ? 1.0 : 0.0));
+        if (d == 0) { d = 1; }
+        s->settings_cursor += d;
+        settings_menu_clamp_cursor(s);
+        break;
+    }
+    case WS_CMD_SETTINGS_ADJUST:
+        settings_menu_adjust(s, (int)(arg < 0.0 ? -1.0 : (arg > 0.0 ? 1.0 : 0.0)));
+        break;
+    case WS_CMD_SETTINGS_APPLY:
+        /* Apply the row: a toggle flips, a scalar steps forward by one, and the
+         * save/reload rows act immediately. */
+        if (s->settings_cursor == WS_SET_ITEM_SAVE) {
+            (void)ws_session_save_settings_file(s);
+        } else if (s->settings_cursor == WS_SET_ITEM_RELOAD) {
+            if (s->settings_path[0] != '\0') {
+                ws_settings saved;
+                if (ws_settings_load(s->settings_path, &saved) == WS_OK) {
+                    (void)ws_session_apply_settings(s, &saved);
+                    s->render_scale = saved.render_scale;
+                    s->hud_scale = saved.hud_scale;
+                }
+            }
+        } else {
+            settings_menu_adjust(s, 1);
+        }
+        break;
+    case WS_CMD_SETTINGS_DEFAULTS: {
+        ws_settings d = ws_settings_default();
+        s->view_mode = d.view;
+        s->time_of_day_s = d.time_of_day_s;
+        s->shadows_visible = d.shadows;
+        s->stats_visible = d.stats;
+        s->help_visible = d.help;
+        s->hud_scale = d.hud_scale;
+        s->render_scale = d.render_scale;
+        s->volume = d.volume;
+        ws_audio_set_master_gain(&s->audio, (double)s->volume / 100.0);
+        s->cam_speed_pct = d.cam_speed;
+        s->look_sens_pct = d.look_sens;
+        s->config.viewport_w = d.width;
+        s->config.viewport_h = d.height;
+        s->speed_index = 2;
+        break;
+    }
     case WS_CMD_REPLAY_TOGGLE:
         if (s->replay_active) {
             replay_exit(s);
@@ -709,6 +851,12 @@ ws_result ws_session_apply_settings(ws_session *s, const struct ws_settings *set
     s->shadows_visible = settings->shadows ? 1 : 0;
     s->stats_visible = settings->stats ? 1 : 0;
     s->help_visible = settings->help ? 1 : 0;
+    s->hud_scale = settings->hud_scale < 1 ? 1 : (settings->hud_scale > 2 ? 2 : settings->hud_scale);
+    s->render_scale = settings->render_scale;
+    s->volume = settings->volume < 0 ? 0 : (settings->volume > 100 ? 100 : settings->volume);
+    ws_audio_set_master_gain(&s->audio, (double)s->volume / 100.0);
+    s->cam_speed_pct = settings->cam_speed < 25 ? 25 : (settings->cam_speed > 400 ? 400 : settings->cam_speed);
+    s->look_sens_pct = settings->look_sens < 25 ? 25 : (settings->look_sens > 400 ? 400 : settings->look_sens);
     return WS_OK;
 }
 
@@ -722,11 +870,18 @@ ws_result ws_session_get_settings(const ws_session *s, struct ws_settings *out)
      * the live state. */
     ws_settings v = ws_settings_default();
     v.seed = s->config.seed;
+    v.width = s->config.viewport_w;
+    v.height = s->config.viewport_h;
+    v.render_scale = s->render_scale;
     v.view = s->view_mode;
     v.time_of_day_s = s->time_of_day_s;
     v.shadows = s->shadows_visible ? 1 : 0;
     v.stats = s->stats_visible ? 1 : 0;
     v.help = s->help_visible ? 1 : 0;
+    v.hud_scale = s->hud_scale;
+    v.volume = s->volume;
+    v.cam_speed = s->cam_speed_pct;
+    v.look_sens = s->look_sens_pct;
     *out = v;
     return WS_OK;
 }
@@ -769,8 +924,11 @@ ws_result ws_session_camera_input(ws_session *s, double forward, double right,
     if (s->view_mode != WS_VIEW_FREE) {
         return WS_OK;
     }
-    s->free_yaw += look_dx * 0.0035;
-    s->free_pitch -= look_dy * 0.0035;
+    /* User-tunable feel (settings menu "Camera speed" / "Look sensitivity"). */
+    double speed_scale = (double)s->cam_speed_pct / 100.0;
+    double look_scale = (double)s->look_sens_pct / 100.0;
+    s->free_yaw += look_dx * 0.0035 * look_scale;
+    s->free_pitch -= look_dy * 0.0035 * look_scale;
     if (s->free_pitch > 1.3) { s->free_pitch = 1.3; }
     if (s->free_pitch < -1.3) { s->free_pitch = -1.3; }
 
@@ -778,7 +936,7 @@ ws_result ws_session_camera_input(ws_session *s, double forward, double right,
     ws_vec3 dir = ws_vec3_make(cos(s->free_yaw) * cp, sin(s->free_pitch),
                                sin(s->free_yaw) * cp);
     ws_vec3 rightv = ws_vec3_make(-sin(s->free_yaw), 0.0, cos(s->free_yaw));
-    double move = 40.0 * dt;
+    double move = 40.0 * dt * speed_scale;
     ws_vec3 eye = s->free_camera.eye;
     eye = ws_vec3_add(eye, ws_vec3_scale(dir, forward * move));
     eye = ws_vec3_add(eye, ws_vec3_scale(rightv, right * move));
@@ -861,6 +1019,164 @@ double ws_session_replay_span_s(const ws_session *s)
     return span > 0.0 ? span : 0.0;
 }
 uint64_t ws_session_seed(const ws_session *s) { return s != NULL ? s->config.seed : 0u; }
+
+/* --- interactive settings menu ------------------------------------------ */
+
+int ws_session_settings_cursor(const ws_session *s)
+{
+    return s != NULL ? s->settings_cursor : 0;
+}
+
+int ws_session_hud_scale(const ws_session *s) { return s != NULL ? s->hud_scale : 1; }
+
+int ws_session_volume(const ws_session *s) { return s != NULL ? s->volume : 0; }
+
+int ws_session_camera_speed_pct(const ws_session *s) { return s != NULL ? s->cam_speed_pct : 100; }
+
+int ws_session_look_sensitivity_pct(const ws_session *s) { return s != NULL ? s->look_sens_pct : 100; }
+
+ws_result ws_session_settings_item(const ws_session *s, int item,
+                                   char *label, size_t label_cap,
+                                   char *value, size_t value_cap)
+{
+    if (s == NULL || label == NULL || value == NULL || label_cap == 0u || value_cap == 0u) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (item < 0 || item >= WS_SET_ITEM_COUNT) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    switch (item) {
+    case WS_SET_ITEM_WIDTH:
+        snprintf(label, label_cap, "Resolution width");
+        snprintf(value, value_cap, "%u", s->config.viewport_w);
+        break;
+    case WS_SET_ITEM_HEIGHT:
+        snprintf(label, label_cap, "Resolution height");
+        snprintf(value, value_cap, "%u", s->config.viewport_h);
+        break;
+    case WS_SET_ITEM_RENDER_SCALE:
+        snprintf(label, label_cap, "Render scale");
+        if (s->render_scale == 0) {
+            snprintf(value, value_cap, "auto");
+        } else {
+            snprintf(value, value_cap, "1/%d", s->render_scale);
+        }
+        break;
+    case WS_SET_ITEM_VIEW:
+        snprintf(label, label_cap, "Start view");
+        snprintf(value, value_cap, "%s", ws_view_mode_name(s->view_mode));
+        break;
+    case WS_SET_ITEM_TIME: {
+        snprintf(label, label_cap, "Time of day");
+        int total = (int)s->time_of_day_s;
+        if (total < 0) { total = 0; }
+        snprintf(value, value_cap, "%02d:%02d", (total / 3600) % 24, (total / 60) % 60);
+        break;
+    }
+    case WS_SET_ITEM_SPEED:
+        snprintf(label, label_cap, "Simulation speed");
+        snprintf(value, value_cap, "x%.1f", WS_SPEEDS[s->speed_index]);
+        break;
+    case WS_SET_ITEM_SHADOWS:
+        snprintf(label, label_cap, "Directional shadows");
+        snprintf(value, value_cap, "%s", s->shadows_visible ? "on" : "off");
+        break;
+    case WS_SET_ITEM_STATS:
+        snprintf(label, label_cap, "Statistics panel");
+        snprintf(value, value_cap, "%s", s->stats_visible ? "on" : "off");
+        break;
+    case WS_SET_ITEM_HELP:
+        snprintf(label, label_cap, "Help overlay");
+        snprintf(value, value_cap, "%s", s->help_visible ? "on" : "off");
+        break;
+    case WS_SET_ITEM_HUD_SCALE:
+        snprintf(label, label_cap, "Text size");
+        snprintf(value, value_cap, "%s", s->hud_scale >= 2 ? "large" : "small");
+        break;
+    case WS_SET_ITEM_VOLUME:
+        snprintf(label, label_cap, "Master volume");
+        snprintf(value, value_cap, "%d%%", s->volume);
+        break;
+    case WS_SET_ITEM_CAM_SPEED:
+        snprintf(label, label_cap, "Camera speed");
+        snprintf(value, value_cap, "%d%%", s->cam_speed_pct);
+        break;
+    case WS_SET_ITEM_LOOK_SENS:
+        snprintf(label, label_cap, "Look sensitivity");
+        snprintf(value, value_cap, "%d%%", s->look_sens_pct);
+        break;
+    case WS_SET_ITEM_SAVE:
+        snprintf(label, label_cap, "Save settings now");
+        snprintf(value, value_cap, "%s",
+                 s->settings_path[0] != '\0' ? "enter" : "no file");
+        break;
+    case WS_SET_ITEM_RELOAD:
+        snprintf(label, label_cap, "Reload settings file");
+        snprintf(value, value_cap, "%s",
+                 s->settings_path[0] != '\0' ? "enter" : "no file");
+        break;
+    default:
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    return WS_OK;
+}
+
+int ws_session_settings_item_value(const ws_session *s, int item)
+{
+    if (s == NULL || item < 0 || item >= WS_SET_ITEM_COUNT) {
+        return -1;
+    }
+    switch (item) {
+    case WS_SET_ITEM_WIDTH: return (int)s->config.viewport_w;
+    case WS_SET_ITEM_HEIGHT: return (int)s->config.viewport_h;
+    case WS_SET_ITEM_RENDER_SCALE: return s->render_scale;
+    case WS_SET_ITEM_VIEW: return s->view_mode;
+    case WS_SET_ITEM_TIME: return (int)s->time_of_day_s;
+    case WS_SET_ITEM_SPEED: return s->speed_index;
+    case WS_SET_ITEM_SHADOWS: return s->shadows_visible;
+    case WS_SET_ITEM_STATS: return s->stats_visible;
+    case WS_SET_ITEM_HELP: return s->help_visible;
+    case WS_SET_ITEM_HUD_SCALE: return s->hud_scale;
+    case WS_SET_ITEM_VOLUME: return s->volume;
+    case WS_SET_ITEM_CAM_SPEED: return s->cam_speed_pct;
+    case WS_SET_ITEM_LOOK_SENS: return s->look_sens_pct;
+    case WS_SET_ITEM_SAVE: return s->settings_path[0] != '\0' ? 1 : 0;
+    case WS_SET_ITEM_RELOAD: return s->settings_path[0] != '\0' ? 1 : 0;
+    default: return -1;
+    }
+}
+
+ws_result ws_session_save_settings_file(ws_session *s)
+{
+    if (s == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (s->settings_path[0] == '\0') {
+        return WS_OK; /* no file configured: a no-op, never an error */
+    }
+    ws_settings out;
+    if (ws_session_get_settings(s, &out) != WS_OK) {
+        return WS_ERR_INVALID_STATE;
+    }
+    return ws_settings_save(s->settings_path, &out);
+}
+
+ws_result ws_session_set_settings_path(ws_session *s, const char *path)
+{
+    if (s == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (path == NULL) {
+        s->settings_path[0] = '\0';
+        return WS_OK;
+    }
+    size_t n = strlen(path);
+    if (n + 1u > sizeof(s->settings_path)) {
+        return WS_ERR_CAPACITY;
+    }
+    memcpy(s->settings_path, path, n + 1u);
+    return WS_OK;
+}
 
 double ws_session_perf_last_ms(const ws_session *s) { return s != NULL ? s->last_frame_ms : 0.0; }
 double ws_session_perf_avg_ms(const ws_session *s) { return s != NULL ? s->avg_frame_ms : 0.0; }

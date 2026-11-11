@@ -41,6 +41,7 @@ typedef struct ws_audio {
     uint32_t sample_rate;
     ws_audio_voice voices[WS_AUDIO_MAX_VOICES];
     double last_trigger_s[WS_AUDIO_KIND_COUNT]; /* world time of the last voice */
+    double master_gain; /* 0..1 user volume multiplier (settings menu) */
     uint64_t events_played;
     uint64_t events_skipped; /* real events suppressed by the per-kind cooldown */
     uint64_t voices_dropped; /* events that found every voice busy */
@@ -67,6 +68,13 @@ ws_result ws_audio_mix(ws_audio *a, int16_t *out, uint32_t frames);
 
 /* Total sound samples produced since init. */
 uint64_t ws_audio_samples_rendered(const ws_audio *a);
+
+/* Master volume as a 0..1 gain. Values outside the range are clamped. Setting
+ * the gain changes only the mixed output, never the voice state or the world. */
+void ws_audio_set_master_gain(ws_audio *a, double gain);
+
+/* Current master gain (0..1). Returns 1.0 for a NULL pointer. */
+double ws_audio_master_gain(const ws_audio *a);
 
 /* Write an interleaved stereo int16 PCM buffer as a canonical 44-byte-header
  * 16-bit WAV. Returns WS_OK, or an error when the file cannot be opened. */

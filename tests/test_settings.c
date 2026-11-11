@@ -44,6 +44,10 @@ static int test_roundtrip(void)
     in.shadows = 1;
     in.stats = 1;
     in.help = 1;
+    in.hud_scale = 2;
+    in.volume = 40;
+    in.cam_speed = 250;
+    in.look_sens = 175;
 
     char buf[512];
     size_t n = ws_settings_format(buf, sizeof(buf), &in);
@@ -62,6 +66,10 @@ static int test_roundtrip(void)
     WS_CHECK(out.shadows == in.shadows);
     WS_CHECK(out.stats == in.stats);
     WS_CHECK(out.help == in.help);
+    WS_CHECK(out.hud_scale == in.hud_scale);
+    WS_CHECK(out.volume == in.volume);
+    WS_CHECK(out.cam_speed == in.cam_speed);
+    WS_CHECK(out.look_sens == in.look_sens);
     return 1;
 }
 
@@ -97,7 +105,11 @@ static int test_clamping(void)
         "render_scale=9\n"
         "time_of_day=999999\n"
         "fullscreen=5\n"
-        "shadows=-3\n";
+        "shadows=-3\n"
+        "hud_scale=9\n"
+        "volume=999\n"
+        "cam_speed=1\n"
+        "look_sens=99999\n";
     ws_settings s;
     WS_CHECK(ws_settings_parse(text, &s) == WS_OK);
     WS_CHECK(s.width == 16u);
@@ -107,6 +119,10 @@ static int test_clamping(void)
     WS_CHECK(s.time_of_day_s == 0.0);
     WS_CHECK(s.fullscreen == 1);
     WS_CHECK(s.shadows == 1);
+    WS_CHECK(s.hud_scale == 2);
+    WS_CHECK(s.volume == 100);
+    WS_CHECK(s.cam_speed == 25);
+    WS_CHECK(s.look_sens == 400);
     return 1;
 }
 

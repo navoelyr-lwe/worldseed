@@ -42,6 +42,7 @@ void ws_audio_init(ws_audio *a, uint32_t sample_rate)
     }
     memset(a, 0, sizeof(*a));
     a->sample_rate = sample_rate ? sample_rate : WS_AUDIO_SAMPLE_RATE;
+    a->master_gain = 1.0;
     /* Negative sentinel: the first event of every kind always sounds, whatever
      * the starting world time. */
     for (uint32_t i = 0; i < WS_AUDIO_KIND_COUNT; ++i) {
@@ -145,8 +146,9 @@ ws_result ws_audio_mix(ws_audio *a, int16_t *out, uint32_t frames)
         }
         /* Master gain keeps a herd's overlapping voices below full scale, and
          * a soft saturator (x/(1+|x|)) rounds off what is left instead of
-         * hard-clipping it, which would buzz. */
-        const double master = 0.32;
+         * hard-clipping it, which would buzz. The user's volume multiplies in
+         * before the saturator so the curve stays smooth across the range. */
+        const double master = 0.32 * a->master_gain;
         left *= master;
         right *= master;
         left = left / (1.0 + fabs(left));
@@ -161,6 +163,21 @@ ws_result ws_audio_mix(ws_audio *a, int16_t *out, uint32_t frames)
 uint64_t ws_audio_samples_rendered(const ws_audio *a)
 {
     return a != NULL ? a->samples_rendered : 0u;
+}
+
+void ws_audio_set_master_gain(ws_audio *a, double gain)
+{
+    if (a == NULL) {
+        return;
+    }
+    if (gain < 0.0) { gain = 0.0; }
+    if (gain > 1.0) { gain = 1.0; }
+    a->master_gain = gain;
+}
+
+double ws_audio_master_gain(const ws_audio *a)
+{
+    return a != NULL ? a->master_gain : 1.0;
 }
 
 static void put_u32le(uint8_t *p, uint32_t v)

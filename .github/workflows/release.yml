@@ -134,7 +134,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P11 - kalici ayarlar ve ayar paneli)." \
+            "Worldseed Engine onizleme surumu (P11 - etkilesimli ayar menusu)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
@@ -157,8 +157,14 @@ jobs:
             "" \
             "Kalici ayarlar (bu surumun ana yeniligi): seciminiz worldseed.cfg dosyasina" \
             "yazilir ve sonraki acilista geri yuklenir - cozunurluk, ic render olcegi," \
-            "baslangic gorunumu/saati, golge ve tam ekran. Pencerede O tusu ayar panelini" \
-            "acar. Acik komut satiri bayragi dosyayi gecersiz kilar; kanit kosulari" \
+            "baslangic gorunumu/saati, golge, tam ekran, metin boyutu, ana ses duzeyi," \
+            "kamera hizi ve fare hassasiyeti. Pencerede O tusu artik ETKILESIMLI bir ayar" \
+            "menusu acar: up/down (veya W/S) imleci tasir, left/right (veya A/D) secili" \
+            "satiri degistirir, Enter uygular, B varsayilanlara doner, O/Esc kapatir." \
+            "Cozunurluk satiri pencereyi yeniden boyutlandirir (tam ekranda degil), metin" \
+            "boyutu HUD olcegini surer, ses duzeyi kendi C17 ses karistiricimizin ana" \
+            "kazancini olcekler, kamera hizi/fare hassasiyeti serbest kamerayi etkiler." \
+            "Acik komut satiri bayragi dosyayi gecersiz kilar; kanit kosulari" \
             "(headless/tur) ayar dosyasini okumaz/yazmaz, boylece olcumler sabit kalir." \
             "Ayar uygulamak yalnizca gozlemciyi degistirir, dunyayi degistirmez." \
             "" \
@@ -189,7 +195,7 @@ jobs:
             "Bilinen sinirlamalar: 4K/30 FPS referans donanim hedefi henuz olculup gecilemedi;" \
             "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
             "olceklendirilir; ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir);" \
-            "ses/giris alt ayarlari ve tam etkilesimli ayar menusu sonraki dilimdedir." \
+            "fareyle tiklayarak secme ve dunya secim menusu sonraki dilimdedir." \
             "" \
             "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + MANIFEST.txt)," \
             "sha256 dosyasi, ekteki PNG kareleri ve CI artefaktlari." \
