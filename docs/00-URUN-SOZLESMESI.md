@@ -82,6 +82,10 @@ Görsel kalite yalnız çözünürlükle ölçülmez. Geometri, doku/malzeme, ı
 - Bitki, kaynak ve hayvan etkileşimleri çalışan ekolojik döngü oluşturur.
 - Dünya kamera dışında da ilerler ve yeniden yüklenince sürekliliği korunur.
 - Sinematik yönetmen gerçek olayları değişmeden gösterir ve tekrar oynatma çalışır.
+- Doğal ses manzarası release ürününün parçasıdır: rüzgâr/yaprak, yağmur, su ve habitat ambiyansı ile tür ve davranışla ilişkili hayvan sesleri gerçek simülasyon durumundan üretilir; sahte olay veya önceden kaydedilmiş sahne akışı dünyadaki olayların yerine geçmez.
+- Ses mekânsal sunumda kaynak yönü ve mesafeye ek olarak engel/örtülme ve ortamın yayılım etkilerini hesaba katar; kullanılan akustik modelin varsayımları ve kanıt seviyesi belgelenir.
+- Windows ürününde gerçek zamanlı ses aygıtı çıkışı bulunur. Ses aygıtının kaybı, taşması veya devre dışı kalması dünya simülasyon adımını bloke etmez.
+- Aynı seed, model sürümü ve olay akışı aynı deterministik ses çıktısını üretir; WAV dışa aktarma ve canlı ses yolu aynı ses kaynaklarını/karışım kurallarını kullanır.
 - Referans sahneler hedef görsel kalite kriterlerini karşılar.
 - Referans donanımda golden scene seti native 4K/30 FPS hedefini karşılar. Hedef geçilmezse optimizasyon ve kalite profili çalışması sürer; sessizce kabul eşiği düşürülemez.
 - Tüm otomatik testler, uzun süre testleri, güvenlik ve paket doğrulamaları geçer.
