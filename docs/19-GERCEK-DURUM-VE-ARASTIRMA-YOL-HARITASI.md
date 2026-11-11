@@ -224,7 +224,7 @@ Orman gap-model literatürü, ormanı farklı yaş/süksesyon aşamalarındaki y
 2026 ekolojik model kalibrasyon ve belirsizlik derlemesi, parametre belirsizliği, model yapısı belirsizliği, duyarlılık analizi ve kalibrasyonun birlikte ele alınmasını önerir. 2024 avcı-av modeli çalışması, carrying capacity ve fonksiyonel tepki parametrelerinin gelişigüzel seçilmemesi, saha verisi ve biyolojik ölçütlerle kıyaslanması gerektiğini gösterir.
 
 Kaynaklar:
-- Bugmann, A review of forest gap models: https://doi.org/10.1016/S0378-1127(99)00029-1
+- Bugmann, A review of forest gap models: https://doi.org/10.1023/A:1012525626267
 - Malchow & Hartig (2026), Calibration, Sensitivity and Uncertainty Analysis of Complex Ecological Models: https://doi.org/10.1111/ele.70375
 - Ecological Modelling (2024), Methods for comparing theoretical models parameterized with field data using biological criteria and Sobol analysis: https://doi.org/10.1016/j.ecolmodel.2024.110728
 
@@ -396,6 +396,8 @@ Aşağıdaki bağlantılar 11 Kasım 2026 tarihinde kontrol edilmiştir. Bunlar 
 15. ISO 9613-2:2024, dış ortamda ses yayılımının zayıflaması: https://www.iso.org/standard/74047.html
 16. Tarrero ve ark. (2008), ormanlarda ses yayılımının deneysel ölçümü: https://doi.org/10.1016/j.apacoust.2007.01.007
 17. Khronos OpenCL kayıt/specifikasyonları: https://registry.khronos.org/OpenCL/
+18. Khronos OpenCL 1.2 API specification: https://registry.khronos.org/OpenCL/specs/opencl-1.2.pdf
+19. Bugmann & Seidl (2022), The evolution, complexity and diversity of models of long-term forest dynamics: https://doi.org/10.1111/1365-2745.13989
 
 ---
 
