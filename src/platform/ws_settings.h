@@ -35,6 +35,7 @@ typedef struct ws_settings {
     int volume;             /* master audio volume percent, 0..100 */
     int cam_speed;          /* free-camera move speed percent, 25..400 */
     int look_sens;          /* mouse-look sensitivity percent, 25..400 */
+    int cam_collision;      /* 0/1 free-camera ground collision (docs/17) */
 } ws_settings;
 
 /* Sensible defaults matching the live application's own defaults. */

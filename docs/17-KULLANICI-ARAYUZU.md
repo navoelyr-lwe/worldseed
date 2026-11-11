@@ -50,6 +50,14 @@ Duraklatma, tek adım, normal hız ve hızlandırma seçenekleri bulunur. Hızla
 - Kamera hızını/ivmesini sınırlayan yumuşatma.
 - Kamera çarpışması ve fiziksel engel farkındalığı.
 
+**Uygulandı (kamera çarpışması):** Serbest kameranın gözü altındaki arazi
+yüksekliğinin 1.5 m (`WS_SESSION_CAM_CLEARANCE_M`) üzerinde tutulur; kamera yere
+gömülmez. Su yüzeyi de bir tabandır: göz su seviyesinin altına inmez. Arazi
+yüksekliği ve su seviyesi dünya konumunun saf fonksiyonlarıdır, bu yüzden odak
+yamağı dışında da geçerlidir. Ayarlar menüsündeki **Camera collision** satırı bunu
+açıp kapatır (varsayılan açık; kalıcı ayar anahtarı `cam_collision`). Çarpışma
+gözlemci salt-okunurdur: dünya özetini değiştirmez.
+
 ## Durum panelleri
 
 Bilgiler simülasyonun gerçek state/event verisinden gelir. UI'da tahmin edilen veya eksik bilgi kesin gerçek gibi gösterilmez. Canlının iç durumu doğrudan ölçülemeyen bir şeyse model çıktısı olduğu belirtilir.

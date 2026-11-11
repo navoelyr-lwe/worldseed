@@ -128,6 +128,21 @@ ws_result ws_session_camera_input(ws_session *s, double forward, double right,
                                   double up, double look_dx, double look_dy,
                                   double dt);
 
+/* Minimum clearance in metres the free camera keeps above the ground. The eye
+ * is kept at least this far above the terrain height under it, so the camera
+ * never sinks into the ground ("Kamera çarpışması ve fiziksel engel
+ * farkındalığı", docs/17). */
+#define WS_SESSION_CAM_CLEARANCE_M 1.5
+
+/* Whether free-camera ground collision is enabled (the "Camera collision" row).
+ * On by default; when off the eye may pass below the terrain, which is useful
+ * for inspection. Observer-only: it never changes the world. */
+int ws_session_camera_collision(const ws_session *s);
+
+/* Terrain height (metres, world) under the free camera's eye, for evidence and
+ * the HUD. Returns 0 when there is no session. */
+double ws_session_camera_ground_height(const ws_session *s);
+
 /* --- state queries (all read-only) --------------------------------------- */
 
 int ws_session_view_mode(const ws_session *s);
@@ -186,9 +201,10 @@ typedef enum ws_settings_item {
     WS_SET_ITEM_VOLUME = 10,
     WS_SET_ITEM_CAM_SPEED = 11,
     WS_SET_ITEM_LOOK_SENS = 12,
-    WS_SET_ITEM_SAVE = 13,
-    WS_SET_ITEM_RELOAD = 14,
-    WS_SET_ITEM_COUNT = 15
+    WS_SET_ITEM_CAM_COLLISION = 13,
+    WS_SET_ITEM_SAVE = 14,
+    WS_SET_ITEM_RELOAD = 15,
+    WS_SET_ITEM_COUNT = 16
 } ws_settings_item;
 
 /* Row the cursor currently sits on (0 .. WS_SET_ITEM_COUNT-1). */
