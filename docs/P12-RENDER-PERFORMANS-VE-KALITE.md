@@ -295,8 +295,12 @@ kaldırır:
 
 - Hedef 30 FPS henüz 1080p'de tutulmuyor (~6 FPS). Gölge geçişi ek bir
   geometri geçişi maliyeti getirir; sahne başına opt-in'dir.
-- Gölge haritası sahne başına bir kez kurulur (statik sahne varsayımı); hareketli
-  nesneler için gelecekte kare başına güncelleme gerekir.
+- Gölge haritası **her karede** sahnenin güncel nesne listesinden yeniden
+  kurulur, bu yüzden hareketli nesneler (canlı üründeki aktörler) gölgelerini
+  doğru izler; bu davranış `render shadow follows moving occluder` testiyle
+  kilitlenir. Maliyeti kare başına ek bir geometri geçişidir; hareketli
+  sahnelerde gölge haritasını yalnız değişen nesneler için güncellemek (artımlı
+  yeniden kurma) sonraki dilimdir.
 - Yarı-gölge (penumbra) genişletildi (`shadow_softness`, sabit tam sayı disk);
   filtre gerçek bir yumuşak temas gölgesi verir ve deterministiktir, ancak örnek
   sayısı yarıçapla kare olarak artar (yarıçap 8'de ≈197 örnek), bu yüzden gölge
