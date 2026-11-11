@@ -153,6 +153,21 @@ jobs:
           test "$(grep -c 'verdict=PASS' evidence/quality/quality.txt)" = "6" \
             || { echo "not all six product scenes passed the checklist"; exit 1; }
 
+      - name: Product motion-quality checklist
+        run: |
+          # P12 acceptance also requires a "motion" quality dimension, which a
+          # still frame cannot cover (docs/QUALITY-CHECKLIST.md). The harness
+          # drives the real reference quadruped through the gait controller and
+          # gates forward progress, speed, smoothness, balance, foot contact and
+          # energy from the simulated body itself.
+          mkdir -p evidence/motion
+          ./build/tools/ws_motion evidence/motion 20260101 | tee evidence/motion/motion.txt
+          grep -q "WS_MOTION_OK" evidence/motion/motion.txt
+          # Same seed must reproduce identical motion metrics (determinism).
+          grep -q "reproducible=1" evidence/motion/motion.txt
+          test "$(grep -c 'verdict=PASS' evidence/motion/motion.txt)" = "1" \
+            || { echo "the reference walk failed the motion checklist"; exit 1; }
+
       - name: Asset pipeline
         run: |
           mkdir -p evidence/assets

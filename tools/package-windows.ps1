@@ -111,6 +111,17 @@ New-Item -ItemType Directory -Force -Path evidence/quality | Out-Null
 if (-not (Select-String -Path evidence/quality/quality.txt -Pattern "WS_QUALITY_OK" -Quiet)) { exit 1 }
 if ((Select-String -Path evidence/quality/quality.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count -ne 6) { exit 1 }
 
+# P12 product motion-quality checklist (docs/QUALITY-CHECKLIST.md): a still
+# frame cannot cover motion, so the reference quadruped is driven through the
+# gait controller and the run is gated on progress, speed, smoothness, balance,
+# foot contact and energy.
+$motionExe = "$BuildDir/tools/Release/ws_motion.exe"
+if (-not (Test-Path $motionExe)) { Write-Error "missing build output: $motionExe"; exit 1 }
+New-Item -ItemType Directory -Force -Path evidence/motion | Out-Null
+& $motionExe evidence/motion 20260101 | Tee-Object -FilePath evidence/motion/motion.txt
+if (-not (Select-String -Path evidence/motion/motion.txt -Pattern "WS_MOTION_OK" -Quiet)) { exit 1 }
+if ((Select-String -Path evidence/motion/motion.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count -ne 1) { exit 1 }
+
 $stage = "stage/worldseed"
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item $exe "$stage/worldseed.exe"
@@ -131,6 +142,8 @@ Copy-Item evidence/live/export-a/export-manifest.txt "$stage/export/"
 New-Item -ItemType Directory -Force -Path "$stage/quality" | Out-Null
 Copy-Item evidence/quality/quality.csv "$stage/quality/"
 Copy-Item evidence/quality/quality.txt "$stage/quality/"
+Copy-Item evidence/motion/motion.csv "$stage/quality/"
+Copy-Item evidence/motion/motion.txt "$stage/quality/"
 @(
     "Worldseed Engine preview (P12 - CPU render performansi ve kalite kapisi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",

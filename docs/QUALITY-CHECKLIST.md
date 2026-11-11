@@ -60,13 +60,16 @@ hareket** kalite kontrol listesi ister. Her boyut nerede kapılandığı:
 | Işık | `mean_luma`, `max_luma`, `blown_fraction` | `ws_quality` |
 | Gölge | `luma_stddev`, `dark_fraction` + `shadows` golden sahnesi | `ws_quality` + `ws_golden` |
 | Atmosfer | `sky_gradient` + sis/sky sahneleri | `ws_quality` + `ws_golden` |
-| Hareket | kare-arası değişim (canlı tur, deterministik tur adımları) + biyomekanik | `worldseed --live-tour` + `tests/test_life.c` |
+| Hareket | `forward_m`, `speed`, `com_accel`, `tilt`, `foot_clear`, `energy` | `ws_motion` (bu belge) |
 
 Hareket boyutu tek karede ölçülemez; bu yüzden altı ürün referans sahnesi
-(durağan kareler) bu boyutu kapsamaz. Hareket, canlı turun kare-arası adımları
-(`step-*` kareleri bit-özdeş tekrar eder) ve P5/P7 biyomekanik/ekoloji testleriyle
-ayrı kapılanır. Bu kontrol listesi altı durağan referans sahnenin geometri,
-malzeme, ışık, gölge ve atmosfer boyutlarını otomatik ölçer.
+(durağan kareler) bu boyutu kapsamaz. Hareket artık ayrı, otomatik bir kapıyla
+ölçülür: `tools/ws_motion` gerçek referans dört ayaklı canlıyı (P5 biyomekanik)
+gerçek yürüyüş denetleyicisiyle sabit bir simülasyon aralığı boyunca koşar ve
+koşunun kendisinden (konum, hız, kütle merkezi ivmesi, gövde eğimi, ayak teması,
+enerji) şu ölçülebilir sinyalleri çıkarır. Aynı tohum aynı ölçümleri üretir
+(determinizm). Canlı turun kare-arası adımları ve P5/P7 biyomekanik/ekoloji
+testleri ek kapsama sağlar.
 
 ## Sahne başına eşikler ve gerekçe
 
@@ -87,6 +90,34 @@ Ayrıca her sahne için **determinizm** kapısı vardır: aynı seed ile iki ren
 bit-özdeş olmalıdır (bu, ürünün "kamera dışı durumu koru" ve "deterministik
 simülasyon" ilkeleriyle uyumludur).
 
+## Hareket kalite ölçüleri ve eşikleri
+
+`src/render/ws_motion.{h,c}` gerçek referans dört ayaklı canlıyı (kızıl geyik,
+P5 biyomekanik) sabit adımlı yürüyüş denetleyicisiyle düz zeminde 20 s
+(yaklaşık 10.000 adım) koşar ve koşudan şu **deterministik** ölçüleri çıkarır:
+
+- **İlerleme:** `forward_m` (gövde ileri yolu), `forward_speed_mps` (ortalama
+  ileri hız) — canlı gerçekten yürür, yerinde saymaz.
+- **Pürüzsüzlük:** `max_com_accel_mps2` (kütle merkezi ivmesinin tepe değeri) —
+  ani sıçramaları eler.
+- **Denge:** `max_torso_tilt_rad` (gövde eğiminin dikeyden en büyük sapması) —
+  beden dik ve dengeli kalır.
+- **Temas:** `min_foot_clearance_m` (ayakların yüzeyin altına en derin inişi) —
+  ayaklar zemine gömülmez.
+- **Enerji:** `max_energy_j` (toplam kinetik enerji tepesi) — enerji patlamasını
+  eler.
+- **Süre:** `frames` (ölçülen adım sayısı) — koşu kanıt için yeterince uzundur.
+
+Eşikler (referans ölçüm: 2026-11-09, seed 20260101, 20 s):
+
+| Sahne | forward_m | hız (m/s) | com_accel (m/s²) | tilt (rad) | foot_clear (m) | energy (J) | frames |
+|---|---|---|---|---|---|---|---|
+| `creature_walk` | ≥2.0 (16.2) | 0.20–1.60 (0.81) | ≤500 (248) | ≤0.80 (0.27) | ≥−0.05 (−0.011) | ≤4000 (647) | ≥250 (10000) |
+
+Eşikler ihtiyatlıdır: durmuş, dengesiz veya patlayan bir yürüyüşü eler; meşru bir
+ayar değişikliğini elemez. Her sahne için **determinizm** kapısı vardır: aynı
+seed ile iki koşu bit-özdeş metrik üretmelidir.
+
 ## Otomatik kanıt
 
 - **Araç:** `tools/ws_quality <dizin> [seed]` altı sahneyi gerçek katalogdan
@@ -102,10 +133,23 @@ simülasyon" ilkeleriyle uyumludur).
     eşiğin altındaki metrik doğru hata bitini üretir, üstündeki geçer.
   - `quality checklist passes on product scenes` — altı ürün sahnesi gerçek
     katalogdan kurulup kontrol listesini geçer.
+- **Araç (hareket):** `tools/ws_motion <dizin> [seed]` referans dört ayaklı
+  canlıyı koşar, her sahneyi ölçer ve `motion.csv` + konsol özeti yazar. Eşik
+  veya determinizm kapısı geçilmezse çıkış kodu sıfırdan farklı olur ve
+  `WS_MOTION_FAIL` yazılır.
+- **Birim testleri (`tests/test_render.c`):**
+  - `motion check gates each metric` — her eşik gerçekten kapı işlevi görür:
+    eşiğin altındaki metrik doğru hata bitini üretir, üstündeki geçer.
+  - `motion measure is deterministic` — aynı seed aynı metrikleri verir; farklı
+    seed farklı koşu üretir.
+  - `motion checklist passes reference walk` — referans yürüyüş kontrol
+    listesini geçer ve gerçekten ileri gider.
 - **CI kapısı:** `ci.yml` "Product visual-quality checklist" adımı
-  `WS_QUALITY_OK`, altı `verdict=PASS` ve `reproducible=1` arar.
-- **Windows paketi:** `tools/package-windows.ps1` aynı aracı çalıştırıp
-  `evidence/quality/` çıktısını pakete koyar.
+  `WS_QUALITY_OK`, altı `verdict=PASS` ve `reproducible=1` arar; "Product
+  motion-quality checklist" adımı `WS_MOTION_OK`, `verdict=PASS` ve
+  `reproducible=1` arar.
+- **Windows paketi:** `tools/package-windows.ps1` iki aracı da çalıştırıp
+  `evidence/quality/` ve `evidence/motion/` çıktısını pakete koyar.
 
 ## Referans kabul protokolü
 
@@ -113,8 +157,10 @@ Bir render özelliği "görsel kalite açısından tamam" sayılmak için:
 
 1. `ws_golden` bit-özdeşliği korunur (değişmezlik kanıtı).
 2. `ws_quality` altı sahnede `WS_QUALITY_OK` verir (kalite kapısı).
-3. Aynı seed iki koşuda bit-özdeş kare üretir (determinizm).
-4. Yeni/opt-in özellikler mevcut golden kareleri değiştirmez; yalnız eklemeli
+3. `ws_motion` referans yürüyüşte `WS_MOTION_OK` verir (hareket kapısı).
+4. Aynı seed iki koşuda bit-özdeş kare ve bit-özdeş hareket metrikleri üretir
+   (determinizm).
+5. Yeni/opt-in özellikler mevcut golden kareleri değiştirmez; yalnız eklemeli
    olur (`docs/08`).
 
 Teknik regresyon (adım 1) ile kalite kontrol listesi (adım 2-3) birlikte

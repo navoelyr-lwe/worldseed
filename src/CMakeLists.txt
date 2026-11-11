@@ -76,6 +76,7 @@ add_library(worldseed_core STATIC
   render/ws_render.c
   render/ws_image.c
   render/ws_quality.c
+  render/ws_motion.c
   render/ws_texture.c
   ui/ws_font.c
   ui/ws_session.c
