@@ -42,6 +42,7 @@ Tam ürün planı 22 dosyadır. İçerik `docs/plan-bundle/RESTORE.md` yönerges
 | Dosya | Konu |
 |---|---|
 | `docs/DENETIM-RAPORU.md` | Plan denetimi, çelişkiler ve yapılan düzeltmeler |
+| `docs/19-GERCEK-DURUM-VE-ARASTIRMA-YOL-HARITASI.md` | Güncel ürün gerçekliği denetimi, bilimsel araştırma, riskler ve P12–P18 önerilen yol haritası |
 | `docs/P1-MOTOR-CEKIRDEGI.md` | P1 C17 motor çekirdeği durumu, modüller ve kanıtlar |
 | `docs/P2-RENDER-TEMELI.md` | P2 sahne renderer, varlık hattı, golden scene durumu ve kanıtlar |
 | `docs/P3-ILK-DOGAL-CEVRE.md` | P3 prosedürel arazi, su, habitat, bitki örtüsü ve atmosfer durumu ve kanıtlar |
