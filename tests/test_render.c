@@ -15,6 +15,7 @@
 #include "render/ws_motion.h"
 #include "render/ws_quality.h"
 #include "render/ws_render.h"
+#include "render/ws_render_internal.h"
 #include "render/ws_scene.h"
 #include "render/ws_showcase.h"
 #include "render/ws_texture.h"
@@ -565,6 +566,68 @@ static int test_render_shadow_follows_moving_occluder(void)
     return 1;
 }
 
+/* The shadow map is built from disjoint row bands that run across the worker
+ * pool (P12). Because every pixel is owned by exactly one band and the triangle
+ * walk is identical for each, the map must be bit-identical for any band count;
+ * otherwise the parallel product path would change the image. This locks that
+ * invariant directly on the depth map, not just on the final frame. */
+static int test_render_shadow_parallel_build_identical(void)
+{
+    ws_vertex gverts[4];
+    uint32_t gidx[6];
+    const uint8_t white[3] = {255u, 255u, 255u};
+    ws_mesh ground;
+    WS_CHECK(ws_mesh_make_plane(&ground, gverts, 4u, gidx, 6u, 20.0, 1u, white) == WS_OK);
+
+    ws_vertex cverts[24];
+    uint32_t cidx[36];
+    ws_mesh block;
+    WS_CHECK(ws_mesh_make_cube(&block, cverts, 24u, cidx, 36u, white) == WS_OK);
+
+    ws_scene_object objects[3];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 3u) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene, &ground, ws_mat4_translation(ws_vec3_make(0.0, 0.0, 0.0)),
+                                 ws_material_make(0.8, 0.8, 0.8, 1.0, 0.0, 0.0)) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene, &block,
+                                 ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(-1.5, 1.0, 0.0)),
+                                                  ws_mat4_scale(ws_vec3_make(0.5, 0.5, 0.5))),
+                                 ws_material_make(0.8, 0.6, 0.4, 1.0, 0.0, 0.0)) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene, &block,
+                                 ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(1.2, 0.7, -0.6)),
+                                                  ws_mat4_scale(ws_vec3_make(0.4, 0.4, 0.4))),
+                                 ws_material_make(0.5, 0.7, 0.9, 1.0, 0.0, 0.0)) == WS_OK);
+    scene.camera.eye = ws_vec3_make(0.0, 9.0, 0.0001);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, 0.0);
+    scene.camera.up = ws_vec3_make(0.0, 0.0, -1.0);
+    scene.camera.far_z = 100.0;
+    scene.light.direction = ws_vec3_normalize(ws_vec3_make(-0.5, -0.8, -0.2));
+    scene.settings = ws_render_settings_default();
+
+    const unsigned size = 257u; /* a prime edge so bands do not divide evenly */
+    size_t count = (size_t)size * (size_t)size;
+    float *serial = malloc(count * sizeof(float));
+    float *banded = malloc(count * sizeof(float));
+    WS_CHECK(serial != NULL && banded != NULL);
+
+    WS_CHECK(ws_render_shadow_build_for_test(&scene, serial, size, 1u) == WS_OK);
+    /* A map that is all-empty would make the test vacuous; require occluders. */
+    uint64_t occluded = 0u;
+    for (size_t i = 0; i < count; ++i) {
+        if (serial[i] < 0.999f) { occluded += 1u; }
+    }
+    WS_CHECK(occluded > 100u);
+
+    for (unsigned bands = 2u; bands <= 17u; ++bands) {
+        WS_CHECK(ws_render_shadow_build_for_test(&scene, banded, size, bands) == WS_OK);
+        WS_CHECK(memcmp(serial, banded, count * sizeof(float)) == 0);
+    }
+
+    free(serial);
+    free(banded);
+    return 1;
+}
+
 static int test_ppm_roundtrip(void)
 {
     ws_framebuffer src;
@@ -911,6 +974,81 @@ static int test_render_sky_gradient(void)
     /* Horizon is brighter than the zenith. */
     WS_CHECK(fb.pixels[bot + 1u] > fb.pixels[top + 1u]);
     ws_framebuffer_free(&fb);
+    return 1;
+}
+
+/* With sky enabled and geometry present the sky is deferred to after the
+ * geometry and masked by the depth sentinel, so a covered pixel is shaded once
+ * instead of twice. This must be a pure optimisation: every pixel the geometry
+ * wrote must be identical to a render with the sky off, and every pixel the
+ * geometry left untouched must be identical to the pure sky. Together those
+ * prove the composited frame equals "sky everywhere, geometry on top". */
+static int test_render_sky_deferred_matches_sky_first(void)
+{
+    ws_vertex cverts[24];
+    uint32_t cidx[36];
+    const uint8_t white[3] = {255u, 255u, 255u};
+    ws_mesh cube;
+    WS_CHECK(ws_mesh_make_cube(&cube, cverts, 24u, cidx, 36u, white) == WS_OK);
+
+    ws_scene_object objects[1];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 1u) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene, &cube,
+                                 ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(0.6, -0.4, -4.0)),
+                                                  ws_mat4_scale(ws_vec3_make(1.5, 1.5, 1.5))),
+                                 ws_material_make(0.8, 0.5, 0.3, 0.9, 0.0, 0.2)) == WS_OK);
+    scene.camera = ws_camera_default();
+    scene.camera.eye = ws_vec3_make(0.0, 0.0, 0.0);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, -1.0);
+    scene.settings = ws_render_settings_default();
+    scene.settings.sky_enabled = 1;
+    scene.settings.tonemap = 1;
+    scene.settings.exposure = 1.2;
+
+    ws_framebuffer with_sky;
+    ws_framebuffer no_sky;
+    WS_CHECK(ws_framebuffer_create(&with_sky, 96u, 96u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&no_sky, 96u, 96u) == WS_OK);
+    size_t count = (size_t)with_sky.width * with_sky.height;
+    float *depth = malloc(count * sizeof(float));
+    float *sky_depth = malloc(count * sizeof(float));
+    WS_CHECK(depth != NULL && sky_depth != NULL);
+
+    WS_CHECK(ws_render_scene(&scene, &with_sky, depth, 16u, NULL) == WS_OK);
+    scene.settings.sky_enabled = 0;
+    WS_CHECK(ws_render_scene(&scene, &no_sky, depth, 16u, NULL) == WS_OK);
+
+    /* Pure sky: the same camera and light with no geometry at all. */
+    ws_scene empty;
+    WS_CHECK(ws_scene_init(&empty, objects, 1u) == WS_OK);
+    empty.camera = scene.camera;
+    empty.light = scene.light;
+    empty.settings = scene.settings;
+    empty.settings.sky_enabled = 1;
+    ws_framebuffer pure_sky;
+    WS_CHECK(ws_framebuffer_create(&pure_sky, 96u, 96u) == WS_OK);
+    WS_CHECK(ws_render_scene(&empty, &pure_sky, sky_depth, 16u, NULL) == WS_OK);
+
+    size_t covered = 0u;
+    for (size_t i = 0; i < count; ++i) {
+        const uint8_t *a = &with_sky.pixels[i * 4u];
+        if (depth[i] < 1.0e29f) {
+            covered += 1u;
+            /* Covered: deferred sky must not have touched the geometry pixel. */
+            WS_CHECK(memcmp(a, &no_sky.pixels[i * 4u], 4u) == 0);
+        } else {
+            /* Uncovered: must equal the pure sky. */
+            WS_CHECK(memcmp(a, &pure_sky.pixels[i * 4u], 4u) == 0);
+        }
+    }
+    WS_CHECK(covered > 100u && covered < count);
+
+    free(depth);
+    free(sky_depth);
+    ws_framebuffer_free(&with_sky);
+    ws_framebuffer_free(&no_sky);
+    ws_framebuffer_free(&pure_sky);
     return 1;
 }
 
@@ -1294,8 +1432,10 @@ int main(void)
         {"render shadow darkens occluded", test_render_shadow_darkens_occluded},
         {"render shadow soft penumbra", test_render_shadow_soft_penumbra},
         {"render shadow follows moving occluder", test_render_shadow_follows_moving_occluder},
+        {"render shadow parallel build identical", test_render_shadow_parallel_build_identical},
         {"render specular highlight", test_render_specular_highlight},
         {"render sky gradient", test_render_sky_gradient},
+        {"render sky deferred matches sky first", test_render_sky_deferred_matches_sky_first},
         {"render fog attenuates distance", test_render_fog_attenuates},
         {"render tonemap is monotonic", test_render_tonemap_monotonic},
         {"render texture map changes output", test_render_texture_changes_output},

@@ -12,6 +12,7 @@
  * the final high-quality renderer.
  */
 #include "ws_render.h"
+#include "ws_render_internal.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -328,8 +329,11 @@ static clip_vertex make_depth_clip_vertex(ws_mat4 mvp, const ws_vertex *v)
     return out;
 }
 
-/* Rasterise one light-space triangle writing the nearest depth (smaller wins). */
-static void shadow_raster(const screen_vertex *v, float *depth, unsigned size)
+/* Rasterise one light-space triangle writing the nearest depth (smaller wins).
+ * Only rows in [band_y0, band_y1) are written, so the map can be built from
+ * disjoint row bands in parallel; a band's writes never touch another's rows. */
+static void shadow_raster(const screen_vertex *v, float *depth, unsigned size,
+                          int band_y0, int band_y1)
 {
     int w = (int)size;
     int h = (int)size;
@@ -349,6 +353,14 @@ static void shadow_raster(const screen_vertex *v, float *depth, unsigned size)
     int y0 = (int)min_y; if (y0 < 0) { y0 = 0; }
     int y1 = (int)max_y + 1; if (y1 > h - 1) { y1 = h - 1; }
     if (x0 > x1 || y0 > y1) {
+        return;
+    }
+    /* Restrict to the caller's row band so parallel bands never overlap; each
+     * pixel keeps exactly one band, so the depth map is identical to a serial
+     * pass regardless of band count or thread scheduling. */
+    if (y0 < band_y0) { y0 = band_y0; }
+    if (y1 > band_y1 - 1) { y1 = band_y1 - 1; }
+    if (y0 > y1) {
         return;
     }
     double inv_area = 1.0 / area;
@@ -378,12 +390,8 @@ static void shadow_raster(const screen_vertex *v, float *depth, unsigned size)
 }
 
 static void shadow_render_pass(const ws_scene *scene, ws_mat4 light_vp,
-                               float *depth, unsigned size)
+                               float *depth, unsigned size, int band_y0, int band_y1)
 {
-    size_t count = (size_t)size * (size_t)size;
-    for (size_t i = 0; i < count; ++i) {
-        depth[i] = 1.0f;
-    }
     for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
         const ws_scene_object *obj = &scene->objects[oi];
         if (obj->mesh == NULL || obj->mesh->vertices == NULL || obj->mesh->indices == NULL) {
@@ -416,10 +424,101 @@ static void shadow_render_pass(const ws_scene *scene, ws_mat4 light_vp,
             }
             for (int k = 1; k + 1 < cn; ++k) {
                 screen_vertex tri[3] = {scr[0], scr[k], scr[k + 1]};
-                shadow_raster(tri, depth, size);
+                shadow_raster(tri, depth, size, band_y0, band_y1);
             }
         }
     }
+}
+
+/* Parallel shadow-map build. The map is split into disjoint row bands, exactly
+ * like the image pass, and every band rasterises the scene into its own rows.
+ * Because the triangle walk is the same for every band and each pixel is owned
+ * by exactly one band, the resulting depth map is bit-identical to the serial
+ * build; the pool only changes wall-clock time. */
+typedef struct shadow_band_job {
+    const ws_scene *scene;
+    ws_mat4 light_vp;
+    float *depth;
+    unsigned size;
+    int band_y0;
+    int band_y1;
+} shadow_band_job;
+
+static void shadow_band_body(void *vctx, uint32_t index)
+{
+    shadow_band_job *jobs = (shadow_band_job *)vctx;
+    const shadow_band_job *j = &jobs[index];
+    shadow_render_pass(j->scene, j->light_vp, j->depth, j->size, j->band_y0, j->band_y1);
+}
+
+/* Build the shadow depth map, splitting the rows across `band_count` bands.
+ * Clears the whole map first (a separate parallel-safe step), then rasterises
+ * each band into its own rows. With band_count == 1 (or no pool) this is the
+ * serial build. `sched` may be NULL, in which case the bands run serially. */
+static void shadow_build(const ws_scene *scene, ws_mat4 light_vp, float *depth,
+                         unsigned size, ws_sched *sched, uint32_t band_count)
+{
+    size_t count = (size_t)size * (size_t)size;
+    for (size_t i = 0; i < count; ++i) {
+        depth[i] = 1.0f;
+    }
+    if (band_count == 0u) {
+        band_count = 1u;
+    }
+    if (band_count > size) {
+        band_count = size;
+    }
+    enum { SHADOW_MAX_BANDS = 64 };
+    if (band_count > SHADOW_MAX_BANDS) {
+        band_count = SHADOW_MAX_BANDS;
+    }
+    shadow_band_job jobs[SHADOW_MAX_BANDS];
+    uint32_t rows_per_band = (size + band_count - 1u) / band_count;
+    uint32_t active = 0u;
+    for (uint32_t b = 0u; b < band_count; ++b) {
+        uint32_t y0 = b * rows_per_band;
+        uint32_t y1 = y0 + rows_per_band;
+        if (y0 >= size) {
+            break;
+        }
+        if (y1 > size) {
+            y1 = size;
+        }
+        shadow_band_job *j = &jobs[active];
+        j->scene = scene;
+        j->light_vp = light_vp;
+        j->depth = depth;
+        j->size = size;
+        j->band_y0 = (int)y0;
+        j->band_y1 = (int)y1;
+        active++;
+    }
+    if (sched != NULL && active > 1u) {
+        ws_sched_parallel_for(sched, 0u, active, shadow_band_body, jobs);
+    } else {
+        for (uint32_t i = 0u; i < active; ++i) {
+            shadow_band_body(jobs, i);
+        }
+    }
+}
+
+ws_result ws_render_shadow_build_for_test(const ws_scene *scene, float *depth,
+                                          unsigned size, unsigned band_count)
+{
+    if (scene == NULL || depth == NULL || scene->objects == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (size == 0u) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    ws_vec3 lo, hi;
+    scene_world_bounds(scene, &lo, &hi);
+    ws_mat4 light_vp = shadow_light_matrix(scene, lo, hi);
+    ws_sched *sched = NULL;
+    (void)ws_sched_create_default(&sched);
+    shadow_build(scene, light_vp, depth, size, sched, band_count);
+    ws_sched_destroy(sched);
+    return WS_OK;
 }
 
 /* Fraction of the direct light reaching `world`: 1 in light, lower in shadow. */
@@ -730,7 +829,8 @@ static uint64_t raster_triangle(const screen_vertex *v, ws_framebuffer *fb, floa
  * Rows are independent, so the bands can draw their own sky slice in parallel;
  * together they cover the whole image exactly once. */
 static void draw_sky_band(const ws_scene *scene, ws_framebuffer *fb,
-                          uint32_t y_begin, uint32_t y_end)
+                          uint32_t y_begin, uint32_t y_end,
+                          const float *depth, float depth_sentinel)
 {
     const ws_camera *cam = &scene->camera;
     const ws_render_settings *settings = &scene->settings;
@@ -749,13 +849,21 @@ static void draw_sky_band(const ws_scene *scene, ws_framebuffer *fb,
     for (uint32_t y = y_begin; y < y_end; ++y) {
         double ndc_y = 1.0 - 2.0 * ((double)y + 0.5) / (double)fb->height;
         for (uint32_t x = 0u; x < fb->width; ++x) {
+            size_t idx = (size_t)y * fb->width + x;
+            /* When a depth buffer is supplied the sky is drawn after the
+             * geometry and only where nothing was rasterised, so covered pixels
+             * are shaded once instead of being overdrawn. The value written to
+             * an uncovered pixel is unchanged, so the image is bit-identical. */
+            if (depth != NULL && depth[idx] < depth_sentinel) {
+                continue;
+            }
             double ndc_x = 2.0 * ((double)x + 0.5) / (double)fb->width - 1.0;
             ws_vec3 dir = ws_vec3_make(forward.x + right.x * ndc_x * aspect * tan_half + up.x * ndc_y * tan_half,
                                        forward.y + right.y * ndc_x * aspect * tan_half + up.y * ndc_y * tan_half,
                                        forward.z + right.z * ndc_x * aspect * tan_half + up.z * ndc_y * tan_half);
             dir = ws_vec3_normalize(dir);
             double t = ws_clamp_double((dir.y + 0.15) / 0.9, 0.0, 1.0);
-            uint8_t *p = &fb->pixels[((size_t)y * fb->width + x) * 4u];
+            uint8_t *p = &fb->pixels[idx * 4u];
             for (int c = 0; c < 3; ++c) {
                 double lin = ws_lerp(horizon[c], top[c], t);
                 p[c] = encode_display_u8(lin, settings);
@@ -800,10 +908,11 @@ static void render_band(band_job *job)
     int h = (int)fb->height;
 
     /* Background and depth for this band's rows: independent of other bands, so
-     * it runs in parallel with them. */
-    if (scene->settings.sky_enabled) {
-        draw_sky_band(scene, fb, (uint32_t)band_y0, (uint32_t)band_y1);
-    } else {
+     * it runs in parallel with them. When a depth buffer exists the sky is
+     * deferred to the end of the band (below) and drawn only where no geometry
+     * landed, so covered pixels are shaded once. */
+    int draw_sky = scene->settings.sky_enabled;
+    if (!draw_sky) {
         for (int y = band_y0; y < band_y1; ++y) {
             uint8_t *row = &fb->pixels[(size_t)y * fb->width * 4u];
             for (int x = 0; x < w; ++x) {
@@ -813,6 +922,8 @@ static void render_band(band_job *job)
                 row[x * 4 + 3] = 255u;
             }
         }
+    } else if (depth == NULL) {
+        draw_sky_band(scene, fb, (uint32_t)band_y0, (uint32_t)band_y1, NULL, 0.0f);
     }
     if (depth != NULL) {
         for (int y = band_y0; y < band_y1; ++y) {
@@ -905,6 +1016,13 @@ static void render_band(band_job *job)
             }
         }
     }
+
+    /* Deferred sky: geometry has written this band's depth, so fill only the
+     * rows still at the sentinel. Bit-identical to a sky-first pass (uncovered
+     * pixels get the same colour), but covered pixels are never drawn twice. */
+    if (draw_sky && depth != NULL) {
+        draw_sky_band(scene, fb, (uint32_t)band_y0, (uint32_t)band_y1, depth, 1.0e30f);
+    }
 }
 
 static void band_body(void *vctx, uint32_t index)
@@ -927,6 +1045,11 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
     }
 
     encode_lut_init();
+
+    /* One worker pool per frame, shared by the shadow pass and the image pass so
+     * the pool is created (and torn down) once instead of twice. */
+    ws_sched *sched = NULL;
+    (void)ws_sched_create_default(&sched);
 
     const ws_camera *cam = &scene->camera;
     ws_mat4 view = ws_mat4_look_at(cam->eye, cam->target, cam->up);
@@ -953,7 +1076,11 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
         size_t scount = (size_t)ssize * (size_t)ssize;
         shadow_depth = (float *)malloc(scount * sizeof(float));
         if (shadow_depth != NULL) {
-            shadow_render_pass(scene, light_vp, shadow_depth, ssize);
+            uint32_t shadow_bands = 1u;
+            if (sched != NULL) {
+                shadow_bands = (ws_sched_worker_count(sched) + 1u) * 4u;
+            }
+            shadow_build(scene, light_vp, shadow_depth, ssize, sched, shadow_bands);
             shadow.depth = shadow_depth;
             shadow.size = ssize;
             shadow.strength = ws_clamp_double(scene->settings.shadow_strength, 0.0, 1.0);
@@ -1020,10 +1147,9 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
     /* Split the image into row bands, one per worker. Vertex setup is shared
      * across bands (see the prepass above) and every band writes only its own
      * rows, so the split is the same for every frame and the result is
-     * deterministic. */
+     * deterministic. The pool `sched` was created once at the top of the frame
+     * and is shared with the shadow pass. */
     enum { MAX_BANDS = 64 };
-    ws_sched *sched = NULL;
-    (void)ws_sched_create_default(&sched);
     uint32_t band_count = 1u;
     if (sched != NULL) {
         /* Many narrow bands give the scheduler enough work items to balance
