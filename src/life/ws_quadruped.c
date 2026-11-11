@@ -469,7 +469,7 @@ ws_result ws_quadruped_walk_steer(ws_creature *c, const ws_quad_parts *parts,
         return WS_ERR_NULL_POINTER;
     }
     if (!g->initialised) {
-        ws_gait_state_init(g);
+        ws_gait_state_init_for(g, p);
     }
     ws_quadruped_walk(c, parts, p, g, v_des);
     g->yaw_rate = yaw_rate;
