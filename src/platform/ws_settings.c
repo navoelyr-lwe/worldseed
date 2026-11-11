@@ -21,6 +21,10 @@ ws_settings ws_settings_default(void)
     s.shadows = 0;
     s.stats = 0;
     s.help = 0;
+    s.hud_scale = 1;
+    s.volume = 70;
+    s.cam_speed = 100;
+    s.look_sens = 100;
     return s;
 }
 
@@ -42,6 +46,14 @@ void ws_settings_clamp(ws_settings *s)
     s->shadows = s->shadows ? 1 : 0;
     s->stats = s->stats ? 1 : 0;
     s->help = s->help ? 1 : 0;
+    if (s->hud_scale < 1) { s->hud_scale = 1; }
+    if (s->hud_scale > 2) { s->hud_scale = 2; }
+    if (s->volume < 0) { s->volume = 0; }
+    if (s->volume > 100) { s->volume = 100; }
+    if (s->cam_speed < 25) { s->cam_speed = 25; }
+    if (s->cam_speed > 400) { s->cam_speed = 400; }
+    if (s->look_sens < 25) { s->look_sens = 25; }
+    if (s->look_sens > 400) { s->look_sens = 400; }
 }
 
 static int parse_int(const char *v, long *out)
@@ -133,6 +145,14 @@ ws_result ws_settings_parse(const char *text, ws_settings *out)
                     s.stats = (int)n;
                 } else if (strcmp(key, "help") == 0 && parse_int(val, &n)) {
                     s.help = (int)n;
+                } else if (strcmp(key, "hud_scale") == 0 && parse_int(val, &n)) {
+                    s.hud_scale = (int)n;
+                } else if (strcmp(key, "volume") == 0 && parse_int(val, &n)) {
+                    s.volume = (int)n;
+                } else if (strcmp(key, "cam_speed") == 0 && parse_int(val, &n)) {
+                    s.cam_speed = (int)n;
+                } else if (strcmp(key, "look_sens") == 0 && parse_int(val, &n)) {
+                    s.look_sens = (int)n;
                 }
                 /* Unknown keys are ignored. */
             }
@@ -167,11 +187,15 @@ size_t ws_settings_format(char *buf, size_t cap, const ws_settings *s)
                      "fullscreen=%d\n"
                      "shadows=%d\n"
                      "stats=%d\n"
-                     "help=%d\n",
+                     "help=%d\n"
+                     "hud_scale=%d\n"
+                     "volume=%d\n"
+                     "cam_speed=%d\n"
+                     "look_sens=%d\n",
                      s->version, s->version, (unsigned long long)s->seed,
                      s->width, s->height, s->view, s->time_of_day_s,
                      s->render_scale, s->fullscreen, s->shadows, s->stats,
-                     s->help);
+                     s->help, s->hud_scale, s->volume, s->cam_speed, s->look_sens);
     if (n < 0) {
         return 0u;
     }

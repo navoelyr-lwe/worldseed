@@ -54,12 +54,16 @@ zaman serisi (`ws_session_population_history`).
 HUD, render edilen karenin üzerine gözlemcinin göstergelerini çizer: durum çubuğu
 (dünya saati, tick, hız, görünüm, nüfus, FPS), canlı inceleme paneli, olay zaman
 çizelgesi, dünya haritası, P11'de eklenen istatistik paneli (demografi sayaçları
-ve tür başına yığılmış popülasyon grafiği) ve kalıcı ayar paneli (`O` ile açılır;
-çözünürlük, iç ölçek, başlangıç görünümü, başlangıç saati, gölge/tam ekran ve
-tohumu gösterir). Tüm metin, kendi C17 bitmap
-fontumuzla (5×7 glif, ASCII 32..126) çizilir; font varlığı veya üçüncü taraf metin
-kütüphanesi yoktur (ADR-008). HUD yalnız sunum tamponuna yazar; dünyaya veya
-render sahnesine asla yazmaz.
+ve tür başına yığılmış popülasyon grafiği) ve etkileşimli ayar menüsü (`O` ile
+açılır). Ayar menüsü gezilebilir ve değiştirilebilir: `↑/↓` (veya `W/S`) imleci
+taşır, `←/→` (veya `A/D`) seçili satırı değiştirir, `Enter` uygular, `B`
+varsayılanlara döndürür, `O`/`Esc` kapatır. Satırlar çözünürlük (genişlik/
+yükseklik), iç render ölçeği, başlangıç görünümü, günün saati, simülasyon hızı,
+gölge, istatistik/yardım katmanları, metin boyutu, ana ses düzeyi, kamera hızı,
+fare hassasiyeti ve "şimdi kaydet"/"dosyadan geri yükle"dir. Tüm metin, kendi C17
+bitmap fontumuzla (5×7 glif, ASCII 32..126) çizilir; font varlığı veya üçüncü
+taraf metin kütüphanesi yoktur (ADR-008). HUD yalnız sunum tamponuna yazar;
+dünyaya veya render sahnesine asla yazmaz.
 
 ### Kalıcı ayarlar — `src/platform/ws_settings.{h,c}`
 
@@ -70,10 +74,14 @@ başlangıç görünümü, başlangıç saati, gölge/tam ekran bayrakları ve t
 saklar; bilinmeyen anahtarlar ve bozuk satırlar yok sayılır, aralık dışı değerler
 kırpılır. Uygulama açılışta dosyayı okur (açık komut satırı bayrağı her zaman
 dosyayı geçersiz kılar) ve pencere temiz kapanışta gözlemcinin son seçimlerini
-yazar. Headless/tur kanıt koşuları dosyayı ne okur ne yazar; kanıtlar geliştirici
-ayarından bağımsızdır. `ws_session_apply_settings` / `ws_session_get_settings` bu
-anlık görüntüyü gözlemciye uygular; dünyaya dokunmadığı için aynı tohum ve tick
-sayısında özet bit-özdeş kalır.
+yazar. Etkileşimli ayar menüsü de aynı dosyaya yazar ("şimdi kaydet" satırı) ve
+"dosyadan geri yükle" satırıyla yeniden okur. Headless/tur kanıt koşuları dosyayı
+ne okur ne yazar; kanıtlar geliştirici ayarından bağımsızdır.
+`ws_session_apply_settings` / `ws_session_get_settings` bu anlık görüntüyü
+gözlemciye uygular; dünyaya dokunmadığı için aynı tohum ve tick sayısında özet
+bit-özdeş kalır. Menünün ses düzeyi satırı kendi C17 ses karıştırıcımızın ana
+kazancını (`ws_audio_set_master_gain`) ölçekler; kamera hızı ve fare hassasiyeti
+satırları serbest kamera hareketini/hassasiyetini çarpan olarak etkiler.
 
 ### Dosya sistemi yardımcıları — `src/platform/ws_fs.{h,c}`
 
@@ -218,9 +226,11 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
 - Ses, prosedürel olarak sentezlenir ve WAV üretir; çalma cihazı arayüzü sonraki
   sürümdedir (`docs/10`, `docs/17`).
 - Ayarlar kalıcı olarak `worldseed.cfg` (anahtar=değer) dosyasında saklanır:
-  çözünürlük, iç render ölçeği, başlangıç görünümü/saati, gölge/tam ekran ve tohum.
-  Açık komut satırı bayrağı dosyayı geçersiz kılar; pencere temiz kapanışta dosyayı
-  yazar. Ayarlar ekranındaki ses ve giriş alt bölümleri ile dünya seçim menüsü bu
-  dilimde hâlâ komut satırı bayraklarıyla karşılanır; tam etkileşimli ayar menüsü
-  (fareyle düzenleme, ses düzeyi kaydırıcıları) sonraki dilimdedir.
+  çözünürlük, iç render ölçeği, başlangıç görünümü/saati, gölge/tam ekran, tohum,
+  metin boyutu, ana ses düzeyi, kamera hızı ve fare hassasiyeti. Açık komut satırı
+  bayrağı dosyayı geçersiz kılar; pencere temiz kapanışta dosyayı yazar.
+  Etkileşimli ayar menüsü (`O`, `docs/17` madde 9) bu dilimde tamamlandı: menü
+  gezilebilir ve değiştirilebilir, kaydet/geri yükle satırları dosyayı kullanır,
+  çözünürlük satırı pencereyi yeniden boyutlandırır (tam ekranda değil). Fareyle
+  tıklayarak seçme ve dünya seçim menüsü sonraki dilimdedir.
 - `1.0.0` yalnız `docs/00` bölüm 8'in bütün koşulları geçildiğinde yayımlanır.

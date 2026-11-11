@@ -41,6 +41,7 @@ if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "LIVE_TOUR_OK" -
 if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "shadows_verified=1" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "single_step_verified=1" -Quiet)) { exit 1 }
+if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "settings_menu_verified=1" -Quiet)) { exit 1 }
 & $exe --live-tour evidence/live/tour-b --size 1280x720 | Out-Null
 Get-ChildItem evidence/live/tour-a/step-*.ppm | ForEach-Object {
     $b = Join-Path "evidence/live/tour-b" $_.Name
@@ -72,10 +73,11 @@ New-Item -ItemType Directory -Force -Path "$stage/live" | Out-Null
 Copy-Item evidence/live/tour-a/*.png "$stage/live/"
 Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
 @(
-    "Worldseed Engine preview (P11 - kalici ayarlar ve ayar paneli).",
+    "Worldseed Engine preview (P11 - etkilesimli ayar menusu).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
     "Kalici ayarlar: seciminiz worldseed.cfg dosyasina yazilir ve sonraki acilista geri yuklenir;",
-    "pencerede O tusu ayar panelini acar. Acik komut satiri bayragi dosyayi gecersiz kilar.",
+    "pencerede O tusu etkilesimli ayar menusunu acar (up/down gez, left/right degistir, enter uygula,",
+    "B varsayilanlar, O/Esc kapat). Acik komut satiri bayragi dosyayi gecersiz kilar.",
     "Canli tuslar: O ayarlar, T yonlu golgeleri acar/kapatir (varsayilan kapali).",
     "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
     "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",

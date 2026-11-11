@@ -31,6 +31,10 @@ typedef struct ws_settings {
     int shadows;            /* 0/1 directional shadows */
     int stats;              /* 0/1 statistics panel visible */
     int help;               /* 0/1 help panel visible */
+    int hud_scale;          /* HUD/UI text scale: 1 = small, 2 = large */
+    int volume;             /* master audio volume percent, 0..100 */
+    int cam_speed;          /* free-camera move speed percent, 25..400 */
+    int look_sens;          /* mouse-look sensitivity percent, 25..400 */
 } ws_settings;
 
 /* Sensible defaults matching the live application's own defaults. */

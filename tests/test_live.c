@@ -84,6 +84,7 @@ static int test_tour_run(void)
         int saw_roundtrip = 0;
         int saw_shadows = 0;
         int saw_step = 0;
+        int saw_menu = 0;
         while (fgets(line, sizeof(line), mf) != NULL) {
             if (strstr(line, "save_load_roundtrip=1") != NULL) {
                 saw_roundtrip = 1;
@@ -94,11 +95,15 @@ static int test_tour_run(void)
             if (strstr(line, "single_step_verified=1") != NULL) {
                 saw_step = 1;
             }
+            if (strstr(line, "settings_menu_verified=1") != NULL) {
+                saw_menu = 1;
+            }
         }
         fclose(mf);
         WS_CHECK(saw_roundtrip == 1);
         WS_CHECK(saw_shadows == 1);
         WS_CHECK(saw_step == 1);
+        WS_CHECK(saw_menu == 1);
     }
     return 1;
 }

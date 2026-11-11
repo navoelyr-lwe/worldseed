@@ -211,9 +211,9 @@ void ws_live_save_settings(const ws_live_options *opts, const ws_session *s)
     if (ws_session_get_settings(s, &out) != WS_OK) {
         return;
     }
-    out.width = opts->width;
-    out.height = opts->height;
-    out.render_scale = opts->render_scale;
+    /* The session owns the observer fields including any resolution/scale/text
+     * size the user changed from the in-window settings menu; only fullscreen is
+     * a pure window operation that the session does not track. */
     out.fullscreen = opts->fullscreen;
     (void)ws_settings_save(opts->settings_path, &out);
 }
@@ -235,6 +235,8 @@ ws_result ws_live_make_session(const ws_live_options *opts, ws_session **out)
     }
     (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_AUTO + opts->start_view, 0.0);
     (void)ws_session_apply_settings(s, &opts->settings);
+    /* Give the in-window settings menu a file to save to/reload from. */
+    (void)ws_session_set_settings_path(s, opts->settings_path);
     *out = s;
     return WS_OK;
 }
@@ -336,7 +338,7 @@ static int run_headless(const ws_live_options *opts)
 static const char *TOUR_STEPS[] = {
     "auto_day", "free_overview", "follow_deer", "map_overview",
     "auto_dusk", "follow_fox", "auto_night", "reload_check",
-    "shadows_off", "shadows_on", "single_step",
+    "shadows_off", "shadows_on", "single_step", "settings_menu",
 };
 
 static int capture_step(ws_session *s, ws_framebuffer *fb, float *depth,
@@ -347,6 +349,9 @@ static int capture_step(ws_session *s, ws_framebuffer *fb, float *depth,
         return 0;
     }
     ws_hud_options ho = ws_hud_options_default();
+    /* The tour frames honour the live "Text size" setting so the settings-menu
+     * step visibly changes at large text. */
+    ho.scale = ws_session_hud_scale(s);
     ws_hud_draw(fb, s, &ho);
     char path[512];
     snprintf(path, sizeof(path), "%s/step-%02d-%s.ppm", opts->out_dir, index, name);
@@ -500,6 +505,51 @@ static int run_tour(const ws_live_options *opts)
     ok &= single_step_ok;
     ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
 
+    /* 12: interactive settings menu (docs/17 item 9). Open the menu, move the
+     * cursor down and right, and confirm the change is real: the "Text size"
+     * row goes small -> large and the world digest is untouched (the menu is
+     * observer-only). The world is still paused from the single-step step. */
+    char menu_before[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, menu_before);
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    int menu_open = ws_session_settings_visible(s);
+    int text_before = ws_session_hud_scale(s);
+    /* Walk the cursor to the "Text size" row (row WS_SET_ITEM_HUD_SCALE). */
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_HUD_SCALE) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    while (ws_session_settings_cursor(s) > WS_SET_ITEM_HUD_SCALE) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, -1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0); /* small->large */
+    int text_after = ws_session_hud_scale(s);
+    /* Also exercise the "Master volume" row (docs/17 item 9 audio setting). */
+    int vol_before = ws_session_volume(s);
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_VOLUME) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0);
+    int vol_after = ws_session_volume(s);
+    /* And the "Camera speed" row (docs/17 item 9 input/camera setting). */
+    int cam_before = ws_session_camera_speed_pct(s);
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_CAM_SPEED) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    int cam_after = ws_session_camera_speed_pct(s);
+    char menu_after[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, menu_after);
+    int menu_changed = (text_before != text_after) && (text_after == 2) &&
+                       (vol_after == vol_before - 10) &&
+                       (cam_after == cam_before + 25);
+    int menu_readonly = strcmp(menu_before, menu_after) == 0;
+    printf("tour settings_menu open=%d text %d->%d volume %d->%d cam %d->%d changed=%d readonly=%d\n",
+           menu_open, text_before, text_after, vol_before, vol_after,
+           cam_before, cam_after, menu_changed, menu_readonly);
+    ok &= menu_open && menu_changed && menu_readonly;
+    ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0); /* close menu */
+
     if (mf != NULL) {
         fprintf(mf, "# Worldseed Engine P11 live tour manifest\n");
         fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
@@ -510,6 +560,7 @@ static int run_tour(const ws_live_options *opts)
         fprintf(mf, "save_load_roundtrip=%d\n", roundtrip);
         fprintf(mf, "shadows_verified=%d\n", shadow_pair_changed);
         fprintf(mf, "single_step_verified=%d\n", single_step_ok);
+        fprintf(mf, "settings_menu_verified=%d\n", menu_changed && menu_readonly);
         fprintf(mf, "steps=%d\n", step);
         fclose(mf);
     }

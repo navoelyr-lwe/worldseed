@@ -554,6 +554,161 @@ static int test_step_once(void)
     return 1;
 }
 
+/* The interactive settings menu (docs/17 item 9): the cursor moves and clamps,
+ * the rows report stable values, adjusting a row changes the observer but never
+ * the world, and save/reload round-trips through the settings file. */
+static int test_settings_menu(void)
+{
+    ws_session *s = make(11ULL);
+    WS_CHECK(s != NULL);
+    run_seconds(s, 1.0);
+
+    /* Menu closed by default, cursor starts on the first row. */
+    WS_CHECK(ws_session_settings_visible(s) == 0);
+    WS_CHECK(ws_session_settings_cursor(s) == WS_SET_ITEM_WIDTH);
+
+    /* Rows report label+value; an out-of-range row is rejected. */
+    char label[64], value[48];
+    WS_CHECK(ws_session_settings_item(s, WS_SET_ITEM_VIEW, label, sizeof(label),
+                                      value, sizeof(value)) == WS_OK);
+    WS_CHECK(label[0] != '\0' && value[0] != '\0');
+    WS_CHECK(ws_session_settings_item(s, WS_SET_ITEM_COUNT, label, sizeof(label),
+                                      value, sizeof(value)) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK(ws_session_settings_item(s, -1, label, sizeof(label),
+                                      value, sizeof(value)) == WS_ERR_INVALID_ARGUMENT);
+
+    char before[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, before) == WS_OK);
+
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    WS_CHECK(ws_session_settings_visible(s) == 1);
+
+    /* Cursor moves down and clamps at the last row. */
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    WS_CHECK(ws_session_settings_cursor(s) == WS_SET_ITEM_WIDTH + 1);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, -1.0);
+    WS_CHECK(ws_session_settings_cursor(s) == WS_SET_ITEM_WIDTH);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, -1.0); /* clamp low */
+    WS_CHECK(ws_session_settings_cursor(s) == 0);
+
+    /* Move to the "Text size" row and adjust it: small (1) -> large (2). */
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_HUD_SCALE) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    WS_CHECK(ws_session_hud_scale(s) == 1);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    WS_CHECK(ws_session_hud_scale(s) == 2);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0); /* clamp high */
+    WS_CHECK(ws_session_hud_scale(s) == 2);
+
+    /* Move to the "Master volume" row: it steps in tens and clamps at 0/100.
+     * This is still observer-only (the audio gain), not world state. */
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_VOLUME) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    WS_CHECK(ws_session_volume(s) == 70);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    WS_CHECK(ws_session_volume(s) == 80);
+    for (int i = 0; i < 8; ++i) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    }
+    WS_CHECK(ws_session_volume(s) == 100); /* clamp high */
+    for (int i = 0; i < 20; ++i) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0);
+    }
+    WS_CHECK(ws_session_volume(s) == 0); /* clamp low */
+
+    /* Camera speed and look sensitivity step in 25s and clamp at 25..400. */
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_CAM_SPEED) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    WS_CHECK(ws_session_camera_speed_pct(s) == 100);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    WS_CHECK(ws_session_camera_speed_pct(s) == 125);
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_LOOK_SENS) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    WS_CHECK(ws_session_look_sensitivity_pct(s) == 100);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0);
+    WS_CHECK(ws_session_look_sensitivity_pct(s) == 75);
+
+    /* The world is untouched by any of the menu work. */
+    char after[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, after) == WS_OK);
+    WS_CHECK(strcmp(before, after) == 0);
+
+    /* Reset-to-defaults restores the default observer state. */
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_DEFAULTS, 0.0);
+    WS_CHECK(ws_session_hud_scale(s) == 1);
+    WS_CHECK(ws_session_volume(s) == 70);
+    WS_CHECK(ws_session_camera_speed_pct(s) == 100);
+    WS_CHECK(ws_session_look_sensitivity_pct(s) == 100);
+    WS_CHECK(ws_session_view_mode(s) == WS_VIEW_AUTO);
+    WS_CHECK(ws_session_time_of_day_s(s) == 10.0 * 3600.0);
+
+    /* Save/reload round-trips through a real file. */
+    const char *path = "ws_session_menu_test.cfg";
+    remove(path);
+    WS_CHECK(ws_session_set_settings_path(s, path) == WS_OK);
+    /* Put the cursor on the shadows row and turn it on via the menu. */
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_SHADOWS) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    while (ws_session_settings_cursor(s) > WS_SET_ITEM_SHADOWS) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, -1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    WS_CHECK(ws_session_shadows_visible(s) == 1);
+    WS_CHECK(ws_session_save_settings_file(s) == WS_OK);
+    WS_CHECK(ws_session_save_settings_file(NULL) == WS_ERR_NULL_POINTER);
+    /* Change the live state, then reload the file and confirm it comes back. */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0);
+    WS_CHECK(ws_session_shadows_visible(s) == 0);
+    /* Point the cursor at the reload row and apply it. */
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_RELOAD) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_APPLY, 0.0);
+    WS_CHECK(ws_session_shadows_visible(s) == 1);
+    remove(path);
+
+    WS_CHECK(ws_session_set_settings_path(NULL, path) == WS_ERR_NULL_POINTER);
+    WS_CHECK(ws_session_set_settings_path(s, NULL) == WS_OK); /* disable */
+    WS_CHECK(ws_session_save_settings_file(s) == WS_OK);      /* no-op, not error */
+
+    /* Camera speed setting has a real effect on free-camera motion: the same
+     * input step moves the camera further at 200% than at 50%. */
+    (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_FREE, 0.0);
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_CAM_SPEED) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    while (ws_session_settings_cursor(s) > WS_SET_ITEM_CAM_SPEED) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, -1.0);
+    }
+    while (ws_session_camera_speed_pct(s) > 50) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0);
+    }
+    WS_CHECK(ws_session_camera_speed_pct(s) == 50);
+    ws_camera base = ws_session_camera(s);
+    (void)ws_session_camera_input(s, 1.0, 0.0, 0.0, 0.0, 0.0, 0.1);
+    ws_camera slow = ws_session_camera(s);
+    double slow_d = (slow.eye.x - base.eye.x) * (slow.eye.x - base.eye.x) +
+                    (slow.eye.z - base.eye.z) * (slow.eye.z - base.eye.z);
+    while (ws_session_camera_speed_pct(s) < 200) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    }
+    WS_CHECK(ws_session_camera_speed_pct(s) == 200);
+    base = ws_session_camera(s);
+    (void)ws_session_camera_input(s, 1.0, 0.0, 0.0, 0.0, 0.0, 0.1);
+    ws_camera fast = ws_session_camera(s);
+    double fast_d = (fast.eye.x - base.eye.x) * (fast.eye.x - base.eye.x) +
+                    (fast.eye.z - base.eye.z) * (fast.eye.z - base.eye.z);
+    WS_CHECK(fast_d > slow_d);
+
+    ws_session_destroy(s);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -574,6 +729,7 @@ int main(void)
         {"session_replay_enter_seek_exit", test_replay_enter_seek_exit},
         {"session_replay_observation_only", test_replay_is_observation_only},
         {"session_step_once", test_step_once},
+        {"session_settings_menu", test_settings_menu},
     };
     return ws_test_run("session", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }
