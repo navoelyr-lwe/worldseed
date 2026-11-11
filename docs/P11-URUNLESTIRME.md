@@ -150,6 +150,21 @@ göz mutlak datanın üstünde kalır. Kalıcı ayarlara eklendi (`cam_collision
 salt okunurdur: kamera hareketi dünya özetini değiştirmez (`tests/test_session.c`
 `session_camera_terrain_collision`).
 
+### Dışa aktarma — `src/app/ws_live.{h,c}`, `src/ui/ws_session.{h,c}`
+
+`docs/17` "Dışa aktarma" maddesinin uygulaması: zaman damgalı kare dizisi ve eşleşen
+WAV ses çıktısı. `worldseed.exe --live-export <dizin> [--live-export-seconds <s>]`
+canlı ürünü sabit 1/30 s kare aralığıyla koşar, her kareyi kendi CPU referans
+renderer'ımızla çizer ve HUD'ı bindirip `frame-NNNNN.ppm` olarak yazar. Aynı aralık
+için oturumun canlı prosedürel ses manzarası `ws_session_render_audio` ile karıştırılır
+(48 kHz, stereo, int16) ve karelerle hizalanan tek bir `soundscape.wav` üretilir; WAV
+oturumun **gerçek** yaşam olaylarından sürülür (sabit kayıt değil). `frames-index.txt`
+her karenin dosya adını, dünya zamanını, tick'ini ve SHA-256'sını; `export-manifest.txt`
+ise kare sayısını, aralığı, ses örnekleme hızını/kare sayısını ve dünyanın SHA-256
+özetini kaydeder. Karıştırma yalnız ses durumunu ilerletir, dünyayı değiştirmez
+(`tests/test_session.c` `session_audio_export_readonly`); aynı tohumla iki koşu
+bit-özdeş kare dizisi ve bit-özdeş WAV üretir (`tests/test_live.c` `live_export_run`).
+
 ## Kontroller (kullanıcıya görünür)
 
 | Tuş | İşlev |
@@ -243,6 +258,25 @@ salt okunurdur: kamera hareketi dünya özetini değiştirmez (`tests/test_sessi
   devam ettiği doğrulanır. Manifest `newest_matches_live=1` (en yeni kayıtlı örnek
   canlı dünyayı bit-özdeş yeniden üretir) ve `live_restored=1` (replay'den çıkış
   canlı dünyayı bit-özdeş geri yükler) yazar. `LIVE_REPLAY_OK` çıktısı CI kapısıdır.
+
+- **Dışa aktarma kanıtı** — `worldseed.exe --live-export <dizin> [--live-export-seconds <s>]`
+  (docs/17 "Dışa aktarma"): canlı ürün 1/30 s kare aralığıyla koşar, her kareyi kendi
+  CPU referans renderer'ımızla çizip `frame-NNNNN.ppm` olarak yazar ve aynı aralık için
+  canlı prosedürel ses manzarasını karelerle hizalanan tek bir `soundscape.wav` olarak
+  karıştırır. `frames-index.txt` her karenin dünya zamanını, tick'ini ve SHA-256'sını;
+  `export-manifest.txt` kare sayısını, aralığı, ses örnekleme hızını/kare sayısını ve
+  dünyanın SHA-256 özetini kaydeder. Bu makinede (320×180, 1 s):
+
+  ```
+  LIVE_EXPORT_OK frames=30 wav=.../soundscape.wav frames=48000 nonzero_audio=1
+  ```
+
+  Aynı tohumla iki dışa aktarma koşusu bit-özdeş kare dizisi ve bit-özdeş WAV üretir
+  (`cmp` her `frame-*.ppm` ve `soundscape.wav` için başarılı); `ci.yml`,
+  `gui-windows.yml` ve `tools/package-windows.ps1` bu eşitliği zorunlu kapı yapar.
+  Ses karıştırmanın dünyayı değiştirmediği `tests/test_session.c`
+  `session_audio_export_readonly` ile, dışa aktarma koşusunun uçtan uca çalıştığı
+  `tests/test_live.c` `live_export_run` ile doğrulanır.
 
 - **Tur tekrarlanabilirliği** — Aynı parametrelerle iki tur karesi bit-özdeş olur
   (`cmp` her `step-*.ppm` için başarılı). Bu, "gözlemci salt okunurdur" kuralını

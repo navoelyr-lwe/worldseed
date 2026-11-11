@@ -70,6 +70,28 @@ Get-ChildItem evidence/live/select/*.ppm | ForEach-Object {
     & tools/ppm2png.ps1 -In $_.FullName -Out ($_.FullName -replace '\.ppm$', '.png')
 }
 
+# Export (docs/17 "Dışa aktarma"): the live product writes a timestamped frame
+# sequence plus the matching WAV. Prove it is reproducible across two runs, then
+# ship a few exported frames and the exported soundscape.
+New-Item -ItemType Directory -Force -Path evidence/live/export-a,evidence/live/export-b | Out-Null
+& $exe --live-export evidence/live/export-a --size 1280x720 --live-export-seconds 1 | Tee-Object -FilePath evidence/live/export.txt
+if (-not (Select-String -Path evidence/live/export.txt -Pattern "LIVE_EXPORT_OK" -Quiet)) { exit 1 }
+if (-not (Select-String -Path evidence/live/export-a/export-manifest.txt -Pattern "audio_nonzero=1" -Quiet)) { exit 1 }
+& $exe --live-export evidence/live/export-b --size 1280x720 --live-export-seconds 1 | Out-Null
+Get-ChildItem evidence/live/export-a/frame-*.ppm | ForEach-Object {
+    $b = Join-Path "evidence/live/export-b" $_.Name
+    if ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $b).Hash) {
+        Write-Error "live export $($_.Name) not reproducible"; exit 1
+    }
+}
+if ((Get-FileHash evidence/live/export-a/soundscape.wav).Hash -ne (Get-FileHash evidence/live/export-b/soundscape.wav).Hash) {
+    Write-Error "live export WAV not reproducible"; exit 1
+}
+# Convert a few exported frames to PNG for the package.
+Get-ChildItem evidence/live/export-a/frame-*.ppm | Where-Object { $_.BaseName -match 'frame-000(00|10|20)$' } | ForEach-Object {
+    & tools/ppm2png.ps1 -In $_.FullName -Out ($_.FullName -replace '\.ppm$', '.png')
+}
+
 # P9 soundscape: our own C17 synthesis, rendered from a real ecology run, so
 # the preview ships a listenable WAV next to the frames.
 & $audioExe "evidence/preview/soundscape.wav" 20260101 | Tee-Object -FilePath evidence/preview/audio.txt
@@ -91,6 +113,10 @@ Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
 New-Item -ItemType Directory -Force -Path "$stage/select" | Out-Null
 Copy-Item evidence/live/select/*.png "$stage/select/"
 Copy-Item evidence/live/select/select-manifest.txt "$stage/select/"
+New-Item -ItemType Directory -Force -Path "$stage/export" | Out-Null
+Copy-Item evidence/live/export-a/frame-*.png "$stage/export/"
+Copy-Item evidence/live/export-a/soundscape.wav "$stage/export/"
+Copy-Item evidence/live/export-a/export-manifest.txt "$stage/export/"
 @(
     "Worldseed Engine preview (P11 - fare ile menu secimi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
@@ -106,7 +132,8 @@ Copy-Item evidence/live/select/select-manifest.txt "$stage/select/"
     "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
     "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",
     "Kanit: preview/*.png (CPU referans renderer ciktilari), live/*.png (canli uygulama turu),",
-    "select/*.png (dunya secimi), preview/perf.txt (donanim/olcum) ve manifest.txt (SHA-256).",
+    "select/*.png (dunya secimi), export/*.png + export/soundscape.wav (disa aktarma: zaman",
+    "damgali kare dizisi ve eslesen ses), preview/perf.txt (donanim/olcum) ve manifest.txt (SHA-256).",
     "CPU referans renderer bit-ozdes kalarak hizlandirildi; golgeler opt-in ve eklemeli.",
     "GPU yalniz gercek kazanc oldugunda kullanilir; OpenCL cihazi yoksa CPU fallback calisir."
 ) | Set-Content -Path "$stage/README.txt"
@@ -117,6 +144,8 @@ $mfFiles = @("$stage/worldseed.exe")
 $mfFiles += Get-ChildItem "$stage/preview/*.png" | ForEach-Object { $_.FullName }
 $mfFiles += Get-ChildItem "$stage/live/*.png" | ForEach-Object { $_.FullName }
 $mfFiles += Get-ChildItem "$stage/select/*.png" | ForEach-Object { $_.FullName }
+$mfFiles += Get-ChildItem "$stage/export/*.png" | ForEach-Object { $_.FullName }
+$mfFiles += "$stage/export/soundscape.wav"
 $mfFiles += "$stage/preview/soundscape.wav"
 $mfFiles += "$stage/preview/perf.txt"
 & $mfExe --out "MANIFEST.txt" --version "$Version" @mfFiles
