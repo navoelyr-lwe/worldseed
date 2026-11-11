@@ -1073,8 +1073,8 @@ static int test_motion_check_gates_each_metric(void)
 static int test_motion_measure_is_deterministic(void)
 {
     ws_motion_metrics a, b;
-    WS_CHECK(ws_motion_measure(20260101ULL, 5.0, &a) == WS_OK);
-    WS_CHECK(ws_motion_measure(20260101ULL, 5.0, &b) == WS_OK);
+    WS_CHECK(ws_motion_measure(WS_SPECIES_DEER, 20260101ULL, 5.0, &a) == WS_OK);
+    WS_CHECK(ws_motion_measure(WS_SPECIES_DEER, 20260101ULL, 5.0, &b) == WS_OK);
     WS_CHECK(a.frames == b.frames);
     WS_CHECK(a.forward_m == b.forward_m);
     WS_CHECK(a.forward_speed_mps == b.forward_speed_mps);
@@ -1086,22 +1086,34 @@ static int test_motion_measure_is_deterministic(void)
 
     /* A different seed changes the run (start phase), so the metrics differ. */
     ws_motion_metrics c;
-    WS_CHECK(ws_motion_measure(99ULL, 5.0, &c) == WS_OK);
+    WS_CHECK(ws_motion_measure(WS_SPECIES_DEER, 99ULL, 5.0, &c) == WS_OK);
     WS_CHECK(c.forward_m != a.forward_m);
+
+    /* An unknown species is rejected rather than silently measured. */
+    ws_motion_metrics d;
+    WS_CHECK(ws_motion_measure(9999, 20260101ULL, 5.0, &d) == WS_ERR_INVALID_ARGUMENT);
     return 1;
 }
 
 static int test_motion_checklist_passes_reference_walk(void)
 {
-    WS_CHECK(ws_motion_spec_count() >= 1u);
+    /* One spec per representative species: the whole four-species body/gait
+     * catalogue carries a motion claim (docs/19 §4.3). */
+    WS_CHECK(ws_motion_spec_count() == (size_t)WS_SPECIES_COUNT);
+    int seen[WS_SPECIES_COUNT] = {0};
     for (size_t i = 0; i < ws_motion_spec_count(); ++i) {
         const ws_motion_spec *spec = ws_motion_spec_at(i);
+        WS_CHECK(spec->species >= 0 && spec->species < WS_SPECIES_COUNT);
+        seen[spec->species] += 1;
         ws_motion_metrics m;
-        WS_CHECK(ws_motion_measure(20260101ULL, 20.0, &m) == WS_OK);
+        WS_CHECK(ws_motion_measure(spec->species, 20260101ULL, 20.0, &m) == WS_OK);
         uint32_t fail = 0u;
         WS_CHECK_MSG(ws_motion_check(spec, &m, &fail) == WS_OK, spec->scene_id);
-        /* The reference walk must genuinely move forward, not drift. */
+        /* Every species' reference walk must genuinely move forward. */
         WS_CHECK(m.forward_m > 0.0);
+    }
+    for (int s = 0; s < WS_SPECIES_COUNT; ++s) {
+        WS_CHECK(seen[s] == 1);
     }
     return 1;
 }

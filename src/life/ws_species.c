@@ -28,6 +28,8 @@ static ws_species_profile fox_body(void)
     p.total_mass = 6.5;
     p.body_length = 0.70;
     p.shoulder_h = 0.38;
+    /* Legs are longer than shoulder height (deer ratio), so the knees stay bent
+     * at rest and the leg has horizontal reach to place a foot. */
     p.leg_upper = 0.22;
     p.leg_lower = 0.22;
     p.stance = 0.34;
@@ -44,8 +46,8 @@ static ws_species_profile rabbit_body(void)
     p.total_mass = 1.8;
     p.body_length = 0.40;
     p.shoulder_h = 0.18;
-    p.leg_upper = 0.09;
-    p.leg_lower = 0.09;
+    p.leg_upper = 0.103;
+    p.leg_lower = 0.103;
     p.stance = 0.16;
     p.gait_freq = 3.0;
     p.duty_factor = 0.55;
@@ -60,8 +62,8 @@ static ws_species_profile boar_body(void)
     p.total_mass = 80.0;
     p.body_length = 1.3;
     p.shoulder_h = 0.80;
-    p.leg_upper = 0.30;
-    p.leg_lower = 0.35;
+    p.leg_upper = 0.45;
+    p.leg_lower = 0.45;
     p.stance = 0.55;
     p.gait_freq = 1.8;
     p.duty_factor = 0.65;
@@ -183,12 +185,16 @@ const char *ws_species_card(ws_species_kind kind)
 
 double ws_species_walk_speed(ws_species_kind kind)
 {
+    /* Froude scaling: a walk speed proportional to sqrt(shoulder height),
+     * anchored to the reference deer's 1.5 m/s. This keeps each species' stride
+     * inside its leg reach instead of demanding a deer-length stride from a
+     * short-legged body (docs/19 §4.3). */
     switch (kind) {
-    case WS_SPECIES_DEER: return 1.5;
-    case WS_SPECIES_FOX:  return 1.8;
+    case WS_SPECIES_DEER:   return 1.5;
+    case WS_SPECIES_FOX:    return 1.8;
     case WS_SPECIES_RABBIT: return 2.0;
-    case WS_SPECIES_BOAR: return 1.3;
-    default:              return 1.5;
+    case WS_SPECIES_BOAR:   return 1.3;
+    default:                return 1.5;
     }
 }
 

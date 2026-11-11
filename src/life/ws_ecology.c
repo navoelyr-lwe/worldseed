@@ -262,8 +262,13 @@ static ws_eco_agent *spawn_agent(ws_ecology *e, int species, double x, double y,
 static int spawn_offspring(ws_ecology *e, ws_eco_agent *parent, int species)
 {
     const ws_species_info *si = ws_species_get((ws_species_kind)species);
+    double area = e->config.area_m;
     double x = parent->x + (ws_rng_next_double(&e->rng) - 0.5) * 5.0;
     double y = parent->y + (ws_rng_next_double(&e->rng) - 0.5) * 5.0;
+    /* A parent near a border would otherwise drop its offspring outside the
+     * region; wrap the birth site back into [0, area). */
+    x -= floor(x / area) * area;
+    y -= floor(y / area) * area;
     ws_eco_agent *child = spawn_agent(e, species, x, y, si->juvenile_frac, 0.0);
     if (child == NULL) {
         return 0;
@@ -361,11 +366,13 @@ static void step_agent(ws_ecology *e, uint32_t i, double dt)
     double step = speed * dt;
     a->x += cos(a->heading) * step;
     a->y += sin(a->heading) * step;
+    /* Wrap into [0, area). A single conditional add/subtract only handles a
+     * displacement smaller than the region; a fast species can move further in
+     * one step and leave the agent outside. The modulo form is correct for any
+     * step size and for negative coordinates. */
     double area = e->config.area_m;
-    if (a->x < 0.0) a->x += area;
-    if (a->x >= area) a->x -= area;
-    if (a->y < 0.0) a->y += area;
-    if (a->y >= area) a->y -= area;
+    a->x -= floor(a->x / area) * area;
+    a->y -= floor(a->y / area) * area;
     a->dist_travelled += step;
 
     /* Grazing: demand-driven. An animal eats only what it needs to refill its

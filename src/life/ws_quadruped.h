@@ -87,6 +87,12 @@ typedef struct ws_gait_state {
 
 void ws_gait_state_init(ws_gait_state *g);
 
+/* Initialise the gait state with swing apex and foot-placement gain scaled from
+ * the species profile, so a small species does not lift a deer-sized foot or
+ * over-correct at its stride scale. The reference deer maps to the same values
+ * as ws_gait_state_init. NULL profile falls back to the deer defaults. */
+void ws_gait_state_init_for(ws_gait_state *g, const ws_species_profile *p);
+
 void ws_quadruped_walk(ws_creature *c, const ws_quad_parts *parts,
                        const ws_species_profile *p, ws_gait_state *g,
                        double v_des);
@@ -104,5 +110,12 @@ ws_result ws_quadruped_walk_steer(ws_creature *c, const ws_quad_parts *parts,
  * Applied to body `torso` as a stabiliser torque (not part of the gait). */
 void ws_quadruped_balance(ws_creature *c, int torso, double kp, double kd,
                           double target_angle);
+
+/* Default balance gains for a species, scaled from the reference deer by the
+ * same mass x length factor the builder uses for the joint torque budget, so a
+ * small species is not stabilised with a deer-scale torque. NULL profile gives
+ * the reference deer gains. */
+void ws_quadruped_default_balance(const ws_species_profile *p,
+                                  double *out_kp, double *out_kd);
 
 #endif /* WS_LIFE_QUADRUPED_H */

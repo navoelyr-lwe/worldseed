@@ -65,7 +65,7 @@ int main(int argc, char **argv)
         const ws_motion_spec *spec = ws_motion_spec_at(i);
 
         ws_motion_metrics m;
-        ws_result res = ws_motion_measure(seed, MOTION_SECONDS, &m);
+        ws_result res = ws_motion_measure(spec->species, seed, MOTION_SECONDS, &m);
         if (res != WS_OK) {
             fprintf(stderr, "motion: run failed for %s: %s\n", spec->scene_id,
                     ws_result_name(res));
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
         /* Determinism: the same seed must reproduce identical metrics. */
         ws_motion_metrics m2;
         int reproducible = 0;
-        if (ws_motion_measure(seed, MOTION_SECONDS, &m2) == WS_OK) {
+        if (ws_motion_measure(spec->species, seed, MOTION_SECONDS, &m2) == WS_OK) {
             reproducible = (m.frames == m2.frames) &&
                            (m.forward_m == m2.forward_m) &&
                            (m.forward_speed_mps == m2.forward_speed_mps) &&

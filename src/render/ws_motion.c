@@ -13,6 +13,7 @@
 #include "../core/ws_rng.h"
 #include "../life/ws_creature.h"
 #include "../life/ws_quadruped.h"
+#include "../life/ws_species.h"
 
 #include <math.h>
 
@@ -21,7 +22,6 @@
 #define MOTION_ITERS 30
 #define MOTION_BIAS 0.2
 #define MOTION_SETTLE_STEPS 1000
-#define MOTION_V_DES 0.8
 #define MOTION_BAL_KP 4000.0
 #define MOTION_BAL_KD 500.0
 
@@ -68,7 +68,8 @@ static void com_velocity(const ws_creature *c, double *out_vx, double *out_vy)
     *out_vy = vy;
 }
 
-ws_result ws_motion_measure(uint64_t seed, double seconds, ws_motion_metrics *out)
+ws_result ws_motion_measure(int species, uint64_t seed, double seconds,
+                            ws_motion_metrics *out)
 {
     if (out == NULL) {
         return WS_ERR_NULL_POINTER;
@@ -76,33 +77,51 @@ ws_result ws_motion_measure(uint64_t seed, double seconds, ws_motion_metrics *ou
     if (seconds <= 0.0) {
         return WS_ERR_INVALID_ARGUMENT;
     }
+    const ws_species_info *si = ws_species_get((ws_species_kind)species);
+    if (si == NULL) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    const ws_species_profile *sp = &si->body;
+    /* Integration step: hold a fixed number of steps per gait cycle instead of
+     * a fixed absolute step. A small, fast-stepping body has a stiffer joint
+     * plant; at the deer's absolute step its stance dynamics are under-resolved
+     * and the walk goes unstable. Anchoring to the deer's 1/500 step at 1.4 Hz
+     * leaves the deer exactly unchanged while giving the faster species the
+     * finer step their dynamics need. */
+    double dt = MOTION_DT * (1.4 / sp->gait_freq);
 
-    ws_species_profile sp = ws_species_red_deer();
     ws_quad_storage st;
     ws_quad_parts parts;
     ws_cbody bodies[8];
     ws_cjoint joints[8];
     ws_cfoot feet[4];
     ws_creature c;
-    if (ws_creature_init(&c, MOTION_DT, MOTION_G, MOTION_ITERS, MOTION_BIAS,
+    if (ws_creature_init(&c, dt, MOTION_G, MOTION_ITERS, MOTION_BIAS,
                          bodies, 8u, joints, 8u, feet, 4u) != WS_OK) {
         return WS_ERR_INVALID_STATE;
     }
     ws_creature_set_ground(&c, flat_ground, NULL);
-    if (ws_quadruped_build(&c, &st, &sp, 0.0, &parts) != WS_OK) {
+    if (ws_quadruped_build(&c, &st, sp, 0.0, &parts) != WS_OK) {
         return WS_ERR_INVALID_STATE;
     }
 
+    /* Species-scaled stabiliser gains, and each species commanded at its own
+     * walk speed, so the run is judged at that species' scale (docs/19 §4.3).
+     * The deer keeps the same 1.5 m/s command the golden scene uses. */
+    double bal_kp = MOTION_BAL_KP, bal_kd = MOTION_BAL_KD;
+    ws_quadruped_default_balance(sp, &bal_kp, &bal_kd);
+    double v_des = ws_species_walk_speed((ws_species_kind)species);
+
     /* Settle the standing body before measuring the walk. */
     for (int i = 0; i < MOTION_SETTLE_STEPS; ++i) {
-        ws_quadruped_balance(&c, parts.torso, MOTION_BAL_KP, MOTION_BAL_KD, 0.0);
+        ws_quadruped_balance(&c, parts.torso, bal_kp, bal_kd, 0.0);
         if (ws_creature_step(&c) != WS_OK) {
             return WS_ERR_INVALID_STATE;
         }
     }
 
     ws_gait_state gs;
-    ws_gait_state_init(&gs);
+    ws_gait_state_init_for(&gs, sp);
     /* Seed-varied starting phase keeps the run deterministic per seed while
      * exercising the same thresholds from different points of the stride. The
      * gait controller resets the phase on its first call, so the offset is
@@ -112,19 +131,19 @@ ws_result ws_motion_measure(uint64_t seed, double seconds, ws_motion_metrics *ou
     double phase_offset = ws_rng_next_double(&rng);
 
     double x0 = c.bodies[parts.torso].px;
-    uint64_t frames = (uint64_t)(seconds / MOTION_DT + 0.5);
+    uint64_t frames = (uint64_t)(seconds / dt + 0.5);
     double max_speed = 0.0, max_accel = 0.0, max_energy = 0.0, max_tilt = 0.0;
     double min_clear = 1.0e30;
     double prev_vx = 0.0, prev_vy = 0.0;
     int have_prev = 0;
 
     for (uint64_t i = 0; i < frames; ++i) {
-        ws_quadruped_walk(&c, &parts, &sp, &gs, MOTION_V_DES);
+        ws_quadruped_walk(&c, &parts, sp, &gs, v_des);
         if (i == 0u) {
             gs.phase += phase_offset;
             gs.phase -= floor(gs.phase);
         }
-        ws_quadruped_balance(&c, parts.torso, MOTION_BAL_KP, MOTION_BAL_KD, 0.0);
+        ws_quadruped_balance(&c, parts.torso, bal_kp, bal_kd, 0.0);
         if (ws_creature_step(&c) != WS_OK) {
             return WS_ERR_INVALID_STATE;
         }
@@ -154,8 +173,8 @@ ws_result ws_motion_measure(uint64_t seed, double seconds, ws_motion_metrics *ou
         double vx, vy;
         com_velocity(&c, &vx, &vy);
         if (have_prev) {
-            double ax = (vx - prev_vx) / MOTION_DT;
-            double ay = (vy - prev_vy) / MOTION_DT;
+            double ax = (vx - prev_vx) / dt;
+            double ay = (vy - prev_vy) / dt;
             double a = hypot(ax, ay);
             if (a > max_accel) {
                 max_accel = a;
@@ -168,7 +187,7 @@ ws_result ws_motion_measure(uint64_t seed, double seconds, ws_motion_metrics *ou
 
     out->frames = frames;
     out->forward_m = c.bodies[parts.torso].px - x0;
-    out->forward_speed_mps = out->forward_m / (frames * MOTION_DT);
+    out->forward_speed_mps = out->forward_m / (frames * dt);
     out->max_body_speed_mps = max_speed;
     out->max_com_accel_mps2 = max_accel;
     out->max_torso_tilt_rad = max_tilt;
@@ -177,13 +196,20 @@ ws_result ws_motion_measure(uint64_t seed, double seconds, ws_motion_metrics *ou
     return WS_OK;
 }
 
-/* The reference scene that carries a motion claim. Thresholds are calibrated
- * from deterministic runs and are deliberately conservative: they fail on a
- * stalled, unstable or explosive gait, not on a legitimate tuning change. */
-/* fields: id, min_forward, min_speed, max_speed, max_accel, max_tilt,
+/* The reference scenes that carry a motion claim. The first is the P5 reference
+ * quadruped scene (creature_walk, red deer); the other three cover the
+ * remaining representative species (fox, rabbit, boar) so the whole
+ * four-species body/gait catalogue is held to the same model standard
+ * (docs/19 §4.3). Thresholds are calibrated from deterministic runs and are
+ * deliberately conservative: they fail on a stalled, unstable or explosive
+ * gait, not on a legitimate tuning change. */
+/* fields: id, species, min_forward, min_speed, max_speed, max_accel, max_tilt,
  *         min_clear, max_energy, min_frames */
 static const ws_motion_spec g_specs[] = {
-    {"creature_walk", 2.0, 0.20, 1.60, 500.0, 0.80, -0.05, 4000.0, 250u},
+    {"creature_walk",     WS_SPECIES_DEER,   2.0, 0.20, 1.60, 500.0, 0.80, -0.05, 4000.0, 250u},
+    {"species_fox",       WS_SPECIES_FOX,    2.0, 0.20, 2.20, 900.0, 0.80, -0.05, 4000.0, 250u},
+    {"species_rabbit",    WS_SPECIES_RABBIT, 2.0, 0.20, 2.40, 1500.0, 0.80, -0.05, 4000.0, 250u},
+    {"species_boar",      WS_SPECIES_BOAR,   2.0, 0.20, 1.60, 700.0, 0.80, -0.05, 4000.0, 250u},
 };
 
 size_t ws_motion_spec_count(void)

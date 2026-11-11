@@ -629,8 +629,13 @@ static ws_result build_species_walk(ws_env_scene *e, int kind,
     ws_creature c;
     ws_quad_parts parts;
 
+    /* Per-species integration step: a fixed number of steps per gait cycle. The
+     * deer keeps 1/500 s exactly; smaller, faster-stepping species get a finer
+     * step, without which their stance dynamics are under-resolved and the walk
+     * goes unstable (NaN poses, out-of-region bodies). */
+    double dt = (1.0 / 500.0) * (1.4 / sp->gait_freq);
     double ground0 = 0.0; /* body is built above 0, then seated on the terrain */
-    ws_result r = ws_creature_init(&c, 1.0 / 500.0, 9.80665, 30, 0.2,
+    ws_result r = ws_creature_init(&c, dt, 9.80665, 30, 0.2,
                                    out->bodies, 8u, joints, 8u, feet, 4u);
     if (r != WS_OK) {
         return r;
@@ -642,17 +647,19 @@ static ws_result build_species_walk(ws_env_scene *e, int kind,
     if (r != WS_OK) {
         return r;
     }
+    double bal_kp, bal_kd;
+    ws_quadruped_default_balance(sp, &bal_kp, &bal_kd);
     for (int i = 0; i < 600; ++i) {
-        ws_quadruped_balance(&c, parts.torso, 4000.0, 500.0, 0.0);
+        ws_quadruped_balance(&c, parts.torso, bal_kp, bal_kd, 0.0);
         ws_creature_step(&c);
     }
     ws_gait_state gs;
-    ws_gait_state_init(&gs);
+    ws_gait_state_init_for(&gs, sp);
     double speed = ws_species_walk_speed((ws_species_kind)kind);
     int steps = (int)(3.0 / c.dt);
     for (int i = 0; i < steps; ++i) {
         ws_quadruped_walk(&c, &parts, sp, &gs, speed);
-        ws_quadruped_balance(&c, parts.torso, 4000.0, 500.0, 0.0);
+        ws_quadruped_balance(&c, parts.torso, bal_kp, bal_kd, 0.0);
         ws_creature_step(&c);
     }
     /* Re-seat on the terrain at the requested spot and rotate to the heading. */
