@@ -67,7 +67,7 @@ GUI testi "çalıştı" olarak raporlanmaz.
 - Kısıtlı (403): branch protection, ruleset, Actions izinleri, repo ayarları.
 - Bu nedenle koruma, yönetici erişimi sağlanana kadar PR akışı + workflow kapılarıyla uygulanır.
 
-## Bilinen altyapı sınırı: GitHub-hosted runner erişilemez (2026-11-10)
+## Geçmiş altyapı olayı: GitHub-hosted runner erişimi (2026-11-10)
 
 2026-11-10'da bu depoda **tüm GitHub-hosted işler sıfır adımla anında düşüyor**
 (`runner_id=0`, hiçbir adım çalışmıyor). Durum bağımsız olarak doğrulandı:
@@ -83,13 +83,8 @@ GUI testi "çalıştı" olarak raporlanmaz.
 - GitHub durum sayfası kesinti göstermiyor; bu, hesap/depo düzeyinde bir runner
   erişim kısıtı (ör. Actions dakika/spending limiti veya hosted runner izni).
 
-Sonuç ve güvenli alternatif: hosted kapılar (derleme, birim testleri, MSVC,
-plan bütünlüğü, README bağlantıları, P12 gölge farkı) kodda aynen korunur ve
-erişim geri geldiğinde otomatik çalışır. P12 gölge kanıt kapısı ayrıca **gerçekten
-çalışan** izole Windows self-hosted işine eklendi; böylece şu an bile otomatik
-kanıt üretiliyor. Aynı şekilde release paketleme, hosted Windows işi
-başarısız olduğunda aynı `tools/package-windows.ps1` betiğini izole self-hosted
-Windows koşucusunda çalıştıran bir yedek yola sahiptir; paket bütünlüğü ve
-SHA-256'sı bu koşucuda doğrulandı (`worldseed-windows-x64.zip`,
-`PKG_TEST_OK`). Bu sınır kullanıcı adına saklanmaz; yönetici erişimi
-gerektirdiği için `AGENTS.md` uyarınca raporlanır.
+Bu durum 10 Kasım 2026 tarihli bir olay kaydıdır; kalıcı/güncel runner durumu olarak okunmamalıdır. 11 Kasım 2026'da `main` commit'i `f6d15ed8c54ef51183626aafb565ff817d0b45c0` için CI run `42974024398` başarıyla tamamlandı. Bu çalıştırmada Linux GCC/Clang Debug/Release, Windows MSVC Debug/Release, OpenCL CPU kernel, plan bütünlüğü ve doküman bağlantısı işleri başarılıdır. Aynı commit için izole Windows GUI run `42974024303` ve release run `42974038527` da başarılıdır.
+
+Bu nedenle 11 Kasım 2026 denetim anındaki gözlem: GitHub-hosted CI işleri yeniden çalışır görünmektedir; ancak tek bir başarılı run gelecekteki tüm runner erişimini garanti etmez. Yeni workflow koşuları gerçek sonuçlarına göre değerlendirilmelidir. Önceki 10 Kasım kesintisi tarihsel kayıt olarak korunur.
+
+P12 gölge kanıtı ve release paketleme için izole Windows self-hosted yedek yolu da korunur. Branch protection/ruleset erişimi ayrı konudur: bağlı entegrasyonla branch-protection okuması bu denetimde 403 döndürdü; sunucu tarafı koruma ayarları etkin mi bu denetimde doğrulanamadı. Yetki sağlanmadan ayarların kurulmuş veya doğrulanmış olduğu varsayılmamalıdır.
