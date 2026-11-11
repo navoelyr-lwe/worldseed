@@ -10,7 +10,7 @@ Açılışta modal bir **dünya seçim ekranı** gösterilir (canlı uygulamada 
 - **Mevcut dünyayı yükle:** kayıtlı checkpoint'i bit-özdeş geri yükler; kayıt yoksa seçilemez.
 - **Örnek dünyayı aç:** sabit bir tohumla gelen örnek dünyayı açar; aynı tohum her zaman aynı dünyayı verir (deterministik).
 
-`↑/↓` (veya `W/S`) imleci taşır, `Enter` seçilen dünyayı açar, `M`/`Esc` iptal eder (geçerli dünya korunur). Seçim ekranı gözlemci salt-okunurdur: onaylamadan açıp kapatmak dünyayı değiştirmez. Seçim gerçekleşince oturum yeni dünyayı gösterir ve ekran kapanır.
+`↑/↓` (veya `W/S`) imleci taşır, `Enter` seçilen dünyayı açar, `M`/`Esc` iptal eder (geçerli dünya korunur). Bir satıra **sol tıklama** imleci o satıra taşır; vurgulanan satıra ikinci tıklama satırı klavyedeki `Enter` gibi açar. Seçim ekranı gözlemci salt-okunurdur: onaylamadan açıp kapatmak dünyayı değiştirmez. Seçim gerçekleşince oturum yeni dünyayı gösterir ve ekran kapanır.
 
 ## Ekran ve kipler
 

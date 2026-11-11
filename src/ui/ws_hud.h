@@ -27,4 +27,15 @@ ws_hud_options ws_hud_options_default(void);
 /* Draw the whole HUD for the current session state into `fb`. */
 void ws_hud_draw(ws_framebuffer *fb, const ws_session *s, const ws_hud_options *opts);
 
+/* Mouse hit-testing for the modal menus (docs/17 item 9 / "Ana deneyim").
+ *
+ * A click must land on the row the user sees, so these use exactly the layout
+ * ws_hud_draw paints. `fb_w`/`fb_h` are the framebuffer dimensions the HUD was
+ * drawn at and `scale` the text scale it used; `(px, py)` is the pointer in
+ * framebuffer pixels. Each returns the row id under the point (a
+ * `ws_settings_item` or `ws_world_choice`), or -1 when the point is not on a
+ * menu row. */
+int ws_hud_settings_row_at(uint32_t fb_w, uint32_t fb_h, int scale, int px, int py);
+int ws_hud_world_select_row_at(uint32_t fb_w, uint32_t fb_h, int scale, int px, int py);
+
 #endif /* WS_UI_HUD_H */

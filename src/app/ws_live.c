@@ -387,7 +387,7 @@ static const char *TOUR_STEPS[] = {
     "auto_day", "free_overview", "follow_deer", "map_overview",
     "auto_dusk", "follow_fox", "auto_night", "reload_check",
     "shadows_off", "shadows_on", "single_step", "settings_menu",
-    "world_select",
+    "world_select", "menu_click",
 };
 
 static int capture_step(ws_session *s, ws_framebuffer *fb, float *depth,
@@ -618,6 +618,65 @@ static int run_tour(const ws_live_options *opts)
            select_open, select_cursor, select_readonly);
     ok &= select_readonly;
 
+    /* Step 14: mouse-driven menu selection (docs/17 item 9 / "Ana deneyim").
+     * A left click must land on the row the user sees. We locate a row with the
+     * HUD's own hit-test (the geometry it draws), select it, then click it again
+     * to activate it, and confirm the action happened while the world digest is
+     * untouched. The world-selection screen accepts clicks the same way. */
+    char click_before[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, click_before);
+    int click_scale = ws_session_hud_scale(s);
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0); /* open */
+    /* Park the cursor on a different row so the click visibly moves it. */
+    while (ws_session_settings_cursor(s) != WS_SET_ITEM_SPEED) {
+        double d = ws_session_settings_cursor(s) > WS_SET_ITEM_SPEED ? -1.0 : 1.0;
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, d);
+    }
+    int width_before = ws_session_settings_item_value(s, WS_SET_ITEM_WIDTH);
+    int s_py = -1;
+    for (int y = 0; y < (int)opts->height && s_py < 0; ++y) {
+        if (ws_hud_settings_row_at(opts->width, opts->height, click_scale, 24, y)
+            == WS_SET_ITEM_WIDTH) {
+            s_py = y;
+        }
+    }
+    int click_row_ok = s_py >= 0;
+    int moved = 0, activated = 0;
+    if (click_row_ok) {
+        (void)ws_session_settings_select_row(s, WS_SET_ITEM_WIDTH);
+        moved = ws_session_settings_cursor(s) == WS_SET_ITEM_WIDTH;
+        /* A second click on the same row activates it (like Enter): the
+         * resolution width steps up by one increment. */
+        (void)ws_session_settings_select_row(s, WS_SET_ITEM_WIDTH);
+        activated = ws_session_settings_item_value(s, WS_SET_ITEM_WIDTH) != width_before;
+    }
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0); /* open */
+    int w_py = -1;
+    for (int y = 0; y < (int)opts->height && w_py < 0; ++y) {
+        if (ws_hud_world_select_row_at(opts->width, opts->height, click_scale,
+                                       (int)opts->width / 2, y) == WS_WORLD_SAMPLE) {
+            w_py = y;
+        }
+    }
+    int world_row_ok = w_py >= 0;
+    int world_moved = 0;
+    if (world_row_ok) {
+        (void)ws_session_world_select_row(s, WS_WORLD_SAMPLE);
+        world_moved = ws_session_world_select_cursor(s) == WS_WORLD_SAMPLE;
+    }
+    ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0); /* close */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);    /* close */
+    char click_after[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, click_after);
+    int click_readonly = strcmp(click_before, click_after) == 0;
+    int menu_click_ok = click_row_ok && moved && activated &&
+                        world_row_ok && world_moved && click_readonly;
+    printf("tour menu_click settings_row=%d moved=%d activated=%d "
+           "world_row=%d world_moved=%d readonly=%d\n",
+           click_row_ok, moved, activated, world_row_ok, world_moved, click_readonly);
+    ok &= menu_click_ok;
+
     if (mf != NULL) {
         fprintf(mf, "# Worldseed Engine P11 live tour manifest\n");
         fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
@@ -630,6 +689,7 @@ static int run_tour(const ws_live_options *opts)
         fprintf(mf, "single_step_verified=%d\n", single_step_ok);
         fprintf(mf, "settings_menu_verified=%d\n", menu_changed && menu_readonly);
         fprintf(mf, "world_select_verified=%d\n", select_readonly && select_open == 1);
+        fprintf(mf, "menu_click_verified=%d\n", menu_click_ok);
         fprintf(mf, "steps=%d\n", step);
         fclose(mf);
     }

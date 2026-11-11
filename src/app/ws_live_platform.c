@@ -40,6 +40,12 @@ typedef struct live_state {
     POINT last_cursor;
     double last_time_s;
     uint32_t want_w, want_h; /* last viewport the session asked for */
+    /* Client size and text scale of the last presented frame, so a mouse click
+     * can be mapped to the menu row the user actually sees. The HUD is drawn at
+     * the internal framebuffer size (fb_w x fb_h) and upscaled to the client
+     * (frame_w x frame_h), so a click is converted back to internal pixels. */
+    int frame_w, frame_h, frame_scale;
+    int fb_w, fb_h;
 } live_state;
 
 static void toggle_fullscreen(HWND hwnd, live_state *st)
@@ -218,6 +224,12 @@ static int live_frame(HWND hwnd, live_state *st)
     if (st->fb.width >= 1600u && want_scale < 2) { want_scale = 2; }
     ho.scale = want_scale < 1 ? 1 : want_scale;
     ws_hud_draw(&st->fb, st->session, &ho);
+    /* Remember what the user is looking at, for menu hit-testing. */
+    st->frame_w = (int)w;
+    st->frame_h = (int)h;
+    st->frame_scale = ho.scale;
+    st->fb_w = (int)st->fb.width;
+    st->fb_h = (int)st->fb.height;
 
     size_t count = (size_t)w * h;
     for (size_t i = 0; i < count; ++i) {
@@ -273,9 +285,39 @@ static LRESULT CALLBACK live_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_LBUTTONDOWN:
         if (st != NULL) {
+            int mx = GET_X_LPARAM(lp);
+            int my = GET_Y_LPARAM(lp);
+            /* While a modal menu is open, a left click selects the row under
+             * the pointer (and a click on the highlighted row activates it).
+             * This is the mouse equivalent of the menu's keyboard navigation.
+             * The HUD is drawn at the internal framebuffer size and upscaled,
+             * so convert the client point back to internal pixels first. */
+            int ix = mx, iy = my;
+            if (st->frame_w > 0 && st->frame_h > 0 && st->fb_w > 0 && st->fb_h > 0) {
+                ix = (int)((long)mx * st->fb_w / st->frame_w);
+                iy = (int)((long)my * st->fb_h / st->frame_h);
+            }
+            if (ws_session_settings_visible(st->session)) {
+                int row = ws_hud_settings_row_at((uint32_t)st->fb_w,
+                                                 (uint32_t)st->fb_h,
+                                                 st->frame_scale, ix, iy);
+                if (row >= 0) {
+                    (void)ws_session_settings_select_row(st->session, row);
+                }
+                return 0;
+            }
+            if (ws_session_world_select_visible(st->session)) {
+                int row = ws_hud_world_select_row_at((uint32_t)st->fb_w,
+                                                     (uint32_t)st->fb_h,
+                                                     st->frame_scale, ix, iy);
+                if (row >= 0) {
+                    (void)ws_session_world_select_row(st->session, row);
+                }
+                return 0;
+            }
             st->have_cursor = 1;
-            st->last_cursor.x = GET_X_LPARAM(lp);
-            st->last_cursor.y = GET_Y_LPARAM(lp);
+            st->last_cursor.x = mx;
+            st->last_cursor.y = my;
         }
         return 0;
     case WM_LBUTTONUP:

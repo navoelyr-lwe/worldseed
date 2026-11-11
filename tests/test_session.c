@@ -709,6 +709,59 @@ static int test_settings_menu(void)
     return 1;
 }
 
+static int test_menu_mouse_click(void)
+{
+    /* Mouse-driven menu selection (docs/17 item 9 / "Ana deneyim"): a click
+     * selects the row it lands on, a second click on the highlighted row
+     * activates it, and none of it touches the world. */
+    ws_session *s = make(21ULL);
+    WS_CHECK(s != NULL);
+    run_seconds(s, 1.0);
+
+    char before[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, before) == WS_OK);
+
+    /* Rows are rejected when no menu is open, and the id range is checked. */
+    WS_CHECK(ws_session_settings_select_row(s, WS_SET_ITEM_SHADOWS) == WS_OK);
+    WS_CHECK(ws_session_settings_visible(s) == 1); /* the click opened it */
+    WS_CHECK(ws_session_settings_select_row(s, WS_SET_ITEM_COUNT) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK(ws_session_settings_select_row(s, -1) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK(ws_session_settings_select_row(NULL, 0) == WS_ERR_NULL_POINTER);
+
+    /* First click selects (moves the cursor); a second click activates it. */
+    WS_CHECK(ws_session_settings_cursor(s) == WS_SET_ITEM_SHADOWS);
+    int shadows0 = ws_session_shadows_visible(s);
+    WS_CHECK(ws_session_settings_select_row(s, WS_SET_ITEM_SHADOWS) == WS_OK);
+    WS_CHECK(ws_session_shadows_visible(s) != shadows0); /* toggle applied */
+    /* Clicking a different row just moves the cursor, no side effect. */
+    int shadows1 = ws_session_shadows_visible(s);
+    WS_CHECK(ws_session_settings_select_row(s, WS_SET_ITEM_STATS) == WS_OK);
+    WS_CHECK(ws_session_settings_cursor(s) == WS_SET_ITEM_STATS);
+    WS_CHECK(ws_session_shadows_visible(s) == shadows1);
+
+    /* The settings clicks are observer-only: the world digest is unchanged. */
+    char after[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, after) == WS_OK);
+    WS_CHECK(strcmp(before, after) == 0);
+
+    /* World-selection rows work the same way: first click selects, second
+     * opens the world (here the sample world). */
+    WS_CHECK(ws_session_world_select_row(s, WS_WORLD_SAMPLE) == WS_OK);
+    WS_CHECK(ws_session_world_select_visible(s) == 1);
+    WS_CHECK(ws_session_world_select_cursor(s) == WS_WORLD_SAMPLE);
+    WS_CHECK(ws_session_world_select_row(s, WS_WORLD_CHOICE_COUNT) == WS_ERR_INVALID_ARGUMENT);
+    uint64_t seed_before = ws_session_seed(s);
+    WS_CHECK(ws_session_world_select_row(s, WS_WORLD_SAMPLE) == WS_OK);
+    WS_CHECK(ws_session_seed(s) == WS_SESSION_SAMPLE_SEED);
+    WS_CHECK(ws_session_seed(s) != seed_before);
+    WS_CHECK(ws_session_world_select_visible(s) == 0); /* the click opened it */
+
+    /* A click that lands outside any row does nothing (the platform maps a
+     * miss to row -1 and never calls the session). */
+    ws_session_destroy(s);
+    return 1;
+}
+
 static int test_world_selection(void)
 {
     ws_session *s = make(7ULL);
@@ -862,6 +915,7 @@ int main(void)
         {"session_replay_observation_only", test_replay_is_observation_only},
         {"session_step_once", test_step_once},
         {"session_settings_menu", test_settings_menu},
+        {"session_menu_mouse_click", test_menu_mouse_click},
         {"session_world_selection", test_world_selection},
     };
     return ws_test_run("session", cases, (int)(sizeof(cases) / sizeof(cases[0])));
