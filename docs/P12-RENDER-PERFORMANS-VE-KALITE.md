@@ -129,10 +129,42 @@ Bu, P12'nin asıl darboğazıdır.
 - **Ana bilgisayar API:** `ws_opencl_raster_tiled(...)` eklendi; aygıt kaybı
   yine CPU geri dönüşüne yol açar (davranış `ws_opencl_raster` ile aynı).
 
+### 6. CPU renderer ölçeklenmesi — paylaşılan köşe hazırlığı ve bant dengeleme (bu PR)
+
+Tam sahne (`terrain_day`) CPU yolunda darboğaz iki katmandı ve ikisi de
+**bit-özdeş** biçimde giderildi (görüntü, derinlik, istatistik ve golden
+SHA-256 değerleri değişmedi):
+
+- **Kare başına köşe hazırlığı (prepass):** Önceden her görüntü bandı, bütün
+  üçgenleri baştan kırpıyor ve ekran uzayına eşliyordu; ölçüm 262 536 köşe
+  dönüşümü/kare gösterdi (21 878 üçgen × 4 bant × 3 köşe). Artık her köşe için
+  klip dönüşümü, dünya konumu, normal, albedo ve ekran koordinatı kare başına
+  **bir kez** hesaplanır ve bütün bantlarca salt-okunur paylaşılır. Aritmetik
+  birebir aynıdır (`make_clip_vertex` + `to_screen`), yalnız tekrarı kaldırılır.
+- **Yakın-düzlem hızlı yolu:** Üç köşesi de yakın düzlemin önünde olan üçgenlerde
+  kırpma özdeştir; ekran koordinatları doğrudan hazırlıktan alınır, `clip_near`
+  ve `to_screen` atlanır. Düzlemi kesen üçgenler tam kırpma yoluna düşer.
+- **Bant başına üçgen ayıklama:** Bandın satır aralığına değmeyen (ekran uzayı
+  sınır kutusu bant dışında kalan) üçgenler o bantta atlanır. Bu güvenli bir
+  üst-kümedir (kırpma yalnız üçgen içindeki alanı kaldırır), bu yüzden hiçbir
+  piksel düşmez. İstatistik sahibi bant (bant 0) hiç ayıklamaz.
+- **Bant dengeleme:** Bant sayısı iş parçacığı sayısının 8 katına çıkarıldı;
+  satır maliyeti dengesiz olduğundan (yakın satırlar çok daha fazla piksel
+  gölgeler) daha ince iş öğeleri zamanlayıcının yükü dengelemesini sağlar.
+  Köşe hazırlığı paylaşıldığı için ek bantlar ucuzdur.
+
 ## Ölçüm
 
-- 1920×1080 `terrain_day`: ~150–194 ms (~5.5–6.7 FPS).
-- 3840×2160 `terrain_day`: ~651–703 ms (~1.5 FPS).
+- 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):
+  ~169–179 ms → **~155–160 ms** (~5.6–5.9 → ~6.2–6.4 FPS).
+- 3840×2160 `terrain_day`: ~651–703 ms → **~603–608 ms** (~1.5 → ~1.6 FPS).
+- Golden sahne örnekleri: `terrain_day` 24.6 → 15.8 ms; `shadows` 12.1 → 7.5 ms.
+- **Bit-özdeşlik:** Golden 17 sahnenin tamamında `triangles_submitted`,
+  `triangles_drawn`, `pixels_shaded`, `coverage`, `mean_luma`, `max_luma` ve
+  `sha256` değerleri önce/sonra birebir aynı; yalnız `render_ms` değişir.
+- **Kalan büyük maliyet:** Piksel başına `exp` (sis) ve `pow` (speküler)
+  çağrıları; sis kapatıldığında 1080p ~156 → ~141 ms, sis+speküler kapatıldığında
+  ~101 ms. Bunlar sonraki dilimde (yaklaşım tabloları / GPU) hedeflenir.
 - `raster_cpu` 1080p / 2048 üçgen: ~35.6 ms.
 - Zamanlayıcı: seri ~174 ms → paralel ~58 ms (`speedup≈3.0x`, `identical=1`).
 - `shadows` sahnesi 1920×1080: ~130 ms (gölge geçişi dâhil).
