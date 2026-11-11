@@ -190,10 +190,11 @@ salt okunurdur: kamera hareketi dünya özetini değiştirmez (`tests/test_sessi
   320×180'de `avg_ms=29.54 fps=33.8`, 640×360'ta `avg_ms=105.98 fps=9.4` verir —
   çözünürlük ölçeklemesi doğrusaldır ve pencere modunda otomatik ölçek devrededir.
 
-- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on beş adım
+- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on altı adım
   (auto gündüz, serbest genel görünüm, geyik takibi, harita, alacakaranlık, tilki
   takibi, gece+istatistik, kaydet→ilerlet→yükle, gölgeler kapalı, gölgeler açık, tek
-  adım, ayarlar menüsü, dünya seçimi, fare ile menü seçimi, kamera çarpışması). Her
+  adım, ayarlar menüsü, dünya seçimi, fare ile menü seçimi, kamera çarpışması, ağaç
+  kaçınma). Her
   adım gerçek PPM karesi + SHA-256 ve manifest yazar. Bu makinede (1280×720):
 
   ```
@@ -204,7 +205,8 @@ salt okunurdur: kamera hareketi dünya özetini değiştirmez (`tests/test_sessi
   tour single_step paused=1 from=580 to=585 ok=1
   tour menu_click settings_row=1 moved=1 activated=1 world_row=1 world_moved=1 readonly=1
   tour camera_collision on=1 eye_y=10.268 ground=8.768 clearance=1.500 ok=1 readonly=1
-  LIVE_TOUR_OK steps=15
+  tour tree_avoidance obstacles=351 min_gap=2.441 ok=1 readonly=1
+  LIVE_TOUR_OK steps=16
   ```
 
   `roundtrip=1`, checkpoint kaydedildikten sonra dünyanın ilerletilip geri
@@ -217,7 +219,11 @@ salt okunurdur: kamera hareketi dünya özetini değiştirmez (`tests/test_sessi
   (`manifest` içinde `menu_click_verified=1`). `camera_collision`, serbest kamera
   yere doğru sürüldüğünde gözün arazinin `WS_SESSION_CAM_CLEARANCE_M` (1.5 m)
   üzerinde durduğunu (`ok=1`) ve dünyayı değiştirmediğini (`readonly=1`) doğrular
-  (`manifest` içinde `camera_collision_verified=1`).
+  (`manifest` içinde `camera_collision_verified=1`). `tree_avoidance`, kamera gerçek
+  bir ağaç gövdesine doğru sürüldüğünde gözün gövdenin `radius + 0.6 m` koruma
+  yarıçapının dışında kaldığını (`ok=1`, bu makinede `min_gap=2.441`) ve dünyayı
+  değiştirmediğini (`readonly=1`) doğrular (`manifest` içinde
+  `tree_avoidance_verified=1`).
 
 - **Dünya seçimi kanıtı** — `worldseed.exe --live-select <dizin> --size WxH`
   (docs/17 "Ana deneyim": yeni dünya / mevcut dünyayı yükle / örnek dünyayı aç):

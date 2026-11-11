@@ -58,6 +58,16 @@ yamağı dışında da geçerlidir. Ayarlar menüsündeki **Camera collision** s
 açıp kapatır (varsayılan açık; kalıcı ayar anahtarı `cam_collision`). Çarpışma
 gözlemci salt-okunurdur: dünya özetini değiştirmez.
 
+**Uygulandı (fiziksel engel farkındalığı):** Yükseklik tabanına ek olarak göz
+katı engellerin (ağaç gövdeleri) dışına yatay olarak itilir. Engel listesi odak
+yamağının renderer'ın gerçekten çizdiği ağaçlarını yansıtır (aynı eşit-adım
+seçimi, `WS_ENV_MAX_TREES` sınırı), böylece kamera görünmeyen bir ağaca takılmaz.
+Gövde yarıçapı renderer'ın koni ölçeğinden türetilir (taban yarıçapı
+`0.5 × 0.42 × yükseklik`), bu yüzden çarpışma izi çizilenle uyuşur; itme yarıçapı
+`WS_SESSION_CAM_OBSTACLE_MARGIN_M` (0.6 m) pay bırakır. İtme gövdenin kendi
+çerçevesinde radyaldir ve yalnız gözü taşır; dünyayı değiştirmez. Engel yoksa
+(odak yamağında ağaç yok) davranış yalnız yükseklik tabanına döner.
+
 ## Durum panelleri
 
 Bilgiler simülasyonun gerçek state/event verisinden gelir. UI'da tahmin edilen veya eksik bilgi kesin gerçek gibi gösterilmez. Canlının iç durumu doğrudan ölçülemeyen bir şeyse model çıktısı olduğu belirtilir.

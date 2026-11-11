@@ -320,6 +320,64 @@ static int test_camera_terrain_collision(void)
     return 1;
 }
 
+static int test_camera_obstacle_avoidance(void)
+{
+    /* Free-camera solid-obstacle awareness (docs/17 "Kamera çarpışması ve
+     * fiziksel engel farkındalığı"): the eye is pushed out of tree trunks
+     * horizontally. Placing the eye on a real trunk centre and applying zero
+     * input must move it to at least (radius + margin) away, and the world
+     * digest is untouched (observer read-only). */
+    ws_session *s = make(22ULL);
+    WS_CHECK(s != NULL);
+    (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_FREE, 0.0);
+    WS_CHECK(ws_session_camera_collision(s) == 1);
+
+    uint32_t n = ws_session_camera_obstacle_count(s);
+    WS_CHECK(n > 0u);
+    ws_session_obstacle_view ob = ws_session_camera_obstacle(s, 0u);
+    WS_CHECK(ob.valid == 1);
+    WS_CHECK(ob.radius > 0.0);
+    /* Out-of-range index is reported invalid. */
+    WS_CHECK(ws_session_camera_obstacle(s, n).valid == 0);
+
+    char before[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, before) == WS_OK);
+
+    /* Drop the eye right onto the trunk axis and push the camera; it must end
+     * up clear of the trunk by the full keep distance. */
+    WS_CHECK(ws_session_set_free_camera(s, ob.x, 100.0, ob.z, 0.0, 0.0) == WS_OK);
+    for (int i = 0; i < 8; ++i) {
+        (void)ws_session_camera_input(s, 0.0, 0.0, 0.0, 0.0, 0.0, 0.05);
+    }
+    ws_camera c = ws_session_camera(s);
+    double dx = c.eye.x - ob.x;
+    double dz = c.eye.z - ob.z;
+    double dist = sqrt(dx * dx + dz * dz);
+    double keep = ob.radius + WS_SESSION_CAM_OBSTACLE_MARGIN_M;
+    WS_CHECK(dist >= keep - 1e-6);
+
+    /* With collision off the eye stays where it was placed (no push). */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_CAM_COLLISION) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0); /* off */
+    WS_CHECK(ws_session_camera_collision(s) == 0);
+    (void)ws_session_set_free_camera(s, ob.x, 100.0, ob.z, 0.0, 0.0);
+    for (int i = 0; i < 8; ++i) {
+        (void)ws_session_camera_input(s, 0.0, 0.0, 0.0, 0.0, 0.0, 0.05);
+    }
+    ws_camera off = ws_session_camera(s);
+    WS_CHECK(fabs(off.eye.x - ob.x) < 1e-9 && fabs(off.eye.z - ob.z) < 1e-9);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0); /* on */
+
+    char after[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, after) == WS_OK);
+    WS_CHECK(strcmp(before, after) == 0);
+    ws_session_destroy(s);
+    return 1;
+}
+
 static int test_stats_and_demography(void)
 {
     ws_session *s = make(12ULL);
@@ -969,6 +1027,7 @@ int main(void)
         {"session_render_signal", test_render_produces_signal},
         {"session_view_modes", test_view_modes_cycle},
         {"session_camera_terrain_collision", test_camera_terrain_collision},
+        {"session_camera_obstacle_avoidance", test_camera_obstacle_avoidance},
         {"session_stats_demography", test_stats_and_demography},
         {"session_shadows_toggle", test_shadows_toggle},
         {"session_settings_apply_readonly", test_settings_apply_and_readonly},

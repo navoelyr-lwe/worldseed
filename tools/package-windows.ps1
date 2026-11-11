@@ -45,6 +45,7 @@ if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "settin
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "world_select_verified=1" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "menu_click_verified=1" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "camera_collision_verified=1" -Quiet)) { exit 1 }
+if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "tree_avoidance_verified=1" -Quiet)) { exit 1 }
 & $exe --live-tour evidence/live/tour-b --size 1280x720 | Out-Null
 Get-ChildItem evidence/live/tour-a/step-*.ppm | ForEach-Object {
     $b = Join-Path "evidence/live/tour-b" $_.Name
