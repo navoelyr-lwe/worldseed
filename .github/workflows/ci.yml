@@ -44,7 +44,29 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install toolchain
-        run: sudo apt-get update && sudo apt-get install -y ninja-build clang
+        # clang and ninja ship preinstalled on the ubuntu-24.04 runner image, so
+        # only fall back to apt when one is genuinely missing. This keeps the
+        # build independent of the apt mirror, which intermittently fails with
+        # transient DNS errors ("Temporary failure resolving ..."). When apt is
+        # needed it is retried.
+        run: |
+          need=""
+          command -v ninja >/dev/null 2>&1 || need="$need ninja-build"
+          command -v clang >/dev/null 2>&1 || need="$need clang"
+          if [ -z "$need" ]; then
+            echo "ninja and clang already present: $(ninja --version), $(clang --version | head -1)"
+            exit 0
+          fi
+          for attempt in 1 2 3 4 5; do
+            if sudo apt-get -o Acquire::Retries=5 update \
+               && sudo apt-get -o Acquire::Retries=5 install -y $need; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed; retrying in 20s"
+            sleep 20
+          done
+          echo "apt install failed after retries"
+          exit 1
 
       - name: Configure
         env:
@@ -152,6 +174,21 @@ jobs:
           grep -q "reproducible=1" evidence/quality/quality.txt
           test "$(grep -c 'verdict=PASS' evidence/quality/quality.txt)" = "6" \
             || { echo "not all six product scenes passed the checklist"; exit 1; }
+
+      - name: Product motion-quality checklist
+        run: |
+          # P12 acceptance also requires a "motion" quality dimension, which a
+          # still frame cannot cover (docs/QUALITY-CHECKLIST.md). The harness
+          # drives the real reference quadruped through the gait controller and
+          # gates forward progress, speed, smoothness, balance, foot contact and
+          # energy from the simulated body itself.
+          mkdir -p evidence/motion
+          ./build/tools/ws_motion evidence/motion 20260101 | tee evidence/motion/motion.txt
+          grep -q "WS_MOTION_OK" evidence/motion/motion.txt
+          # Same seed must reproduce identical motion metrics (determinism).
+          grep -q "reproducible=1" evidence/motion/motion.txt
+          test "$(grep -c 'verdict=PASS' evidence/motion/motion.txt)" = "1" \
+            || { echo "the reference walk failed the motion checklist"; exit 1; }
 
       - name: Asset pipeline
         run: |
@@ -295,10 +332,20 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install toolchain and OpenCL ICD
+        # Retry transient apt/DNS failures on GitHub-hosted runners.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build pocl-opencl-icd ocl-icd-libopencl1 clinfo
-          clinfo -l || true
+          for attempt in 1 2 3 4 5; do
+            if sudo apt-get -o Acquire::Retries=5 update \
+               && sudo apt-get -o Acquire::Retries=5 install -y \
+                    ninja-build pocl-opencl-icd ocl-icd-libopencl1 clinfo; then
+              clinfo -l || true
+              exit 0
+            fi
+            echo "apt attempt $attempt failed; retrying in 20s"
+            sleep 20
+          done
+          echo "apt install failed after retries"
+          exit 1
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DWS_WARNINGS_AS_ERRORS=ON

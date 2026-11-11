@@ -12,6 +12,7 @@
 #include "render/ws_framebuffer.h"
 #include "render/ws_image.h"
 #include "render/ws_mesh.h"
+#include "render/ws_motion.h"
 #include "render/ws_quality.h"
 #include "render/ws_render.h"
 #include "render/ws_scene.h"
@@ -1013,6 +1014,98 @@ static int test_quality_checklist_passes_on_product_scenes(void)
     return 1;
 }
 
+/* ---------- motion-quality checklist ---------- */
+
+static int test_motion_check_gates_each_metric(void)
+{
+    const ws_motion_spec *spec = ws_motion_spec_at(0u);
+    WS_CHECK(spec != NULL);
+
+    /* A run that satisfies every threshold must pass. */
+    ws_motion_metrics ok = {0};
+    ok.frames = spec->min_frames;
+    ok.forward_m = spec->min_forward_m;
+    ok.forward_speed_mps = (spec->min_speed_mps + spec->max_speed_mps) * 0.5;
+    ok.max_com_accel_mps2 = spec->max_com_accel_mps2;
+    ok.max_torso_tilt_rad = spec->max_torso_tilt_rad;
+    ok.min_foot_clearance_m = spec->min_foot_clearance_m;
+    ok.max_energy_j = spec->max_energy_j;
+    uint32_t fail = 0u;
+    WS_CHECK(ws_motion_check(spec, &ok, &fail) == WS_OK && fail == 0u);
+
+    /* Each field below its gate flips exactly its own bit. */
+    ws_motion_metrics bad;
+
+    bad = ok;
+    bad.forward_m = spec->min_forward_m - 1.0;
+    WS_CHECK(ws_motion_check(spec, &bad, &fail) != WS_OK && fail == WS_MOTION_FAIL_FORWARD);
+
+    bad = ok;
+    bad.forward_speed_mps = spec->min_speed_mps - 0.01;
+    WS_CHECK(ws_motion_check(spec, &bad, &fail) != WS_OK && fail == WS_MOTION_FAIL_SPEED);
+    bad.forward_speed_mps = spec->max_speed_mps + 0.01;
+    WS_CHECK(ws_motion_check(spec, &bad, &fail) != WS_OK && fail == WS_MOTION_FAIL_SPEED);
+
+    bad = ok;
+    bad.max_com_accel_mps2 = spec->max_com_accel_mps2 + 1.0;
+    WS_CHECK(ws_motion_check(spec, &bad, &fail) != WS_OK && fail == WS_MOTION_FAIL_SMOOTHNESS);
+
+    bad = ok;
+    bad.max_torso_tilt_rad = spec->max_torso_tilt_rad + 0.01;
+    WS_CHECK(ws_motion_check(spec, &bad, &fail) != WS_OK && fail == WS_MOTION_FAIL_BALANCE);
+
+    bad = ok;
+    bad.min_foot_clearance_m = spec->min_foot_clearance_m - 0.01;
+    WS_CHECK(ws_motion_check(spec, &bad, &fail) != WS_OK && fail == WS_MOTION_FAIL_CONTACT);
+
+    bad = ok;
+    bad.max_energy_j = spec->max_energy_j + 1.0;
+    WS_CHECK(ws_motion_check(spec, &bad, &fail) != WS_OK && fail == WS_MOTION_FAIL_ENERGY);
+
+    bad = ok;
+    bad.frames = spec->min_frames - 1u;
+    WS_CHECK(ws_motion_check(spec, &bad, &fail) != WS_OK && fail == WS_MOTION_FAIL_DURATION);
+
+    WS_CHECK(ws_motion_check(NULL, &ok, NULL) == WS_ERR_NULL_POINTER);
+    return 1;
+}
+
+static int test_motion_measure_is_deterministic(void)
+{
+    ws_motion_metrics a, b;
+    WS_CHECK(ws_motion_measure(20260101ULL, 5.0, &a) == WS_OK);
+    WS_CHECK(ws_motion_measure(20260101ULL, 5.0, &b) == WS_OK);
+    WS_CHECK(a.frames == b.frames);
+    WS_CHECK(a.forward_m == b.forward_m);
+    WS_CHECK(a.forward_speed_mps == b.forward_speed_mps);
+    WS_CHECK(a.max_body_speed_mps == b.max_body_speed_mps);
+    WS_CHECK(a.max_com_accel_mps2 == b.max_com_accel_mps2);
+    WS_CHECK(a.max_torso_tilt_rad == b.max_torso_tilt_rad);
+    WS_CHECK(a.min_foot_clearance_m == b.min_foot_clearance_m);
+    WS_CHECK(a.max_energy_j == b.max_energy_j);
+
+    /* A different seed changes the run (start phase), so the metrics differ. */
+    ws_motion_metrics c;
+    WS_CHECK(ws_motion_measure(99ULL, 5.0, &c) == WS_OK);
+    WS_CHECK(c.forward_m != a.forward_m);
+    return 1;
+}
+
+static int test_motion_checklist_passes_reference_walk(void)
+{
+    WS_CHECK(ws_motion_spec_count() >= 1u);
+    for (size_t i = 0; i < ws_motion_spec_count(); ++i) {
+        const ws_motion_spec *spec = ws_motion_spec_at(i);
+        ws_motion_metrics m;
+        WS_CHECK(ws_motion_measure(20260101ULL, 20.0, &m) == WS_OK);
+        uint32_t fail = 0u;
+        WS_CHECK_MSG(ws_motion_check(spec, &m, &fail) == WS_OK, spec->scene_id);
+        /* The reference walk must genuinely move forward, not drift. */
+        WS_CHECK(m.forward_m > 0.0);
+    }
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -1053,6 +1146,10 @@ int main(void)
         {"quality check gates each metric", test_quality_check_gates_each_metric},
         {"quality checklist passes on product scenes",
          test_quality_checklist_passes_on_product_scenes},
+        {"motion check gates each metric", test_motion_check_gates_each_metric},
+        {"motion measure is deterministic", test_motion_measure_is_deterministic},
+        {"motion checklist passes reference walk",
+         test_motion_checklist_passes_reference_walk},
     };
     return ws_test_run("render", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

@@ -193,6 +193,39 @@ kapsar (kamera, dünya, ekoloji ve HUD dâhil). Yüzdelik yardımcısı
 ve `gui-windows.yml` artık headless çıktısında `p95_ms=` alanını zorunlu kapı
 yapar; böylece performans iddiası otomatik ve makine-okunur kanıta bağlanır.
 
+### 9. Ürün hareket kalite kontrol listesi (bu PR)
+
+P12 kabulü altı kalite boyutu ister: geometri/malzeme/ışık/gölge/atmosfer/
+**hareket** (`docs/13` P12; `docs/QUALITY-CHECKLIST.md`). Önceki dilim görsel
+boyutları (`ws_quality`) kapıladı, ancak **hareket** boyutu yalnız dolaylı
+kapsanıyordu (canlı turun kare-arası adımları ve biyomekanik testleri); hareket
+tek bir karede ölçülemez. Bu dilim o boşluğu doğrudan, otomatik bir kapıyla
+kapatır:
+
+- **Yeni modül:** `src/render/ws_motion.{h,c}` (ISO C17) gerçek referans dört
+  ayaklı canlıyı (kızıl geyik, P5 biyomekanik; `src/life/ws_creature.c`,
+  `src/life/ws_quadruped.c`) sabit adımlı yürüyüş denetleyicisiyle düz zeminde
+  20 s (≈10 000 adım) koşar ve koşunun **kendisinden** deterministik hareket
+  ölçüleri çıkarır: ilerleme (`forward_m`, `forward_speed_mps`), pürüzsüzlük
+  (`max_com_accel_mps2`), denge (`max_torso_tilt_rad`), ayak teması
+  (`min_foot_clearance_m`), enerji (`max_energy_j`) ve süre (`frames`). Başlangıç
+  fazı tohumdan türetilir, böylece her tohum aynı eşikleri yürüyüşün farklı
+  noktasından sınar.
+- **Yeni araç:** `tools/ws_motion` referans yürüyüşü koşar, determinizmi
+  doğrular (aynı tohum → bit-özdeş metrik) ve `motion.csv` + konsol özeti yazar;
+  eşik veya determinizm geçilmezse çıkış kodu sıfırdan farklı olur
+  (`WS_MOTION_FAIL`).
+- **Yeni belge bölümü:** `docs/QUALITY-CHECKLIST.md` hareket ölçülerini, eşik
+  gerekçesini ve referans kabul protokolünü tanımlar.
+- **CI kapısı:** `ci.yml` "Product motion-quality checklist" adımı
+  `WS_MOTION_OK`, `verdict=PASS` ve `reproducible=1` arar.
+- **Windows paketi:** `tools/package-windows.ps1` aracı çalıştırıp
+  `evidence/motion/` çıktısını pakete koyar (`quality/` klasörü altında).
+- **Birim testleri:** `tests/test_render.c` üç yeni vaka ekler (her eşiğin
+  gerçekten kapı işlevi görmesi, aynı tohumun bit-özdeş metrik üretmesi/farklı
+  tohumun farklı koşu üretmesi, referans yürüyüşün kontrol listesini geçip
+  gerçekten ileri gitmesi). Test sayısı 36 → 39'a çıkar.
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):
