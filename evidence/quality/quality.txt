@@ -1,0 +1,7 @@
+quality scene=terrain_day verdict=PASS reproducible=1 objects=674 geom_cov=1.000 coverage=1.000 mean_luma=118.73 stddev=17.95 sat=0.253 variety=37.00000 sky_gradient=0.841 failures=-
+quality scene=ecosystem verdict=PASS reproducible=1 objects=718 geom_cov=0.809 coverage=1.000 mean_luma=122.08 stddev=12.00 sat=0.333 variety=45.00000 sky_gradient=8.621 failures=-
+quality scene=organism_forage verdict=PASS reproducible=1 objects=686 geom_cov=1.000 coverage=1.000 mean_luma=119.44 stddev=10.46 sat=0.368 variety=37.00000 sky_gradient=15.358 failures=-
+quality scene=creature_walk verdict=PASS reproducible=1 objects=685 geom_cov=1.000 coverage=1.000 mean_luma=117.95 stddev=8.59 sat=0.369 variety=35.00000 sky_gradient=14.020 failures=-
+quality scene=terrain_weather verdict=PASS reproducible=1 objects=674 geom_cov=1.000 coverage=1.000 mean_luma=111.00 stddev=24.04 sat=0.260 variety=40.00000 sky_gradient=2.058 failures=-
+quality scene=terrain_dusk verdict=PASS reproducible=1 objects=674 geom_cov=1.000 coverage=1.000 mean_luma=84.75 stddev=35.03 sat=0.289 variety=37.00000 sky_gradient=3.421 failures=-
+WS_QUALITY_OK scenes=6 csv=evidence/quality/quality.csv

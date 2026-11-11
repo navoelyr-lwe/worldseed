@@ -27,6 +27,7 @@ Tam ürün planı 22 dosyadır. İçerik `docs/plan-bundle/RESTORE.md` yönerges
 | `docs/10-SES-KALICILIK-TEKRAR.md` | Ses, kayıt, tekrar oynatma ve kalıcılık |
 | `docs/11-PERFORMANS-DONANIM.md` | CPU/GPU, çözünürlük ve performans bütçeleri |
 | `docs/12-TEST-KABUL-CI.md` | Tam otomatik test, kanıt ve release kapıları |
+| `docs/QUALITY-CHECKLIST.md` | Ürün görsel kalite kontrol listesi ve referans kabul protokolü (altı referans sahne, ölçülebilir eşikler, `tools/ws_quality` kanıtı) |
 | `docs/13-YOL-HARITASI.md` | Aşamalar, bağımlılıklar ve tamamlanma koşulları |
 | `docs/14-OPENHANDS-CALISMA-KURALLARI.md` | OpenHands çalışma kuralları ve yetki sınırları |
 | `docs/15-RISKLER-KARARLAR.md` | Sabit teknik kararlar ve riskler |

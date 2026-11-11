@@ -153,7 +153,34 @@ SHA-256 değerleri değişmedi):
   gölgeler) daha ince iş öğeleri zamanlayıcının yükü dengelemesini sağlar.
   Köşe hazırlığı paylaşıldığı için ek bantlar ucuzdur.
 
-### 7. Canlı ürün sahnesi kare-zamanı yüzdelik kapısı (bu PR)
+### 7. Ürün görsel kalite kontrol listesi ve referans kabul protokolü (bu PR)
+
+`docs/12-TEST-KABUL-CI.md` "Görsel kanıt standardı" ve `docs/08` "Golden scene
+seti", golden hash'in estetik kaliteyi tek başına kanıtlamadığını ve **sahne
+bazlı görsel kalite kontrol listesi ile referans kabul protokolü** gerektiğini
+söyler. Bu dilim o boşluğu kapatır:
+
+- **Yeni modül:** `src/render/ws_quality.{h,c}` (ISO C17) her karenin gerçek
+  piksel tamponundan ve onu üreten sahneden **deterministik** kalite ölçüleri
+  hesaplar: geometri (`objects`, `geometry_coverage`, `coverage`), ışık/ton
+  (`mean_luma`, `luma_stddev`, `dark_fraction`, `blown_fraction`), materyal/renk
+  (`mean_saturation`, `colour_variety`) ve atmosfer (`sky_gradient`). Altı ürün
+  referans sahnesi (`docs/00` §5) katalog kimliklerine eşlenir ve her biri için
+  ölçülebilir eşikler tanımlanır.
+- **Yeni araç:** `tools/ws_quality` altı sahneyi gerçek katalogdan kurar, render
+  eder, ölçer, determinizmi doğrular (aynı seed → bit-özdeş kare) ve
+  `quality.csv` + konsol özeti yazar; herhangi bir sahne geçemezse çıkış kodu
+  sıfırdan farklı olur (`WS_QUALITY_FAIL`).
+- **Yeni belge:** `docs/QUALITY-CHECKLIST.md` kontrol listesini, eşik gerekçesini
+  ve referans kabul protokolünü tanımlar.
+- **CI kapısı:** `ci.yml` "Product visual-quality checklist" adımı
+  `WS_QUALITY_OK`, altı `verdict=PASS` ve `reproducible=1` arar.
+- **Birim testleri:** `tests/test_render.c` dört yeni vaka ekler (düz kare
+  ölçüsü, altı sahne kimliği, her eşiğin gerçekten kapı işlevi görmesi, ürün
+  sahnelerinin gerçek katalogdan kontrol listesini geçmesi). Test sayısı 32 →
+  36'ya çıkar.
+
+### 8. Canlı ürün sahnesi kare-zamanı yüzdelik kapısı (bu PR)
 
 P12 kabul kapılarından biri, performansın **tam ürün sahnesinde** ölçülmesidir
 (yalnız test üçgeni çekirdeği değil) ve ölçüt tek bir FPS örneklemesi değil,
@@ -179,6 +206,11 @@ yapar; böylece performans iddiası otomatik ve makine-okunur kanıta bağlanır
   çağrıları; sis kapatıldığında 1080p ~156 → ~141 ms, sis+speküler kapatıldığında
   ~101 ms. Bunlar sonraki dilimde (yaklaşım tabloları / GPU) hedeflenir.
 - `raster_cpu` 1080p / 2048 üçgen: ~35.6 ms.
+- **Ürün görsel kalite kontrol listesi** (`ws_quality`, 640×360, seed 20260101,
+  bu makine): altı referans sahnenin tamamı geçer; örnek metrikler:
+  `terrain_day` geom_cov=1.00 stddev=18.0 sat=0.25 variety=37 sky_grad=0.84;
+  `terrain_dusk` stddev=35.0; `organism_forage` sky_grad=15.4;
+  `ecosystem` objects=718. Aynı seed iki koşuda bit-özdeş (`reproducible=1`).
 - **Canlı ürün sahnesi kare zamanı** (`--live-headless 5`, bu makine, 4 çekirdek,
   CPU referans yolu; render + HUD, kamera/dünya/ekoloji dâhil):
   - 1280×720: `avg_ms≈57.8`, `p50≈57.5`, `p95≈65.2`, `p99≈74.6` (~17 FPS).
