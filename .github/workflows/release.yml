@@ -140,12 +140,18 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P11 - fare ile menu secimi)." \
+            "Worldseed Engine onizleme surumu (P11 - serbest kamera yer/su carpismasi)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
             "istatistikleri gorur, kaydedip geri yuklersiniz. Dunya, yonetmen ve ses kendi" \
-            "C17 kodumuzdadir. P12 bu surumde iki is ekler: (1) CPU referans renderer" \
+            "C17 kodumuzdadir. Bu surumun ana yeniligi KAMERA CARPISMASI: serbest kamera" \
+            "artik yere gomulmez. Goz, altindaki arazi yuksekliginin 1.5 m uzerinde tutulur" \
+            "ve su yuzeyinin altina inmez; arazi yuksekligi ve su seviyesi dunya konumunun" \
+            "saf fonksiyonlari oldugundan odak yamaginin disinda da gecerlidir. Ayar" \
+            "menusundeki 'Camera collision' satiri bunu acar/kapatir (varsayilan acik) ve" \
+            "kalici ayarlara yazilir. Carpisma gozlemci salt-okunurdur: dunyayi degistirmez." \
+            "P12 bu surumde iki is ekler: (1) CPU referans renderer" \
             "GORUNTUYU BIT-OZDES biraka hizlandirildi (baslikta satir ici matematik" \
             "yardimcilari, sRGB kodlama LUT'u, cok cekirdekli bant render; 1080p terrain_day" \
             "543.78 ms -> ~88 ms, yaklasik 6.2x); (2) yonlu (directional) GOLGE ESLEMESI" \
@@ -161,7 +167,8 @@ jobs:
             "  Tuslar: Space duraklat, +/- hiz, V kip (auto/free/follow/map), N/P canli sec," \
             "  G istatistik, O ayarlar, M dunya secimi, T yonlu golge, H yardim, [ ] saat, S/L kaydet/yukle, ok/WASD serbest kamera, Esc cikis." \
             "" \
-            "Dunya secimi ve fareyle menu (bu surumun ana yeniligi): uygulama acildiginda" \
+            "Kamera carpismasi ve dunya secimi: serbest kamera artik yere gomulmez" \
+            "(asagidaki yenilik); uygulama acildiginda" \
             "secim ekrani gosterilir - YENI dunya olustur, MEVCUT dunyayi yukle (kayit" \
             "varsa) veya ORNEK dunyayi ac. Ok tuslari imleci tasir, Enter secer, M/Esc" \
             "vazgecer. Bir satira FAREYLE tiklamak imleci o satira tasir; vurgulanan satira" \
@@ -205,7 +212,9 @@ jobs:
             "near/mid/far, kamera disi ilerleme, checkpoint, journal, deterministik replay);" \
             "olay-tabanli sinematik yonetmen ve prosedurel ses manzarasi; GPU icin OpenCL C 1.2" \
             "kernel + CPU fallback ve deterministik cok cekirdekli zamanlayici. GPU yalniz" \
-            "gercek kazanc oldugunda kullanilir (ADR-001). Bu surum dunya secim ekranini" \
+            "gercek kazanc oldugunda kullanilir (ADR-001). Bu surum serbest kameraya" \
+            "yer/su carpismasi ekler (goz arazi ve su yuzeyinin ustunde kalir; ayar" \
+            "menusunden acilip kapatilir) ve dunya secim ekranini" \
             "FAREYLE tiklama destegiyle birlikte sunar (acilista yeni / mevcut / ornek dunya," \
             "fare veya klavye ile sec); onceki kalici ayarlar ve ayar paneli" \
             "(worldseed.cfg), P12 CPU render hizlandirmasi ve" \
@@ -214,7 +223,9 @@ jobs:
             "Bilinen sinirlamalar: 4K/30 FPS referans donanim hedefi henuz olculup gecilemedi;" \
             "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
             "olceklendirilir; ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir);" \
-            "fareyle tiklayarak secme artik calisir (ayar menusu ve dunya secim ekrani)." \
+            "fareyle tiklayarak secme artik calisir (ayar menusu ve dunya secim ekrani);" \
+            "kamera carpismasi yukseklik-alani tabanlidir (arazi + su yuzeyi), statik" \
+            "nesnelerin (agac, kaya) govdesine gore yatay itme henuz yoktur." \
             "" \
             "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + MANIFEST.txt)," \
             "sha256 dosyasi, ekteki PNG kareleri ve CI artefaktlari." \
