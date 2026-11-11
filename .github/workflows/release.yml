@@ -76,6 +76,10 @@ jobs:
             evidence/live/select/*.png
             evidence/live/select/select-manifest.txt
             evidence/live/select.txt
+            evidence/live/export-a/frame-*.png
+            evidence/live/export-a/soundscape.wav
+            evidence/live/export-a/export-manifest.txt
+            evidence/live/export.txt
 
   # Resilient path: build the identical package on the isolated self-hosted
   # Windows runner when the hosted pool is unavailable. The publish job consumes
@@ -120,6 +124,10 @@ jobs:
             evidence/live/select/*.png
             evidence/live/select/select-manifest.txt
             evidence/live/select.txt
+            evidence/live/export-a/frame-*.png
+            evidence/live/export-a/soundscape.wav
+            evidence/live/export-a/export-manifest.txt
+            evidence/live/export.txt
 
   publish:
     name: publish prerelease
@@ -140,28 +148,32 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P11 - kamera agac kacinma)." \
+            "Worldseed Engine onizleme surumu (P11 - disa aktarma: kare dizisi + ses)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
             "istatistikleri gorur, kaydedip geri yuklersiniz. Dunya, yonetmen ve ses kendi" \
-            "C17 kodumuzdadir. Bu surumun ana yeniligi KAMERA AGAC KACINMA: serbest" \
-            "kamera artik agaclarin icinden gecmez. Goz, gordurulen agac govdelerinin" \
-            "disina yatay olarak itilir; itme yaricapi govde yaricapinin (cizilen koni" \
-            "olceginden turetilir) ustune 0.6 m pay birakir. Engel listesi renderer'in" \
-            "gercekten cizdigi agaclari yansitir, bu yuzden kamera gorunmeyen bir agaca" \
-            "takilmaz. Onceki kamera yer/su carpismasi (goz arazi ve su yuzeyinin" \
-            "ustunde kalir) ve ayar menusundeki 'Camera collision' satiri korunur;" \
-            "carpisma gozlemci salt-okunurdur: dunyayi degistirmez." \
-            "P12 bu surumde iki is ekler: (1) CPU referans renderer" \
-            "GORUNTUYU BIT-OZDES biraka hizlandirildi (baslikta satir ici matematik" \
-            "yardimcilari, sRGB kodlama LUT'u, cok cekirdekli bant render; 1080p terrain_day" \
-            "543.78 ms -> ~88 ms, yaklasik 6.2x); (2) yonlu (directional) GOLGE ESLEMESI" \
-            "eklendi (isigin bakis acisindan ortografik derinlik haritasi, 3x3 PCF, yalniz" \
-            "dogrudan isigi azaltir). Golgeler opt-in ve eklemelidir; kapaliyken cikti" \
-            "bit-ozdes kalir. Yeni 'shadows' golden sahnesi golgeyi gosterir. Ayrica" \
-            "yonlu golgeler artik CANLI urunde gercek bir ozellik: canli pencerede T tusu" \
-            "golgeleri acar/kapatir (varsayilan kapali); tur bu farki olcup dogrular." \
+            "C17 kodumuzdadir. Bu surumun ana yeniligi DISA AKTARMA: canli urun artik" \
+            "zaman damgali bir kare dizisi ve karelerle hizalanan bir ses dosyasi uretir." \
+            "worldseed.exe --live-export <dizin> [--live-export-seconds <s>] sabit 1/30 s" \
+            "kare araligiyla kosar, her kareyi kendi CPU referans renderer'imizla cizip" \
+            "HUD'i bindirerek frame-NNNNN.ppm olarak yazar ve ayni aralik icin canli" \
+            "prosedurel ses manzarasini tek bir soundscape.wav (48 kHz, stereo) olarak" \
+            "karistirir. WAV gercek yasam olaylarindan surulur (sabit kayit degil);" \
+            "boylece duydugunuz bir olay onu gosteren kareyle ayni zaman dilimindedir." \
+            "frames-index.txt her karenin dunya zamanini, tick'ini ve SHA-256'sini;" \
+            "export-manifest.txt kare sayisini, araligi, ses ornekleme hizini/kare sayisini" \
+            "ve dunyanin SHA-256 ozetini kaydeder. Ses karistirma yalniz ses durumunu" \
+            "ilerletir, dunyayi degistirmez; ayni tohumla iki kosu bit-ozdes kare dizisi ve" \
+            "bit-ozdes WAV uretir. MP4/H.264 gibi sikistirilmis video ilk release zorunlulugu" \
+            "degildir; kare dizisi + WAV hedeflenen bicimdir." \
+            "" \
+            "Onceki surumlerin ozellikleri korunur: kamera yer/su carpismasi ve agac" \
+            "kacinma (serbest kamera artik agaclarin icinden gecmez; goz gordurulen agac" \
+            "govdelerinin disina yatay itilir), ayarlar menusundeki 'Camera collision'" \
+            "satiri ve P12 render isleri (CPU referans renderer GORUNTUYU BIT-OZDES biraka" \
+            "hizlandirildi, 1080p terrain_day 543.78 ms -> ~88 ms; yonlu golge eslemesi" \
+            "opt-in ve eklemeli, canli pencerede T tusuyla)." \
             "" \
             "Canli uygulama (Windows):" \
             "  worldseed.exe --live               pencere modunda canli dunya" \
@@ -196,8 +208,10 @@ jobs:
             "  worldseed.exe --live-headless 3 --size 1280x720  kare zamanlamasi + dunya ozeti" \
             "  worldseed.exe --live-tour cikti --size 1280x720 deterministik tur (gorunum/kayit-yukle)" \
             "  worldseed.exe --live-select cikti --size 1280x720 dunya secimi kaniti (yeni/yukle/ornek)" \
+            "  worldseed.exe --live-export cikti --size 1280x720 disa aktarma kaniti (kare dizisi + WAV)" \
             "  live/*.png turun gercek kareleri, live/manifest.txt tur ozetini icerir." \
             "  select/*.png dunya secim ekranini ve secilen dunyalari gosterir." \
+            "  export/*.png ve export/soundscape.wav disa aktarmayi gosterir." \
             "" \
             "Sabit referans sahneler de duruyor: worldseed.exe --list, --scene N." \
             "preview/*.png her sahnenin gercek CPU referans render ciktisidir." \
@@ -221,7 +235,10 @@ jobs:
             "FAREYLE tiklama destegiyle birlikte sunar (acilista yeni / mevcut / ornek dunya," \
             "fare veya klavye ile sec); onceki kalici ayarlar ve ayar paneli" \
             "(worldseed.cfg), P12 CPU render hizlandirmasi ve" \
-            "opt-in yonlu golgeler korunur." \
+            "opt-in yonlu golgeler korunur. Bu surum ayrica DISA AKTARMA ekler: canli urun" \
+            "zaman damgali kare dizisi (frame-NNNNN.ppm + frames-index.txt) ve karelerle" \
+            "hizalanan tek bir soundscape.wav uretir; ayni tohumla iki kosu bit-ozdes cikti" \
+            "verir ve ses karistirma dunyayi degistirmez." \
             "" \
             "Bilinen sinirlamalar: 4K/30 FPS referans donanim hedefi henuz olculup gecilemedi;" \
             "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
@@ -231,7 +248,7 @@ jobs:
             "govdelerine yatay itme yapar; kayalarin ve canli hayvanlarin govdesine gore" \
             "itme henuz yoktur." \
             "" \
-            "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + MANIFEST.txt)," \
+            "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + select/ + export/ + MANIFEST.txt)," \
             "sha256 dosyasi, ekteki PNG kareleri ve CI artefaktlari." \
             > notes.md
           gh release create "$tag" \
@@ -253,6 +270,9 @@ jobs:
             evidence/live/tour-a/tour-manifest.txt \
             evidence/live/select/*.png \
             evidence/live/select/select-manifest.txt \
+            evidence/live/export-a/frame-*.png \
+            evidence/live/export-a/soundscape.wav \
+            evidence/live/export-a/export-manifest.txt \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md
