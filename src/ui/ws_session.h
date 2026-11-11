@@ -47,6 +47,10 @@
 #define WS_SESSION_DIGEST_HEX 65u
 #define WS_SESSION_MAX_MAP 49u
 
+/* Fixed seed of the built-in sample world (docs/17 "örnek dünyayı açabilir").
+ * A documented constant so "open the sample world" is always reproducible. */
+#define WS_SESSION_SAMPLE_SEED 20260214ULL
+
 typedef enum ws_view_mode {
     WS_VIEW_AUTO = 0,   /* the cinematic observer drives the camera */
     WS_VIEW_FREE = 1,   /* the user flies the camera */
@@ -86,7 +90,10 @@ typedef enum ws_session_command {
     WS_CMD_SETTINGS_MOVE = 25,       /* arg = signed rows to move the menu cursor */
     WS_CMD_SETTINGS_ADJUST = 26,     /* arg = signed delta on the selected row */
     WS_CMD_SETTINGS_APPLY = 27,      /* apply the selected row's value */
-    WS_CMD_SETTINGS_DEFAULTS = 28    /* reset the menu selection to defaults */
+    WS_CMD_SETTINGS_DEFAULTS = 28,   /* reset the menu selection to defaults */
+    WS_CMD_WORLD_SELECT_TOGGLE = 29, /* open/close the world-selection screen */
+    WS_CMD_WORLD_SELECT_MOVE = 30,   /* arg = signed rows to move its cursor */
+    WS_CMD_WORLD_SELECT_CONFIRM = 31 /* confirm the highlighted world choice */
 } ws_session_command;
 
 typedef struct ws_session_config {
@@ -217,6 +224,42 @@ int ws_session_volume(const ws_session *s);
  * percent (25..400), the "Camera speed" and "Look sensitivity" rows. */
 int ws_session_camera_speed_pct(const ws_session *s);
 int ws_session_look_sensitivity_pct(const ws_session *s);
+
+/* --- world selection (docs/17 "Ana deneyim") ---------------------------- */
+
+/* The world-selection screen the application shows when it opens (docs/17:
+ * "uygulama açıldığında kullanıcı yeni dünya oluşturabilir, mevcut dünyayı
+ * yükleyebilir veya örnek dünyayı açabilir"). Three choices, in draw order. */
+typedef enum ws_world_choice {
+    WS_WORLD_NEW = 0,    /* create a fresh world from a (seed-derived) seed */
+    WS_WORLD_LOAD = 1,   /* load the existing checkpoint, if one is present */
+    WS_WORLD_SAMPLE = 2, /* open the built-in sample world */
+    WS_WORLD_CHOICE_COUNT = 3
+} ws_world_choice;
+
+/* Is the world-selection screen currently shown (application start, or `M`)? */
+int ws_session_world_select_visible(const ws_session *s);
+/* Row the selection cursor sits on (0 .. WS_WORLD_CHOICE_COUNT-1). */
+int ws_session_world_select_cursor(const ws_session *s);
+/* Does a checkpoint exist on disk for the "load existing" choice? 0/1. */
+int ws_session_world_select_can_load(const ws_session *s);
+/* Label and formatted detail of a choice row, for the HUD. */
+ws_result ws_session_world_choice_item(const ws_session *s, int choice,
+                                       char *label, size_t label_cap,
+                                       char *value, size_t value_cap);
+/* Whether the "load existing" row is currently selectable. */
+int ws_session_world_choice_enabled(const ws_session *s, int choice);
+/* Set the seed the next "create a new world" confirmation will use. The
+ * application derives it from the wall clock so each new world differs, while
+ * the session still rebuilds deterministically from whatever seed it is given.
+ * 0 restores the default (config.seed + config.world_uid), which keeps the
+ * headless/unit runs reproducible. */
+void ws_session_world_set_new_seed(ws_session *s, uint64_t seed);
+/* Confirm a choice directly (the same action the confirm command takes):
+ * "new" and "sample" build a fresh world, "load" restores the checkpoint.
+ * Returns WS_OK, WS_ERR_NOT_FOUND when the choice is not selectable, or a
+ * deserialize error from a corrupt checkpoint. Closes the selection screen. */
+ws_result ws_session_world_confirm(ws_session *s, int choice);
 
 /* Frames and wall time of the most recent render, for the performance HUD. */
 void ws_session_perf(const ws_session *s, double *out_last_frame_ms,

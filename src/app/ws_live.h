@@ -41,6 +41,8 @@ typedef struct ws_live_options {
     double seconds;     /* headless/tour simulated duration */
     int tour;           /* run the scripted evidence tour */
     int replay;         /* run the replay evidence mode */
+    int worldselect;    /* run the world-selection evidence mode */
+    int no_select;      /* do not show the startup world-selection screen */
     const char *out_dir; /* directory for tour captures (NULL = none) */
     const char *capture_path; /* single capture path (NULL = none) */
     uint64_t seed;
@@ -68,6 +70,16 @@ ws_result ws_live_make_session(const ws_live_options *opts, ws_session **out);
 
 /* Run the live application. Returns a process exit code. */
 int ws_live_run(const ws_live_options *opts);
+
+/* Derive a fresh "new world" seed from `base` and the wall clock (deterministic
+ * 64-bit value; the world is fully reproducible from the seed the user sees). */
+uint64_t ws_live_new_world_seed(uint64_t base);
+
+/* Show the startup world-selection screen on a freshly created session (docs/17
+ * "Ana deneyim"): the user chooses new / load / sample when the application
+ * opens. No-op when opts->no_select is set. The cursor defaults to "load" when
+ * a checkpoint exists, otherwise to "new". */
+void ws_live_startup_world_select(const ws_live_options *opts, ws_session *s);
 
 /* Persist the observer's settings (view, clock, panels, shadows) plus the
  * window fields, to opts->settings_path. Called on a clean windowed exit; a

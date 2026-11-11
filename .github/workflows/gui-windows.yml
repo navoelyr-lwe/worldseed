@@ -92,7 +92,7 @@ jobs:
           # exercises the windowed presentation path (Win32 + GDI blit) that the
           # headless evidence cannot: a real window, a real GDI-presented frame.
           $exe = "build-gui/src/app/Release/worldseed.exe"
-          $proc = Start-Process -FilePath $exe -ArgumentList "--live","--size","1280x720" -PassThru
+          $proc = Start-Process -FilePath $exe -ArgumentList "--live","--live-no-select","--size","1280x720" -PassThru
           Start-Sleep -Seconds 8
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
           $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
@@ -104,6 +104,28 @@ jobs:
           if (-not $proc.HasExited) { $proc.CloseMainWindow() | Out-Null; Start-Sleep -Seconds 2 }
           if (-not $proc.HasExited) { $proc.Kill() }
           if (-not (Test-Path "evidence/gui/app/live-window.png")) { Write-Error "no live window screenshot produced"; exit 1 }
+
+      - name: World selection window and screenshot
+        shell: pwsh
+        run: |
+          # docs/17 "Ana deneyim": on open the user chooses a world. Launch the
+          # real window WITHOUT --live-no-select so the startup selection screen
+          # is shown, capture the desktop, then close it. This is the real GUI
+          # proof that the world-selection screen appears before the live view.
+          New-Item -ItemType Directory -Force -Path evidence/gui/app | Out-Null
+          $exe = "build-gui/src/app/Release/worldseed.exe"
+          $proc = Start-Process -FilePath $exe -ArgumentList "--live","--size","1280x720" -PassThru
+          Start-Sleep -Seconds 5
+          Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+          $bounds = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $gfx = [System.Drawing.Graphics]::FromImage($bmp)
+          $gfx.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bmp.Save("evidence/gui/app/world-select-window.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          $gfx.Dispose(); $bmp.Dispose()
+          if (-not $proc.HasExited) { $proc.CloseMainWindow() | Out-Null; Start-Sleep -Seconds 2 }
+          if (-not $proc.HasExited) { $proc.Kill() }
+          if (-not (Test-Path "evidence/gui/app/world-select-window.png")) { Write-Error "no world-selection window screenshot produced"; exit 1 }
 
       - name: Live headless evidence on isolated runner
         shell: pwsh

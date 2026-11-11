@@ -22,7 +22,9 @@ int main(int argc, char **argv)
     ws_result lr = ws_live_parse_options(argc, (const char *const *)argv, &live);
     if (lr != WS_OK) {
         fprintf(stderr, "invalid live arguments (use --live, --fullscreen, "
-                        "--live-headless <s>, --live-tour <dir>, --live-capture <file>)\n");
+                        "--live-no-select, --live-headless <s>, --live-tour <dir>, "
+                        "--live-replay <dir>, --live-select <dir>, "
+                        "--live-capture <file>)\n");
         return 2;
     }
     if (live.enabled) {

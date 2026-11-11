@@ -61,6 +61,20 @@ static void handle_key(live_state *st, WPARAM key)
 {
     ws_session *s = st->session;
     int menu = ws_session_settings_visible(s);
+    int selecting = ws_session_world_select_visible(s);
+    /* While the world-selection screen is open it is modal: arrows move its
+     * cursor, Enter opens the chosen world, M/Esc cancels. */
+    if (selecting) {
+        switch (key) {
+        case VK_UP: case 'W': (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, -1.0); return;
+        case VK_DOWN: case 'S': (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0); return;
+        case VK_RETURN: (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_CONFIRM, 0.0); return;
+        case VK_ESCAPE: case 'M': (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0); return;
+        default: break;
+        }
+        /* Ignore other keys while the modal selection is open. */
+        return;
+    }
     /* While the settings menu is open its navigation keys take over, so arrow
      * keys and Enter drive the menu instead of the camera or the view. */
     if (menu) {
@@ -88,6 +102,7 @@ static void handle_key(live_state *st, WPARAM key)
     case 'G': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_STATS, 0.0); break;
     case 'T': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SHADOWS, 0.0); break;
     case 'O': (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0); break;
+    case 'M': (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0); break;
     case 'S': (void)ws_session_apply_command(s, WS_CMD_SAVE, 0.0); break;
     case 'L': (void)ws_session_apply_command(s, WS_CMD_LOAD, 0.0); break;
     case 'R': (void)ws_session_apply_command(s, WS_CMD_REPLAY_TOGGLE, 0.0); break;
@@ -268,7 +283,8 @@ static LRESULT CALLBACK live_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         return 0;
     case WM_MOUSEMOVE:
         if (st != NULL && st->have_cursor && (wp & MK_LBUTTON) &&
-            !ws_session_settings_visible(st->session)) {
+            !ws_session_settings_visible(st->session) &&
+            !ws_session_world_select_visible(st->session)) {
             int mx = GET_X_LPARAM(lp);
             int my = GET_Y_LPARAM(lp);
             double dx = (double)(mx - st->last_cursor.x);
@@ -315,6 +331,9 @@ int ws_live_present(const ws_live_options *opts)
         fprintf(stderr, "live: session create failed\n");
         return 1;
     }
+    /* docs/17 "Ana deneyim": on open the user chooses a world (new / load /
+     * sample) before the live view takes over. */
+    ws_live_startup_world_select(opts, st.session);
 
     int screen_w = GetSystemMetrics(SM_CXSCREEN);
     int screen_h = GetSystemMetrics(SM_CYSCREEN);

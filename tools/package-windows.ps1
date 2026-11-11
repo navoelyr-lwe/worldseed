@@ -73,7 +73,7 @@ New-Item -ItemType Directory -Force -Path "$stage/live" | Out-Null
 Copy-Item evidence/live/tour-a/*.png "$stage/live/"
 Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
 @(
-    "Worldseed Engine preview (P11 - etkilesimli ayar menusu).",
+    "Worldseed Engine preview (P11 - dunya secimi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
     "Kalici ayarlar: seciminiz worldseed.cfg dosyasina yazilir ve sonraki acilista geri yuklenir;",
     "pencerede O tusu etkilesimli ayar menusunu acar (up/down gez, left/right degistir, enter uygula,",

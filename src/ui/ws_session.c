@@ -79,6 +79,9 @@ struct ws_session {
     int shadows_visible;
     int settings_visible;
     int settings_cursor;   /* interactive menu row (docs/17 item 9) */
+    int world_select_visible; /* world-selection screen (docs/17 "Ana deneyim") */
+    int world_select_cursor;  /* highlighted choice row */
+    uint64_t world_new_seed;  /* seed for "create a new world" (0 = default) */
     int hud_scale;         /* HUD/UI text scale: 1 small, 2 large */
     int render_scale;      /* windowed internal resolution divisor (0 = auto) */
     int volume;            /* master audio volume percent 0..100 */
@@ -673,6 +676,186 @@ static void settings_menu_adjust(ws_session *s, int delta)
     }
 }
 
+/* --- world selection (docs/17 "Ana deneyim") ---------------------------- */
+
+static void world_select_clamp_cursor(ws_session *s)
+{
+    if (s->world_select_cursor < 0) { s->world_select_cursor = 0; }
+    if (s->world_select_cursor >= WS_WORLD_CHOICE_COUNT) {
+        s->world_select_cursor = WS_WORLD_CHOICE_COUNT - 1;
+    }
+}
+
+int ws_session_world_select_visible(const ws_session *s)
+{
+    return s != NULL ? s->world_select_visible : 0;
+}
+
+int ws_session_world_select_cursor(const ws_session *s)
+{
+    return s != NULL ? s->world_select_cursor : 0;
+}
+
+int ws_session_world_select_can_load(const ws_session *s)
+{
+    if (s == NULL || s->save_path[0] == '\0') {
+        return 0;
+    }
+    FILE *f = fopen(s->save_path, "rb");
+    if (f == NULL) {
+        return 0;
+    }
+    int ok = 0;
+    if (fseek(f, 0L, SEEK_END) == 0) {
+        long sz = ftell(f);
+        if (sz > 0) {
+            ok = 1;
+        }
+    }
+    fclose(f);
+    return ok;
+}
+
+int ws_session_world_choice_enabled(const ws_session *s, int choice)
+{
+    if (choice == WS_WORLD_LOAD) {
+        return ws_session_world_select_can_load(s);
+    }
+    return (choice == WS_WORLD_NEW || choice == WS_WORLD_SAMPLE) ? 1 : 0;
+}
+
+void ws_session_world_set_new_seed(ws_session *s, uint64_t seed)
+{
+    if (s != NULL) {
+        s->world_new_seed = seed;
+    }
+}
+
+static uint64_t world_new_seed_value(const ws_session *s)
+{
+    if (s->world_new_seed != 0u) {
+        return s->world_new_seed;
+    }
+    return s->config.seed + s->config.world_uid;
+}
+
+ws_result ws_session_world_choice_item(const ws_session *s, int choice,
+                                       char *label, size_t label_cap,
+                                       char *value, size_t value_cap)
+{
+    if (s == NULL || label == NULL || value == NULL || label_cap == 0u ||
+        value_cap == 0u) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (choice < 0 || choice >= WS_WORLD_CHOICE_COUNT) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    switch (choice) {
+    case WS_WORLD_NEW:
+        snprintf(label, label_cap, "Create a new world");
+        snprintf(value, value_cap, "seed %llu",
+                 (unsigned long long)world_new_seed_value(s));
+        break;
+    case WS_WORLD_LOAD:
+        snprintf(label, label_cap, "Load the existing world");
+        if (ws_session_world_select_can_load(s)) {
+            snprintf(value, value_cap, "checkpoint found");
+        } else {
+            snprintf(value, value_cap, "no checkpoint");
+        }
+        break;
+    case WS_WORLD_SAMPLE:
+        snprintf(label, label_cap, "Open the sample world");
+        snprintf(value, value_cap, "seed %llu",
+                 (unsigned long long)WS_SESSION_SAMPLE_SEED);
+        break;
+    default:
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    return WS_OK;
+}
+
+/* Rebuild the whole authoritative world in place: a fresh host + focus ecology
+ * for `seed`, the render scene and actors for the focus region, an empty event
+ * timeline and an empty replay recording. This is the one place the world is
+ * (re)created, so "new world" and "open the sample world" share it and stay
+ * deterministic; it never runs while replay is active (replay is read-only).
+ * `reset_seed` sets config.seed to the chosen seed; otherwise the seed already
+ * in the config is used. */
+static ws_result world_reinit(ws_session *s, uint64_t seed, int reset_seed)
+{
+    if (reset_seed) {
+        s->config.seed = seed;
+    }
+    uint64_t use_seed = s->config.seed;
+
+    /* Stop any replay before the world changes underneath it. */
+    replay_exit(s);
+    replay_ring_clear(s);
+
+    /* The focus ecology owns a plant grid; free it before re-init. */
+    ws_ecology_free(&s->eco);
+    ws_env_scene_free(&s->env);
+    s->env_region_valid = 0;
+
+    ws_world_host_config hc = ws_world_host_config_default(use_seed, s->config.world_uid);
+    if (ws_world_host_init(&s->host, &hc) != WS_OK) {
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+    (void)ws_world_host_set_focus_world(&s->host, WS_SESSION_WORLD_M * 0.5,
+                                        WS_SESSION_WORLD_M * 0.5);
+    if (rebuild_env(s, s->host.focus.x, s->host.focus.y) != WS_OK) {
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+    ws_eco_config ecfg = ws_eco_config_default(0x7ec0u ^ use_seed);
+    ecfg.area_m = WS_SESSION_PATCH_M;
+    if (ws_ecology_init(&s->eco, &ecfg) != WS_OK) {
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+
+    s->steps = 0u;
+    s->tick_accumulator_s = 0.0;
+    s->time_of_day_s = s->config.start_time_of_day_s;
+    s->paused = 0;
+    s->speed_index = 2;
+    s->selected = -1;
+    s->timeline_count = 0u;
+    s->host_ev_cursor = 0u;
+    s->eco_event_cursor = 0u;
+    s->replay_next_s = 0.0;
+
+    ws_director_init(&s->director, NULL);
+    ws_director_set_ground(&s->director, NULL, NULL);
+
+    rebuild_actors(s);
+    return WS_OK;
+}
+
+ws_result ws_session_world_confirm(ws_session *s, int choice)
+{
+    if (s == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (choice < 0 || choice >= WS_WORLD_CHOICE_COUNT) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    if (!ws_session_world_choice_enabled(s, choice)) {
+        return WS_ERR_NOT_FOUND;
+    }
+    ws_result r;
+    if (choice == WS_WORLD_LOAD) {
+        r = ws_session_load(s, s->save_path);
+    } else if (choice == WS_WORLD_SAMPLE) {
+        r = world_reinit(s, WS_SESSION_SAMPLE_SEED, 1);
+    } else { /* WS_WORLD_NEW */
+        r = world_reinit(s, world_new_seed_value(s), 1);
+    }
+    if (r == WS_OK) {
+        s->world_select_visible = 0;
+    }
+    return r;
+}
+
 ws_result ws_session_apply_command(ws_session *s, int command, double arg)
 {
     if (s == NULL) {
@@ -778,6 +961,19 @@ ws_result ws_session_apply_command(ws_session *s, int command, double arg)
         s->speed_index = 2;
         break;
     }
+    case WS_CMD_WORLD_SELECT_TOGGLE:
+        s->world_select_visible = !s->world_select_visible;
+        break;
+    case WS_CMD_WORLD_SELECT_MOVE: {
+        int d = (int)(arg < 0.0 ? -1.0 : (arg > 0.0 ? 1.0 : 0.0));
+        if (d == 0) { d = 1; }
+        s->world_select_cursor += d;
+        world_select_clamp_cursor(s);
+        break;
+    }
+    case WS_CMD_WORLD_SELECT_CONFIRM:
+        (void)ws_session_world_confirm(s, s->world_select_cursor);
+        break;
     case WS_CMD_REPLAY_TOGGLE:
         if (s->replay_active) {
             replay_exit(s);

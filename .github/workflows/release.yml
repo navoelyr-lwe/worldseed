@@ -153,9 +153,16 @@ jobs:
             "  worldseed.exe --live               pencere modunda canli dunya" \
             "  worldseed.exe --live --fullscreen  tam ekran canli dunya" \
             "  Tuslar: Space duraklat, +/- hiz, V kip (auto/free/follow/map), N/P canli sec," \
-            "  G istatistik, O ayarlar, T yonlu golge, H yardim, [ ] saat, S/L kaydet/yukle, ok/WASD serbest kamera, Esc cikis." \
+            "  G istatistik, O ayarlar, M dunya secimi, T yonlu golge, H yardim, [ ] saat, S/L kaydet/yukle, ok/WASD serbest kamera, Esc cikis." \
             "" \
-            "Kalici ayarlar (bu surumun ana yeniligi): seciminiz worldseed.cfg dosyasina" \
+            "Dunya secimi (bu surumun ana yeniligi): uygulama acildiginda secim ekrani" \
+            "gosterilir - YENI dunya olustur, MEVCUT dunyayi yukle (kayit varsa) veya" \
+            "ORNEK dunyayi ac. Ok tuslari imleci tasir, Enter secer, M/Esc vazgecer." \
+            "Ornek dunya sabit bir tohumla acilir ve bit-ozdes yeniden uretilir; mevcut" \
+            "dunya secimi checkpoint'i bit-ozdes geri yukler; yeni dunya sifir tick ile" \
+            "baslar. Secim ekrani gozlemci salt-okunurdur: dunyayi degistirmez." \
+            "" \
+            "Kalici ayarlar: seciminiz worldseed.cfg dosyasina" \
             "yazilir ve sonraki acilista geri yuklenir - cozunurluk, ic render olcegi," \
             "baslangic gorunumu/saati, golge, tam ekran, metin boyutu, ana ses duzeyi," \
             "kamera hizi ve fare hassasiyeti. Pencerede O tusu artik ETKILESIMLI bir ayar" \
