@@ -203,6 +203,73 @@ static int test_worldselect_run(void)
     return 1;
 }
 
+/* Export evidence mode (docs/17 "Dışa aktarma"): the run writes a timestamped
+ * frame sequence plus the matching WAV and a manifest. Two runs of the same
+ * seed export bit-identical frames and audio. */
+static int test_export_run(void)
+{
+    const char *const argv[] = {"worldseed", "--live-export", "ws_live_export_test_out",
+                                "--size", "160x90", "--live-export-seconds", "0.5"};
+    ws_live_options o;
+    WS_CHECK(ws_live_parse_options(7, argv, &o) == WS_OK);
+    WS_CHECK(o.export_mode == 1);
+    WS_CHECK(o.headless == 1);
+    WS_CHECK(ws_live_run(&o) == 0);
+
+    FILE *mf = fopen("ws_live_export_test_out/export-manifest.txt", "r");
+    WS_CHECK(mf != NULL);
+    if (mf != NULL) {
+        char line[256];
+        int saw_frames = 0, saw_nonzero = 0, saw_digest = 0;
+        while (fgets(line, sizeof(line), mf) != NULL) {
+            if (strstr(line, "frames=15") != NULL) { saw_frames = 1; }
+            if (strstr(line, "audio_nonzero=1") != NULL) { saw_nonzero = 1; }
+            if (strstr(line, "world_digest=") != NULL) { saw_digest = 1; }
+        }
+        fclose(mf);
+        WS_CHECK(saw_frames && saw_nonzero && saw_digest);
+    }
+    /* First and last frame files exist, plus the WAV. */
+    FILE *f0 = fopen("ws_live_export_test_out/frame-00000.ppm", "rb");
+    FILE *f14 = fopen("ws_live_export_test_out/frame-00014.ppm", "rb");
+    FILE *wav = fopen("ws_live_export_test_out/soundscape.wav", "rb");
+    WS_CHECK(f0 != NULL && f14 != NULL && wav != NULL);
+    if (f0) { fclose(f0); }
+    if (f14) { fclose(f14); }
+    if (wav) { fclose(wav); }
+
+    /* A second run exports a bit-identical frame sequence and WAV. */
+    const char *const argv2[] = {"worldseed", "--live-export", "ws_live_export_test_out2",
+                                 "--size", "160x90", "--live-export-seconds", "0.5"};
+    ws_live_options o2;
+    WS_CHECK(ws_live_parse_options(7, argv2, &o2) == WS_OK);
+    WS_CHECK(ws_live_run(&o2) == 0);
+
+    const char *frames_to_compare[] = {"frame-00000.ppm", "frame-00007.ppm",
+                                       "frame-00014.ppm"};
+    for (int i = 0; i < 3; ++i) {
+        char pa[256], pb[256];
+        snprintf(pa, sizeof(pa), "ws_live_export_test_out/%s", frames_to_compare[i]);
+        snprintf(pb, sizeof(pb), "ws_live_export_test_out2/%s", frames_to_compare[i]);
+        FILE *fa = fopen(pa, "rb");
+        FILE *fb = fopen(pb, "rb");
+        WS_CHECK(fa != NULL && fb != NULL);
+        if (fa != NULL && fb != NULL) {
+            int same = 1;
+            for (;;) {
+                int ca = fgetc(fa);
+                int cb = fgetc(fb);
+                if (ca != cb) { same = 0; break; }
+                if (ca == EOF) { break; }
+            }
+            WS_CHECK(same);
+            fclose(fa);
+            fclose(fb);
+        }
+    }
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -215,6 +282,7 @@ int main(void)
         {"live_settings_precedence", test_settings_file_precedence},
         {"live_replay_run", test_replay_run},
         {"live_worldselect_run", test_worldselect_run},
+        {"live_export_run", test_export_run},
     };
     return ws_test_run("live", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

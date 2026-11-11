@@ -84,3 +84,20 @@ Bilgiler simülasyonun gerçek state/event verisinden gelir. UI'da tahmin edilen
 ## Dışa aktarma
 
 İlk release için kanıt ve tekrar gözlem amacıyla zaman damgalı kare dizisi ve WAV ses çıktısı hedeflenir. MP4/H.264 gibi sıkıştırılmış video üretimi codec/lisans ve ek geliştirme gerektirir; ilk release zorunluluğu değildir. Kullanıcı arayüzündeki “video kaydı” ifadesi uygulanmayan formatı vaat etmemelidir.
+
+Dışa aktarma uygulanmıştır (`worldseed.exe --live-export <dizin> [--live-export-seconds <s>]`).
+Canlı ürün, sabit bir kare aralığıyla (1/30 s) koşar, her kareyi **kendi CPU referans
+renderer'ımızla** çizer ve sıfır dolgulu `frame-NNNNN.ppm` dosyaları olarak yazar. Aynı
+aralık için canlı prosedürel ses manzarası karıştırılır ve karelerle hizalanan tek bir
+`soundscape.wav` (48 kHz, stereo, int16) yazılır; böylece WAV'da duyulan bir doğum ya da
+avlanma, onu gösteren kareyle aynı zaman dilimindedir. `frames-index.txt` her karenin
+dosya adını, dünya zamanını, tick'ini ve karenin SHA-256'sını satır satır kaydeder;
+`export-manifest.txt` kare sayısını, kare aralığını, ses örnekleme hızını, ses kare
+sayısını ve dünyanın SHA-256 özetini bir arada verir.
+
+Dışa aktarma **deterministiktir**: aynı tohum ve kare sayısıyla iki koşu bit-özdeş
+kare dizisi ve bit-özdeş WAV üretir (`tests/test_live.c` `live_export_run`). Dışa aktarma
+gerçek bir koşudur (kareler dünyayı ilerletir); otoritatif dünyaya başka bir müdahalesi
+yoktur ve aynı tohumdan her zaman aynı çıktıyı verir. Kanıt için `ci.yml`,
+`gui-windows.yml` ve `tools/package-windows.ps1` iki koşunun kare ve WAV eşitliğini
+zorunlu kapı yapar.

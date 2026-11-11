@@ -625,6 +625,42 @@ static int test_replay_is_observation_only(void)
     return 1;
 }
 
+/* Export support (docs/17 "Dışa aktarma"): the session can mix the live
+ * procedural soundscape for a frame interval, and mixing is observation-only —
+ * it advances the voice state but never the world, so the digest is unchanged.
+ * The same world run twice mixes a bit-identical PCM buffer. */
+static int test_audio_export_readonly(void)
+{
+    ws_session *s = make(1234ULL);
+    WS_CHECK(s != NULL);
+    run_seconds(s, 3.0);
+
+    const uint32_t frames = 1600u; /* 1/30 s at 48 kHz */
+    int16_t a[1600 * 2];
+    int16_t b[1600 * 2];
+    char before[WS_SESSION_DIGEST_HEX];
+    char after[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, before) == WS_OK);
+    WS_CHECK(ws_session_render_audio(s, a, frames) == WS_OK);
+    WS_CHECK(ws_session_digest(s, after) == WS_OK);
+    WS_CHECK(strcmp(before, after) == 0); /* audio never changes the world */
+
+    /* A second session that ran the same seed and interval mixes the same
+     * audio (the soundscape is a deterministic function of the run). */
+    ws_session *s2 = make(1234ULL);
+    WS_CHECK(s2 != NULL);
+    run_seconds(s2, 3.0);
+    WS_CHECK(ws_session_render_audio(s2, b, frames) == WS_OK);
+    WS_CHECK(memcmp(a, b, sizeof(a)) == 0);
+
+    /* A NULL buffer is rejected, not a crash. */
+    WS_CHECK(ws_session_render_audio(s, NULL, frames) == WS_ERR_NULL_POINTER);
+
+    ws_session_destroy(s);
+    ws_session_destroy(s2);
+    return 1;
+}
+
 static int test_step_once(void)
 {
     /* Time control (docs/17): single step advances exactly one fixed world tick
@@ -1034,6 +1070,7 @@ int main(void)
         {"session_replay_enter_seek_exit", test_replay_enter_seek_exit},
         {"session_replay_observation_only", test_replay_is_observation_only},
         {"session_step_once", test_step_once},
+        {"session_audio_export_readonly", test_audio_export_readonly},
         {"session_settings_menu", test_settings_menu},
         {"session_menu_mouse_click", test_menu_mouse_click},
         {"session_world_selection", test_world_selection},

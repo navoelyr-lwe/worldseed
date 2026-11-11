@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "../core/ws_hash.h"
+#include "../audio/ws_audio.h"
 #include "../platform/ws_clock.h"
 #include "../platform/ws_fs.h"
 #include "../render/ws_image.h"
@@ -23,6 +24,8 @@ ws_live_options ws_live_options_default(void)
     o.tour = 0;
     o.replay = 0;
     o.worldselect = 0;
+    o.export_mode = 0;
+    o.export_seconds = 0.0;
     o.no_select = 0;
     o.out_dir = NULL;
     o.capture_path = NULL;
@@ -97,6 +100,24 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
             opts->headless = 1;
             opts->worldselect = 1;
             opts->out_dir = argv[++i];
+        } else if (strcmp(a, "--live-export") == 0) {
+            if (i + 1 >= argc) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
+            opts->enabled = 1;
+            opts->headless = 1;
+            opts->export_mode = 1;
+            opts->out_dir = argv[++i];
+            opts->export_seconds = 2.0;
+        } else if (strcmp(a, "--live-export-seconds") == 0) {
+            if (i + 1 >= argc) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
+            opts->enabled = 1;
+            opts->export_seconds = strtod(argv[++i], NULL);
+            if (!(opts->export_seconds > 0.0)) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
         } else if (strcmp(a, "--live-no-select") == 0) {
             /* Skip the startup world-selection screen and open the world
              * directly (used by the GUI/evidence runs so they present frames). */
@@ -1026,6 +1047,158 @@ static int run_worldselect(const ws_live_options *opts)
     return ok ? 0 : 1;
 }
 
+/* --- export (docs/17 "Dışa aktarma") ------------------------------------ */
+
+/* Export a run as a timestamped frame sequence plus the matching WAV: the exact
+ * deliverable docs/17 specifies for evidence and later re-observation. The
+ * frames are the live product's own renders (the same session, HUD and camera
+ * the observer sees), written as zero-padded PPM files with an index that
+ * records each frame's world time; the audio is the live procedural soundscape
+ * mixed in step, so a birth or a kill heard in the WAV lines up with the frame
+ * that shows it. A manifest ties the frames, the WAV digest and the world
+ * digest together. The world is never modified by the export. */
+static int run_export(const ws_live_options *opts)
+{
+    if (ws_fs_make_dirs(opts->out_dir) != WS_OK) {
+        fprintf(stderr, "live export: cannot create %s\n", opts->out_dir);
+        return 1;
+    }
+    ws_session *s = NULL;
+    if (ws_live_make_session(opts, &s) != WS_OK) {
+        fprintf(stderr, "live export: session create failed\n");
+        return 1;
+    }
+    ws_framebuffer fb;
+    if (ws_framebuffer_create(&fb, opts->width, opts->height) != WS_OK) {
+        ws_session_destroy(s);
+        return 1;
+    }
+    float *depth = malloc((size_t)opts->width * opts->height * sizeof(float));
+    if (depth == NULL) {
+        ws_framebuffer_free(&fb);
+        ws_session_destroy(s);
+        return 1;
+    }
+
+    const double dt = 1.0 / 30.0;                 /* export frame interval */
+    const uint32_t frames_per_step = (uint32_t)(WS_AUDIO_SAMPLE_RATE * dt);
+    int steps = (int)(opts->export_seconds / dt);
+    if (steps < 1) {
+        steps = 1;
+    }
+    const uint64_t total_audio_frames = (uint64_t)frames_per_step * (uint64_t)steps;
+    int16_t *pcm = malloc((size_t)total_audio_frames * 2u * sizeof(int16_t));
+    if (pcm == NULL) {
+        free(depth);
+        ws_framebuffer_free(&fb);
+        ws_session_destroy(s);
+        return 1;
+    }
+
+    char index_path[512];
+    snprintf(index_path, sizeof(index_path), "%s/frames-index.txt", opts->out_dir);
+    FILE *idx = fopen(index_path, "w");
+    if (idx != NULL) {
+        fprintf(idx, "# Worldseed Engine export frame index (docs/17)\n");
+        fprintf(idx, "# file world_time_s world_tick frame_sha256\n");
+    }
+
+    int ok = 1;
+    int written = 0;
+    int nonzero_audio = 0;
+    for (int i = 0; i < steps; ++i) {
+        if (ws_session_step(s, dt) != WS_OK) {
+            fprintf(stderr, "live export: step failed\n");
+            ok = 0;
+            break;
+        }
+        if (ws_session_render(s, &fb, depth) != WS_OK) {
+            fprintf(stderr, "live export: render failed\n");
+            ok = 0;
+            break;
+        }
+        ws_hud_options ho = ws_hud_options_default();
+        ho.scale = ws_session_hud_scale(s);
+        ws_hud_draw(&fb, s, &ho);
+
+        char path[512];
+        snprintf(path, sizeof(path), "%s/frame-%05d.ppm", opts->out_dir, i);
+        if (ws_framebuffer_write_ppm(&fb, path) != WS_OK) {
+            fprintf(stderr, "live export: cannot write %s\n", path);
+            ok = 0;
+            break;
+        }
+        uint8_t digest[WS_SHA256_DIGEST_SIZE];
+        char hex[WS_SHA256_DIGEST_SIZE * 2u + 1u];
+        ws_sha256_buffer(fb.pixels, (size_t)fb.width * fb.height * 4u, digest);
+        ws_sha256_hex(digest, hex);
+        if (idx != NULL) {
+            fprintf(idx, "frame-%05d.ppm %.3f %llu %s\n", i,
+                    ws_session_time_s(s), (unsigned long long)ws_session_tick(s), hex);
+        }
+        written++;
+
+        /* Mix this frame interval's audio into its slot in the whole WAV, so
+         * the exported soundscape spans exactly the exported frames. */
+        int16_t *slot = &pcm[(size_t)i * frames_per_step * 2u];
+        if (ws_session_render_audio(s, slot, frames_per_step) != WS_OK) {
+            fprintf(stderr, "live export: audio mix failed\n");
+            ok = 0;
+            break;
+        }
+        if (!nonzero_audio) {
+            for (uint32_t k = 0u; k < frames_per_step * 2u; ++k) {
+                if (slot[k] != 0) { nonzero_audio = 1; break; }
+            }
+        }
+    }
+    if (idx != NULL) {
+        fclose(idx);
+    }
+
+    char wav_path[512];
+    snprintf(wav_path, sizeof(wav_path), "%s/soundscape.wav", opts->out_dir);
+    uint64_t audio_frames_total = (uint64_t)frames_per_step * (uint64_t)written;
+    if (ok && written > 0) {
+        if (ws_audio_write_wav(wav_path, pcm, (uint32_t)audio_frames_total,
+                               WS_AUDIO_SAMPLE_RATE) != WS_OK) {
+            fprintf(stderr, "live export: cannot write %s\n", wav_path);
+            ok = 0;
+        }
+    }
+
+    char world_digest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, world_digest);
+
+    char manifest[512];
+    snprintf(manifest, sizeof(manifest), "%s/export-manifest.txt", opts->out_dir);
+    FILE *mf = fopen(manifest, "w");
+    if (mf != NULL) {
+        fprintf(mf, "# Worldseed Engine export manifest (docs/17)\n");
+        fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
+        fprintf(mf, "size=%ux%u\n", opts->width, opts->height);
+        fprintf(mf, "frames=%d\n", written);
+        fprintf(mf, "frame_interval_s=%.4f\n", dt);
+        fprintf(mf, "audio_sample_rate=%u\n", WS_AUDIO_SAMPLE_RATE);
+        fprintf(mf, "audio_frames=%llu\n", (unsigned long long)audio_frames_total);
+        fprintf(mf, "audio_nonzero=%d\n", nonzero_audio);
+        fprintf(mf, "world_digest=%s\n", world_digest);
+        fclose(mf);
+    }
+
+    free(pcm);
+    free(depth);
+    ws_framebuffer_free(&fb);
+    ws_session_destroy(s);
+    if (ok && written > 0 && nonzero_audio) {
+        printf("LIVE_EXPORT_OK frames=%d wav=%s frames=%llu nonzero_audio=%d "
+               "world_digest=%s dir=%s\n",
+               written, wav_path, (unsigned long long)audio_frames_total,
+               nonzero_audio, world_digest, opts->out_dir);
+    }
+    return (ok && written > 0) ? 0 : 1;
+}
+
 int ws_live_run(const ws_live_options *opts)
 {
     if (opts == NULL || !opts->enabled) {
@@ -1033,6 +1206,9 @@ int ws_live_run(const ws_live_options *opts)
     }
     /* Options arrive already merged (parse_options resolves the settings file),
      * so the windowed and headless paths drive exactly the same product. */
+    if (opts->export_mode) {
+        return run_export(opts);
+    }
     if (opts->tour) {
         return run_tour(opts);
     }

@@ -219,6 +219,24 @@ jobs:
           grep -q "LIVE_REPLAY_OK" evidence/live/replay.txt
           grep -q "newest_matches_live=1" evidence/live/replay/replay-manifest.txt
           grep -q "live_restored=1" evidence/live/replay/replay-manifest.txt
+          # Export (docs/17 "Dışa aktarma"): a timestamped frame sequence plus the
+          # matching WAV. Two exports of the same seed must agree frame-for-frame
+          # and sample-for-sample; the frames carry signal (coverage) and the WAV
+          # is not silent.
+          ./build/src/app/worldseed --live-export evidence/live/export-a --size 320x180 \
+            --live-export-seconds 1 | tee evidence/live/export.txt
+          grep -q "LIVE_EXPORT_OK" evidence/live/export.txt
+          grep -q "frames=30" evidence/live/export-a/export-manifest.txt
+          grep -q "audio_nonzero=1" evidence/live/export-a/export-manifest.txt
+          ./build/src/app/worldseed --live-export evidence/live/export-b --size 320x180 \
+            --live-export-seconds 1 >/dev/null
+          for f in evidence/live/export-a/frame-*.ppm; do
+            b=$(basename "$f")
+            cmp "$f" "evidence/live/export-b/$b" \
+              || { echo "live export $b not reproducible"; exit 1; }
+          done
+          cmp evidence/live/export-a/soundscape.wav evidence/live/export-b/soundscape.wav \
+            || { echo "live export WAV not reproducible"; exit 1; }
           # Directional shadows (P12): the on/off pair must differ and the
           # shadowed frame must not be brighter than the unshadowed one.
           ./build/tools/ws_imgdiff evidence/live/tour-a/step-08-shadows_off.ppm \
@@ -469,6 +487,21 @@ jobs:
           if (-not (Select-String -Path evidence/live/replay.txt -Pattern "LIVE_REPLAY_OK" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/live/replay/replay-manifest.txt -Pattern "newest_matches_live=1" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/live/replay/replay-manifest.txt -Pattern "live_restored=1" -Quiet)) { exit 1 }
+          # Export (docs/17 "Dışa aktarma"): timestamped frame sequence + WAV.
+          # Two exports of the same seed must agree frame-for-frame and sample-for-sample.
+          & $exe --live-export evidence/live/export-a --size 320x180 --live-export-seconds 1 | Tee-Object -FilePath evidence/live/export.txt
+          if (-not (Select-String -Path evidence/live/export.txt -Pattern "LIVE_EXPORT_OK" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/live/export-a/export-manifest.txt -Pattern "audio_nonzero=1" -Quiet)) { exit 1 }
+          & $exe --live-export evidence/live/export-b --size 320x180 --live-export-seconds 1 | Out-Null
+          Get-ChildItem evidence/live/export-a/frame-*.ppm | ForEach-Object {
+            $b = Join-Path "evidence/live/export-b" $_.Name
+            if ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $b).Hash) {
+              Write-Error "live export $($_.Name) not reproducible"; exit 1
+            }
+          }
+          if ((Get-FileHash evidence/live/export-a/soundscape.wav).Hash -ne (Get-FileHash evidence/live/export-b/soundscape.wav).Hash) {
+            Write-Error "live export WAV not reproducible"; exit 1
+          }
           # Directional shadows (P12): the on/off pair must differ.
           $diff = & "build/tools/${{ matrix.build_type }}/ws_imgdiff.exe" `
             evidence/live/tour-a/step-08-shadows_off.ppm `

@@ -412,6 +412,15 @@ const char *ws_session_scene_id(const ws_session *s);
  * modified. */
 ws_result ws_session_render(ws_session *s, ws_framebuffer *fb, float *depth);
 
+/* --- export (docs/17 "Dışa aktarma") ----------------------------------- */
+
+/* Mix `frames` stereo sample frames of the live soundscape into `out` (2*frames
+ * int16, interleaved), at WS_AUDIO_SAMPLE_RATE Hz. This is the same procedural
+ * audio the observer hears, driven by the run's real life events, so a
+ * timestamped frame-sequence export can ship the matching WAV. Mixing advances
+ * the voice state but never the world: the digest is unchanged. */
+ws_result ws_session_render_audio(ws_session *s, int16_t *out, uint32_t frames);
+
 /* Checkpoint the whole session to `path`; restore it with ws_session_load. The
  * checkpoint is explicit little-endian bytes (ws_serialize), not a raw struct. */
 ws_result ws_session_save(ws_session *s, const char *path);

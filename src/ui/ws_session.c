@@ -1939,6 +1939,14 @@ ws_result ws_session_render(ws_session *s, ws_framebuffer *fb, float *depth)
     return ws_render_scene(&s->env.scene, fb, depth, 32u, NULL);
 }
 
+ws_result ws_session_render_audio(ws_session *s, int16_t *out, uint32_t frames)
+{
+    if (s == NULL || out == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    return ws_audio_mix(&s->audio, out, frames);
+}
+
 /* --- checkpoint --------------------------------------------------------- */
 
 static ws_result write_ecology(ws_writer *w, const ws_ecology *e)

@@ -42,6 +42,8 @@ typedef struct ws_live_options {
     int tour;           /* run the scripted evidence tour */
     int replay;         /* run the replay evidence mode */
     int worldselect;    /* run the world-selection evidence mode */
+    int export_mode;    /* run the frame-sequence + WAV export (docs/17) */
+    double export_seconds; /* export duration, world seconds */
     int no_select;      /* do not show the startup world-selection screen */
     const char *out_dir; /* directory for tour captures (NULL = none) */
     const char *capture_path; /* single capture path (NULL = none) */
