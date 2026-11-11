@@ -389,7 +389,7 @@ Aşağıdaki bağlantılar 11 Kasım 2026 tarihinde kontrol edilmiştir. Bunlar 
 8. Cai ve ark. (2026), orman ekosisteminde yaban domuzu rooting etkileri derlemesi: https://doi.org/10.1016/j.foreco.2026.124061
 9. Marin, Schaefer & Ackels (2021), memelilerde koku uzamsal bilgisi: https://doi.org/10.1007/s00441-020-03395-3
 10. Goldshtein & Yovel (2024), hayvan karar vermede onboard sensory systems: https://www.annualreviews.org/content/journals/10.1146/annurev-ecolsys-102722-125640
-11. Bugmann, A review of forest gap models: https://doi.org/10.1016/S0378-1127(99)00029-1
+11. Bugmann, A review of forest gap models: https://doi.org/10.1023/A:1012525626267
 12. Malchow & Hartig (2026), ekolojik model kalibrasyonu/duyarlılık/belirsizlik: https://doi.org/10.1111/ele.70375
 13. Ecological Modelling (2024), biyolojik kriter ve Sobol duyarlılık analizi ile predator-prey model kıyaslama: https://doi.org/10.1016/j.ecolmodel.2024.110728
 14. Francis, Phillips & Barber (2023), karasal ekolojide arka plan akustiği: https://doi.org/10.1146/annurev-ecolsys-102220-030316
