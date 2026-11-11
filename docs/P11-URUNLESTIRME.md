@@ -65,6 +65,31 @@ bitmap fontumuzla (5×7 glif, ASCII 32..126) çizilir; font varlığı veya üç
 taraf metin kütüphanesi yoktur (ADR-008). HUD yalnız sunum tamponuna yazar;
 dünyaya veya render sahnesine asla yazmaz.
 
+### Dünya seçimi — `src/ui/ws_session.{h,c}`, `src/ui/ws_hud.c`, `src/app/ws_live.{h,c}`
+
+`docs/17` "Ana deneyim" maddesinin uygulaması: "uygulama açıldığında kullanıcı
+yeni dünya oluşturabilir, mevcut dünyayı yükleyebilir veya örnek dünyayı
+açabilir." Uygulama açılışında modal bir dünya seçim ekranı gösterilir (`M` ile
+yeniden açılır): üç satır — **yeni dünya oluştur**, **mevcut dünyayı yükle**,
+**örnek dünyayı aç**. `↑/↓` (veya `W/S`) imleci taşır, `Enter` seçilen dünyayı
+açar, `M`/`Esc` seçimi iptal eder (geçerli dünya korunur). İmleç varsayılan olarak
+kayıt varsa "yükle" satırına, yoksa "yeni" satırına gelir.
+
+- **Yeni dünya** — çağıranın verdiği taze bir tohumla dünyayı sıfırdan kurar
+  (tick 0, boş olay zaman çizelgesi, boş replay kaydı). Uygulama tohumu duvar
+  saatinden türetir (`ws_live_new_world_seed`), böylece her oturumda dünya
+  farklıdır; oturum yine de verilen tohumdan deterministik kurar.
+- **Mevcut dünyayı yükle** — kayıtlı checkpoint'i bit-özdeş geri yükler
+  (`ws_session_load`); kayıt yoksa satır seçilemez ve onaylama temiz bir
+  `WS_ERR_NOT_FOUND` döner.
+- **Örnek dünyayı aç** — sabit `WS_SESSION_SAMPLE_SEED` tohumuyla örnek dünyayı
+  kurar; aynı tohum + tick sayısı bit-özdeş özet verir (deterministik).
+
+Dünyayı yeniden kurma tek bir yerde toplanır (`world_reinit`): yeni dünya ve
+örnek dünya aynı yolu paylaşır, böylece tutarlı kalır. Seçim ekranının kendisi
+gözlemci salt-okunurdur: açıp kapatmak (onaylamadan) dünya özetini değiştirmez.
+Seçim gerçekleşince oturum yeni dünyayı gösterir; ekran kapanır.
+
 ### Kalıcı ayarlar — `src/platform/ws_settings.{h,c}`
 
 `docs/17` madde 9'un (ayarlar) kalıcı yolunu sağlayan, bağımsız C17 anahtar=değer
@@ -124,6 +149,7 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
 | `G` | İstatistik panelini aç/kapa |
 | `T` | Yönlü gölgeleri aç/kapa |
 | `O` | Ayar panelini aç/kapa |
+| `M` | Dünya seçim ekranı (yeni / mevcut / örnek) |
 | `H` | Yardım katmanını aç/kapa |
 | Ok tuşları / `WASD` | Serbest kamerayı uçur |
 | Fare sürükle | Serbest görünümde bakış |
@@ -151,10 +177,10 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   320×180'de `avg_ms=29.54 fps=33.8`, 640×360'ta `avg_ms=105.98 fps=9.4` verir —
   çözünürlük ölçeklemesi doğrusaldır ve pencere modunda otomatik ölçek devrededir.
 
-- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on bir adım
+- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on üç adım
   (auto gündüz, serbest genel görünüm, geyik takibi, harita, alacakaranlık, tilki
   takibi, gece+istatistik, kaydet→ilerlet→yükle, gölgeler kapalı, gölgeler açık, tek
-  adım). Her adım gerçek PPM karesi + SHA-256
+  adım, ayarlar menüsü, dünya seçimi). Her adım gerçek PPM karesi + SHA-256
   ve manifest yazar. Bu makinede (1280×720):
 
   ```
@@ -163,13 +189,25 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   tour step=06 auto_night   sha256=e02eb50c...
   tour save_load saved=1 loaded=1 roundtrip=1
   tour single_step paused=1 from=580 to=585 ok=1
-  LIVE_TOUR_OK steps=11
+  LIVE_TOUR_OK steps=13
   ```
 
   `roundtrip=1`, checkpoint kaydedildikten sonra dünyanın ilerletilip geri
   yüklendiğinde SHA-256 özetinin birebir aynı olduğunu kanıtlar. `single_step ok=1`,
   durakdayken beş tek adımın dünyayı tam beş tick ilerlettiğini ve duraklamayı
   bozmadığını kanıtlar (`manifest` içinde `single_step_verified=1`).
+
+- **Dünya seçimi kanıtı** — `worldseed.exe --live-select <dizin> --size WxH`
+  (docs/17 "Ana deneyim": yeni dünya / mevcut dünyayı yükle / örnek dünyayı aç):
+  dünya bir süre ilerletilir ve bir checkpoint kaydedilir, ardından seçim ekranı
+  açılır. Örnek dünya sabit bir tohumla (`WS_SESSION_SAMPLE_SEED`) yeniden
+  kurulur ve **bit-özdeş** olarak yeniden üretilir (`sample_reproducible=1`);
+  kaydedilmiş dünya seçimi checkpoint'i bit-özdeş geri yükler (`load_restored=1`);
+  yeni dünya sıfır tick ile başlar (`new_fresh=1`); seçim ekranını açıp kapatmak
+  dünyayı değiştirmez (`readonly=1`). `LIVE_SELECT_OK` çıktısı ve
+  `select-manifest.txt` CI kapısıdır. Seçim ekranı gerçek pencerede uygulama
+  açılışında gösterilir ve izole Windows koşucusunda ekran görüntüsü alınır
+  (`evidence/gui/app/world-select-window.png`).
 
 - **Replay kanıtı** — `worldseed.exe --live-replay <dizin> --size WxH`: dünya
   bir süre ilerletilir, replay'e girilir, en eski örnek, adımlanmış örnek ve en
@@ -183,12 +221,13 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   gerçek çıktı üzerinden doğrular; CI bu karşılaştırmayı zorunlu kapı yapar.
 
 - **Birim testleri** — `tests/test_font.c`, `tests/test_hud.c`, `tests/test_session.c`,
-  `tests/test_live.c`, `tests/test_settings.c` (toplam 42 test): font çizimi/metrikleri,
-  HUD salt-okunurluk ve panel çizimi (istatistik + ayar + replay panelleri dahil), oturum
-  yaşam döngüsü, duraklatma, gözlemci salt-okunurluğu, tohum determinizmi,
+  `tests/test_live.c`, `tests/test_settings.c` (toplam 47 test): font çizimi/metrikleri,
+  HUD salt-okunurluk ve panel çizimi (istatistik + ayar + replay + dünya seçimi panelleri
+  dahil), oturum yaşam döngüsü, duraklatma, gözlemci salt-okunurluğu, tohum determinizmi,
   kare-hızı bağımsızlığı, seçim/inceleme, zaman çizelgesi/harita, kaydet/yükle,
   istatistik/demografi, görünüm kipleri, replay (giriş/arama/adımlama/çıkış ve
-  salt-okunurluk), canlı uygulama seçenek ayrıştırma + headless/tur/replay koşuları,
+  salt-okunurluk), dünya seçimi (yeni/örnek/yükle + salt-okunurluk + determinizm),
+  canlı uygulama seçenek ayrıştırma + headless/tur/replay/dünya-seçimi koşuları,
   ayar ayrıştırma/biçimlendirme/kaydet-yükle ve CLI↔dosya önceliği.
 
 - **Kanıt manifesti aracı** — `tools/ws_manifest.c`: paketteki her dosya için
@@ -200,18 +239,20 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
 
 - `ci.yml`: Linux sanitizer matrisi ve Windows MSVC işlerine "Live application
   evidence" adımı eklendi — headless koşu (`LIVE_HEADLESS_OK`), tur
-  (`LIVE_TOUR_OK`, `save_load_roundtrip=1`) ve iki turun kare-özdeş olduğu `cmp`
-  karşılaştırması. Kanıtlar artefakt olarak yüklenir.
+  (`LIVE_TOUR_OK`, `save_load_roundtrip=1`), dünya seçimi (`LIVE_SELECT_OK`) ve iki
+  turun kare-özdeş olduğu `cmp` karşılaştırması. Kanıtlar artefakt olarak yüklenir.
 - `gui-windows.yml`: izole Windows runner'da gerçek canlı pencere açılır
   (`--live --size 1280x720`), masaüstü ekran görüntüsü alınır, pencere kapatılır;
-  ayrıca headless + tur + replay kanıtı alınır. Bu, yalnız Windows'ta çalışan
-  Win32/GDI sunum yolunu gerçek pencerede sınar.
+  ayrıca dünya seçimi ekranı gerçek pencerede açılıp görüntülenir
+  (`--live --size 1280x720`, `world-select-window.png`); headless + tur + dünya
+  seçimi + replay kanıtı alınır. Bu, yalnız Windows'ta çalışan Win32/GDI sunum
+  yolunu gerçek pencerede sınar.
 - `release.yml`: paket artık canlı tur karelerini (`live/*.png`, `live/manifest.txt`)
   içerir; `worldseed.exe --version` ile sürüm bildirir; `tools/ws_manifest` ile
   `MANIFEST.txt` üretilir; sürüm notu P11 canlı uygulamasını ve kalan sınırlamaları
   açıklar.
-- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.15.0-preview`
-  olarak hizalandı (tek adım zaman kontrolü dilimi); `worldseed.exe --version` aynı
+- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.17.0-preview`
+  olarak hizalandı (dünya seçimi dilimi); `worldseed.exe --version` aynı
   dizeyi yazdırır.
 
 ## Bilinen sınırlamalar
@@ -231,6 +272,8 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   bayrağı dosyayı geçersiz kılar; pencere temiz kapanışta dosyayı yazar.
   Etkileşimli ayar menüsü (`O`, `docs/17` madde 9) bu dilimde tamamlandı: menü
   gezilebilir ve değiştirilebilir, kaydet/geri yükle satırları dosyayı kullanır,
-  çözünürlük satırı pencereyi yeniden boyutlandırır (tam ekranda değil). Fareyle
-  tıklayarak seçme ve dünya seçim menüsü sonraki dilimdedir.
+  çözünürlük satırı pencereyi yeniden boyutlandırır (tam ekranda değil). Dünya
+  seçimi (`docs/17` "Ana deneyim") bu dilimde tamamlandı: uygulama açılışında yeni
+  dünya / mevcut dünyayı yükle / örnek dünyayı aç seçim ekranı gösterilir. Menü ve
+  seçim satırlarında fareyle tıklayarak seçme sonraki dilimdedir.
 - `1.0.0` yalnız `docs/00` bölüm 8'in bütün koşulları geçildiğinde yayımlanır.

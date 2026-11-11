@@ -709,6 +709,138 @@ static int test_settings_menu(void)
     return 1;
 }
 
+static int test_world_selection(void)
+{
+    ws_session *s = make(7ULL);
+    WS_CHECK(s != NULL);
+    run_seconds(s, 1.0);
+
+    /* The screen is closed by default and the cursor starts on "new". */
+    WS_CHECK(ws_session_world_select_visible(s) == 0);
+    WS_CHECK(ws_session_world_select_cursor(s) == WS_WORLD_NEW);
+    WS_CHECK(ws_session_world_choice_enabled(s, WS_WORLD_NEW) == 1);
+    WS_CHECK(ws_session_world_choice_enabled(s, WS_WORLD_SAMPLE) == 1);
+
+    /* Rows report label+value; out-of-range is rejected. */
+    char label[64], value[48];
+    WS_CHECK(ws_session_world_choice_item(s, WS_WORLD_SAMPLE, label, sizeof(label),
+                                         value, sizeof(value)) == WS_OK);
+    WS_CHECK(label[0] != '\0' && value[0] != '\0');
+    WS_CHECK(ws_session_world_choice_item(s, WS_WORLD_CHOICE_COUNT, label,
+                                          sizeof(label), value, sizeof(value)) ==
+             WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK(ws_session_world_choice_item(s, -1, label, sizeof(label), value,
+                                          sizeof(value)) == WS_ERR_INVALID_ARGUMENT);
+
+    char before[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, before) == WS_OK);
+
+    /* Opening the screen and moving the cursor never changes the world. */
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0);
+    WS_CHECK(ws_session_world_select_visible(s) == 1);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0);
+    WS_CHECK(ws_session_world_select_cursor(s) == WS_WORLD_LOAD);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0); /* clamp high */
+    WS_CHECK(ws_session_world_select_cursor(s) == WS_WORLD_CHOICE_COUNT - 1);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0);
+    WS_CHECK(ws_session_world_select_visible(s) == 0);
+    char after[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, after) == WS_OK);
+    WS_CHECK(strcmp(before, after) == 0);
+
+    /* "Open the sample world": a fresh world with the documented sample seed. */
+    WS_CHECK(ws_session_world_confirm(s, WS_WORLD_SAMPLE) == WS_OK);
+    WS_CHECK(ws_session_seed(s) == WS_SESSION_SAMPLE_SEED);
+    WS_CHECK(ws_session_steps(s) == 0u);
+    WS_CHECK(ws_session_timeline_count(s) == 0u);
+    WS_CHECK(ws_session_world_select_visible(s) == 0);
+    run_seconds(s, 2.0);
+    char sample1[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, sample1) == WS_OK);
+
+    /* Deterministic: rebuilding the sample world and advancing the same number
+     * of ticks gives a bit-identical digest. */
+    WS_CHECK(ws_session_world_confirm(s, WS_WORLD_SAMPLE) == WS_OK);
+    run_seconds(s, 2.0);
+    char sample2[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, sample2) == WS_OK);
+    WS_CHECK(strcmp(sample1, sample2) == 0);
+
+    /* "Create a new world": a different (fresh) seed, tick 0. */
+    uint64_t sample_seed = ws_session_seed(s);
+    WS_CHECK(ws_session_world_confirm(s, WS_WORLD_NEW) == WS_OK);
+    WS_CHECK(ws_session_seed(s) != sample_seed);
+    WS_CHECK(ws_session_steps(s) == 0u);
+    WS_CHECK(ws_session_timeline_count(s) == 0u);
+    run_seconds(s, 1.0);
+
+    /* A caller-supplied "new world" seed (the application derives it from the
+     * wall clock) is honoured exactly, and the same seed rebuilds the same
+     * world, so a fresh world is still reproducible. */
+    const uint64_t chosen = 0x123456789abcdef0ULL;
+    ws_session_world_set_new_seed(s, chosen);
+    WS_CHECK(ws_session_world_confirm(s, WS_WORLD_NEW) == WS_OK);
+    WS_CHECK(ws_session_seed(s) == chosen);
+    WS_CHECK(ws_session_steps(s) == 0u);
+    run_seconds(s, 1.0);
+    char chosen1[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, chosen1) == WS_OK);
+    ws_session_world_set_new_seed(s, chosen);
+    WS_CHECK(ws_session_world_confirm(s, WS_WORLD_NEW) == WS_OK);
+    run_seconds(s, 1.0);
+    char chosen2[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, chosen2) == WS_OK);
+    WS_CHECK(strcmp(chosen1, chosen2) == 0);
+    ws_session_world_set_new_seed(s, 0u); /* back to the default seed */
+
+    /* "Load the existing world": save a checkpoint, advance, then reload the
+     * choice and confirm the digest is restored bit-exactly. */
+    const char *path = "ws_session_select_test.wss";
+    remove(path);
+    WS_CHECK(ws_session_set_checkpoint_path(s, path) == WS_OK);
+    char saved_digest[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, saved_digest) == WS_OK);
+    WS_CHECK(ws_session_save(s, path) == WS_OK);
+    WS_CHECK(ws_session_world_select_can_load(s) == 1);
+    run_seconds(s, 2.0);
+    WS_CHECK(ws_session_world_confirm(s, WS_WORLD_LOAD) == WS_OK);
+    char loaded_digest[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, loaded_digest) == WS_OK);
+    WS_CHECK(strcmp(saved_digest, loaded_digest) == 0);
+    remove(path);
+
+    /* Without a checkpoint the "load" row is disabled and confirming it is a
+     * clean "not found", not a crash. */
+    WS_CHECK(ws_session_set_checkpoint_path(s, "ws_session_select_missing.wss") == WS_OK);
+    WS_CHECK(ws_session_world_select_can_load(s) == 0);
+    WS_CHECK(ws_session_world_choice_enabled(s, WS_WORLD_LOAD) == 0);
+    WS_CHECK(ws_session_world_confirm(s, WS_WORLD_LOAD) == WS_ERR_NOT_FOUND);
+    WS_CHECK(ws_session_world_confirm(s, 99) == WS_ERR_INVALID_ARGUMENT);
+
+    /* A corrupt checkpoint that exists but does not deserialize fails cleanly
+     * and leaves the current world in place (no half-applied load). */
+    const char *bad = "ws_session_select_corrupt.wss";
+    remove(bad);
+    FILE *bf = fopen(bad, "wb");
+    WS_CHECK(bf != NULL);
+    if (bf != NULL) {
+        fputs("not a checkpoint", bf);
+        fclose(bf);
+    }
+    WS_CHECK(ws_session_set_checkpoint_path(s, bad) == WS_OK);
+    char corrupt_before[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, corrupt_before) == WS_OK);
+    WS_CHECK(ws_session_world_confirm(s, WS_WORLD_LOAD) != WS_OK);
+    char corrupt_after[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, corrupt_after) == WS_OK);
+    WS_CHECK(strcmp(corrupt_before, corrupt_after) == 0);
+    remove(bad);
+
+    ws_session_destroy(s);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -730,6 +862,7 @@ int main(void)
         {"session_replay_observation_only", test_replay_is_observation_only},
         {"session_step_once", test_step_once},
         {"session_settings_menu", test_settings_menu},
+        {"session_world_selection", test_world_selection},
     };
     return ws_test_run("session", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

@@ -410,6 +410,44 @@ static void draw_replay_panel(ws_framebuffer *fb, const ws_session *s, int scale
     ws_font_draw(fb, cx, cy, "R leave replay (back to live)", scale, COL_TEXT);
 }
 
+/* --- world-selection screen (docs/17 "Ana deneyim") --------------------- */
+
+static void draw_world_select_panel(ws_framebuffer *fb, const ws_session *s, int scale)
+{
+    uint32_t line_h = WS_FONT_GLYPH_H * (uint32_t)scale + 4u;
+    uint32_t w = 360u * (uint32_t)scale;
+    uint32_t h = line_h * (uint32_t)(WS_WORLD_CHOICE_COUNT + 5u) + 12u;
+    int x = ((int)fb->width - (int)w) / 2;
+    int y = ((int)fb->height - (int)h) / 2;
+    panel(fb, x, y, w, h);
+
+    int cursor = ws_session_world_select_cursor(s);
+    char label[64];
+    char value[48];
+    char buf[160];
+    int cy = y + 6;
+    ws_font_draw(fb, x + 8, cy, "WORLDSEED  -  choose a world", scale, COL_ACCENT);
+    cy += (int)line_h;
+    cy += (int)line_h;
+
+    for (int i = 0; i < WS_WORLD_CHOICE_COUNT; ++i) {
+        if (ws_session_world_choice_item(s, i, label, sizeof(label), value, sizeof(value)) != WS_OK) {
+            continue;
+        }
+        int enabled = ws_session_world_choice_enabled(s, i);
+        int sel = (i == cursor);
+        const uint8_t *col = !enabled ? COL_DIM : (sel ? COL_ACCENT : COL_TEXT);
+        snprintf(buf, sizeof(buf), "%c %-26s %s", sel ? '>' : ' ', label, value);
+        ws_font_draw(fb, x + 8, cy, buf, scale, col);
+        cy += (int)line_h;
+    }
+
+    cy += (int)(line_h / 2u);
+    ws_font_draw(fb, x + 8, cy, "up/down  move    enter  open", scale, COL_TEXT);
+    cy += (int)line_h;
+    ws_font_draw(fb, x + 8, cy, "M / Esc  cancel (keep current world)", scale, COL_DIM);
+}
+
 /* --- help overlay ------------------------------------------------------- */
 
 static const char *HELP_LINES[] = {
@@ -424,6 +462,7 @@ static const char *HELP_LINES[] = {
     "  T          toggle directional shadows",
     "  O          toggle settings menu",
     "  (menu) up/down move, left/right change, enter apply",
+    "  M          world selection (new / load / sample)",
     "  Arrow keys / WASD  fly the free camera",
     "  Mouse drag look (free view)",
     "  [ / ]      time of day -/+ 1 hour",
@@ -480,5 +519,10 @@ void ws_hud_draw(ws_framebuffer *fb, const ws_session *s, const ws_hud_options *
     }
     if (o.show_help || ws_session_help_visible(s)) {
         draw_help(fb, scale);
+    }
+    /* The world-selection screen is modal: it covers the frame on top of the
+     * live HUD while the user chooses a world at startup (or with `M`). */
+    if (ws_session_world_select_visible(s)) {
+        draw_world_select_panel(fb, s, scale);
     }
 }

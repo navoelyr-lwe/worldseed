@@ -4,6 +4,14 @@
 
 Uygulama açıldığında kullanıcı yeni dünya oluşturabilir, mevcut dünyayı yükleyebilir veya örnek dünyayı açabilir. Dünya yüklendiğinde varsayılan mod tam ekran otomatik sinematik gözlemdir. Arayüz gerektiğinde gizlenerek görüntü alanı korunur.
 
+Açılışta modal bir **dünya seçim ekranı** gösterilir (canlı uygulamada `M` ile yeniden açılır). Üç seçenek vardır:
+
+- **Yeni dünya oluştur:** taze bir tohumdan sıfırdan dünya kurar (tick 0). Uygulama tohumu duvar saatinden türetir, böylece her oturumda dünya farklıdır.
+- **Mevcut dünyayı yükle:** kayıtlı checkpoint'i bit-özdeş geri yükler; kayıt yoksa seçilemez.
+- **Örnek dünyayı aç:** sabit bir tohumla gelen örnek dünyayı açar; aynı tohum her zaman aynı dünyayı verir (deterministik).
+
+`↑/↓` (veya `W/S`) imleci taşır, `Enter` seçilen dünyayı açar, `M`/`Esc` iptal eder (geçerli dünya korunur). Seçim ekranı gözlemci salt-okunurdur: onaylamadan açıp kapatmak dünyayı değiştirmez. Seçim gerçekleşince oturum yeni dünyayı gösterir ve ekran kapanır.
+
 ## Ekran ve kipler
 
 1. **Sinematik gözlem:** Yönetmen gerçek olayları takip eder; HUD en aza indirilir.

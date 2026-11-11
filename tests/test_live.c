@@ -176,6 +176,33 @@ static int test_replay_run(void)
     return 1;
 }
 
+static int test_worldselect_run(void)
+{
+    const char *const argv[] = {"worldseed", "--live-select", "ws_live_select_test_out",
+                                "--size", "160x90"};
+    ws_live_options o;
+    WS_CHECK(ws_live_parse_options(5, argv, &o) == WS_OK);
+    WS_CHECK(o.worldselect == 1);
+    WS_CHECK(o.headless == 1);
+    WS_CHECK(ws_live_run(&o) == 0);
+    /* The evidence manifest records the world-selection invariants. */
+    FILE *f = fopen("ws_live_select_test_out/select-manifest.txt", "r");
+    WS_CHECK(f != NULL);
+    if (f != NULL) {
+        char line[256];
+        int saw_can_load = 0, saw_repro = 0, saw_restored = 0, saw_readonly = 0;
+        while (fgets(line, sizeof(line), f) != NULL) {
+            if (strstr(line, "can_load=1") != NULL) { saw_can_load = 1; }
+            if (strstr(line, "sample_reproducible=1") != NULL) { saw_repro = 1; }
+            if (strstr(line, "load_restored=1") != NULL) { saw_restored = 1; }
+            if (strstr(line, "readonly=1") != NULL) { saw_readonly = 1; }
+        }
+        fclose(f);
+        WS_CHECK(saw_can_load && saw_repro && saw_restored && saw_readonly);
+    }
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -187,6 +214,7 @@ int main(void)
         {"live_tour_run", test_tour_run},
         {"live_settings_precedence", test_settings_file_precedence},
         {"live_replay_run", test_replay_run},
+        {"live_worldselect_run", test_worldselect_run},
     };
     return ws_test_run("live", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

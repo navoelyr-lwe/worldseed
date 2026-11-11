@@ -22,6 +22,8 @@ ws_live_options ws_live_options_default(void)
     o.seconds = 0.0;
     o.tour = 0;
     o.replay = 0;
+    o.worldselect = 0;
+    o.no_select = 0;
     o.out_dir = NULL;
     o.capture_path = NULL;
     o.seed = 20260101ULL;
@@ -87,6 +89,19 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
             opts->headless = 1;
             opts->replay = 1;
             opts->out_dir = argv[++i];
+        } else if (strcmp(a, "--live-select") == 0) {
+            if (i + 1 >= argc) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
+            opts->enabled = 1;
+            opts->headless = 1;
+            opts->worldselect = 1;
+            opts->out_dir = argv[++i];
+        } else if (strcmp(a, "--live-no-select") == 0) {
+            /* Skip the startup world-selection screen and open the world
+             * directly (used by the GUI/evidence runs so they present frames). */
+            opts->enabled = 1;
+            opts->no_select = 1;
         } else if (strcmp(a, "--live-capture") == 0) {
             if (i + 1 >= argc) {
                 return WS_ERR_INVALID_ARGUMENT;
@@ -218,6 +233,19 @@ void ws_live_save_settings(const ws_live_options *opts, const ws_session *s)
     (void)ws_settings_save(opts->settings_path, &out);
 }
 
+/* Seed the "create a new world" choice derives a fresh world from. Mixing the
+ * configured seed with the wall clock gives a different world each session while
+ * staying a plain deterministic 64-bit value the session can rebuild from. */
+uint64_t ws_live_new_world_seed(uint64_t base)
+{
+    uint64_t t = (uint64_t)(ws_clock_monotonic_ns() / 1000000u);
+    uint64_t z = base + 0x9E3779B97F4A7C15ULL + t;
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    z = z ^ (z >> 31);
+    return z != 0u ? z : base;
+}
+
 ws_result ws_live_make_session(const ws_live_options *opts, ws_session **out)
 {
     if (opts == NULL || out == NULL) {
@@ -239,6 +267,26 @@ ws_result ws_live_make_session(const ws_live_options *opts, ws_session **out)
     (void)ws_session_set_settings_path(s, opts->settings_path);
     *out = s;
     return WS_OK;
+}
+
+void ws_live_startup_world_select(const ws_live_options *opts, ws_session *s)
+{
+    if (opts == NULL || s == NULL || opts->no_select) {
+        return;
+    }
+    /* "Create a new world" should differ each session, so derive its seed from
+     * the wall clock. The session rebuilds deterministically from whatever seed
+     * it is handed (the sample and load choices stay fixed). */
+    ws_session_world_set_new_seed(s, ws_live_new_world_seed(opts->seed));
+    /* Default the cursor to "load" when a checkpoint exists, else "new". */
+    int start = ws_session_world_select_can_load(s) ? WS_WORLD_LOAD : WS_WORLD_NEW;
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0);
+    while (ws_session_world_select_cursor(s) < start) {
+        (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0);
+    }
+    while (ws_session_world_select_cursor(s) > start) {
+        (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, -1.0);
+    }
 }
 
 /* --- headless evidence run ---------------------------------------------- */
@@ -339,6 +387,7 @@ static const char *TOUR_STEPS[] = {
     "auto_day", "free_overview", "follow_deer", "map_overview",
     "auto_dusk", "follow_fox", "auto_night", "reload_check",
     "shadows_off", "shadows_on", "single_step", "settings_menu",
+    "world_select",
 };
 
 static int capture_step(ws_session *s, ws_framebuffer *fb, float *depth,
@@ -550,6 +599,25 @@ static int run_tour(const ws_live_options *opts)
     ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
     (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0); /* close menu */
 
+    /* Step 13: the world-selection screen (docs/17 "Ana deneyim"): new / load /
+     * sample. The tour only opens and closes it (observer-only); the actual
+     * create/load/sample behaviour is proven by --live-select. */
+    char select_before[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, select_before);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0);
+    int select_open = ws_session_world_select_visible(s);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0);
+    int select_cursor = ws_session_world_select_cursor(s);
+    ok &= select_open == 1 && select_cursor >= 0;
+    ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0); /* close */
+    char select_after[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, select_after);
+    int select_readonly = strcmp(select_before, select_after) == 0;
+    printf("tour world_select open=%d cursor=%d readonly=%d\n",
+           select_open, select_cursor, select_readonly);
+    ok &= select_readonly;
+
     if (mf != NULL) {
         fprintf(mf, "# Worldseed Engine P11 live tour manifest\n");
         fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
@@ -561,6 +629,7 @@ static int run_tour(const ws_live_options *opts)
         fprintf(mf, "shadows_verified=%d\n", shadow_pair_changed);
         fprintf(mf, "single_step_verified=%d\n", single_step_ok);
         fprintf(mf, "settings_menu_verified=%d\n", menu_changed && menu_readonly);
+        fprintf(mf, "world_select_verified=%d\n", select_readonly && select_open == 1);
         fprintf(mf, "steps=%d\n", step);
         fclose(mf);
     }
@@ -676,6 +745,158 @@ static int run_replay(const ws_live_options *opts)
     return ok ? 0 : 1;
 }
 
+/* --- world-selection evidence (docs/17 "Ana deneyim") ------------------- */
+
+static int run_worldselect(const ws_live_options *opts)
+{
+    if (ws_fs_make_dirs(opts->out_dir) != WS_OK) {
+        fprintf(stderr, "live select: cannot create %s\n", opts->out_dir);
+        return 1;
+    }
+    ws_session *s = NULL;
+    if (ws_live_make_session(opts, &s) != WS_OK) {
+        fprintf(stderr, "live select: session create failed\n");
+        return 1;
+    }
+    ws_framebuffer fb;
+    if (ws_framebuffer_create(&fb, opts->width, opts->height) != WS_OK) {
+        ws_session_destroy(s);
+        return 1;
+    }
+    float *depth = malloc((size_t)opts->width * opts->height * sizeof(float));
+    if (depth == NULL) {
+        ws_framebuffer_free(&fb);
+        ws_session_destroy(s);
+        return 1;
+    }
+
+    char checkpoint[512];
+    snprintf(checkpoint, sizeof(checkpoint), "%s/checkpoint.wss", opts->out_dir);
+    (void)ws_session_set_checkpoint_path(s, checkpoint);
+
+    int ok = 1;
+    int step = 0;
+
+    /* Let the starting world run so the "new world" digest is a real, evolved
+     * state (not the just-created state), and save a checkpoint so the "load"
+     * choice becomes selectable. */
+    for (int i = 0; i < 60; ++i) { (void)ws_session_step(s, 0.05); }
+    int saved = ws_session_save(s, checkpoint) == WS_OK;
+    ok &= saved;
+    int can_load = ws_session_world_select_can_load(s);
+    ok &= can_load;
+    char new_digest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, new_digest);
+
+    /* Open the selection screen (this is also what the application shows at
+     * startup): three choices, the checkpoint present, the load row enabled. */
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0);
+    int visible = ws_session_world_select_visible(s);
+    ok &= visible == 1;
+    ok &= ws_session_world_choice_enabled(s, WS_WORLD_LOAD) == 1;
+    ok &= ws_session_world_choice_enabled(s, WS_WORLD_NEW) == 1;
+    ok &= ws_session_world_choice_enabled(s, WS_WORLD_SAMPLE) == 1;
+    ok &= capture_step(s, &fb, depth, opts, "world_select_screen", step); step++;
+
+    /* Move the cursor down and back to prove navigation is real and bounded. */
+    int c0 = ws_session_world_select_cursor(s);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0); /* clamps */
+    int c_max = ws_session_world_select_cursor(s);
+    ok &= c_max == WS_WORLD_CHOICE_COUNT - 1;
+    ok &= c_max > c0;
+
+    /* Choose "open the sample world": the seed changes to the documented sample
+     * seed and the world is rebuilt fresh (tick 0, empty timeline). */
+    (void)ws_session_world_confirm(s, WS_WORLD_SAMPLE);
+    uint64_t sample_seed = ws_session_seed(s);
+    int sample_fresh = ws_session_steps(s) == 0u && ws_session_timeline_count(s) == 0u;
+    int sample_closed = ws_session_world_select_visible(s) == 0;
+    ok &= sample_closed && sample_fresh;
+    for (int i = 0; i < 40; ++i) { (void)ws_session_step(s, 0.05); }
+    char sample_digest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, sample_digest);
+    ok &= strcmp(sample_digest, new_digest) != 0;
+    ok &= capture_step(s, &fb, depth, opts, "world_sample", step); step++;
+
+    /* The sample world is reproducible: rebuild it and the same tick count gives
+     * a bit-identical digest (determinism of "open the sample world"). */
+    (void)ws_session_world_confirm(s, WS_WORLD_SAMPLE);
+    for (int i = 0; i < 40; ++i) { (void)ws_session_step(s, 0.05); }
+    char sample_digest2[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, sample_digest2);
+    int sample_reproducible = strcmp(sample_digest, sample_digest2) == 0;
+    ok &= sample_reproducible;
+
+    /* Choose "load the existing world": the checkpoint we saved is restored
+     * bit-exactly (digest matches the state when it was saved). */
+    (void)ws_session_world_confirm(s, WS_WORLD_LOAD);
+    char load_digest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, load_digest);
+    int load_restored = strcmp(load_digest, new_digest) == 0;
+    ok &= load_restored;
+    ok &= capture_step(s, &fb, depth, opts, "world_load", step); step++;
+
+    /* Choose "create a new world": a fresh seed, tick 0, empty timeline. */
+    (void)ws_session_world_confirm(s, WS_WORLD_NEW);
+    uint64_t fresh_seed = ws_session_seed(s);
+    int new_fresh = ws_session_steps(s) == 0u && ws_session_timeline_count(s) == 0u;
+    int new_seed_changed = fresh_seed != sample_seed;
+    ok &= new_fresh && new_seed_changed;
+    for (int i = 0; i < 40; ++i) { (void)ws_session_step(s, 0.05); }
+    ok &= capture_step(s, &fb, depth, opts, "world_new", step); step++;
+
+    /* The selection screen is observer-only bookkeeping: opening and closing it
+     * without confirming leaves the world digest untouched. */
+    (void)ws_session_world_confirm(s, WS_WORLD_NEW);
+    for (int i = 0; i < 30; ++i) { (void)ws_session_step(s, 0.05); }
+    char readonly_before[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, readonly_before);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_MOVE, 1.0);
+    (void)ws_session_apply_command(s, WS_CMD_WORLD_SELECT_TOGGLE, 0.0);
+    char readonly_after[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, readonly_after);
+    int readonly = strcmp(readonly_before, readonly_after) == 0;
+    ok &= readonly;
+
+    char manifest[512];
+    snprintf(manifest, sizeof(manifest), "%s/select-manifest.txt", opts->out_dir);
+    FILE *mf = fopen(manifest, "w");
+    if (mf != NULL) {
+        fprintf(mf, "# Worldseed Engine P11 world-selection manifest\n");
+        fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
+        fprintf(mf, "size=%ux%u\n", opts->width, opts->height);
+        fprintf(mf, "choices=%d\n", (int)WS_WORLD_CHOICE_COUNT);
+        fprintf(mf, "can_load=%d\n", can_load);
+        fprintf(mf, "cursor_max=%d\n", c_max);
+        fprintf(mf, "sample_seed=%llu\n", (unsigned long long)sample_seed);
+        fprintf(mf, "new_seed=%llu\n", (unsigned long long)fresh_seed);
+        fprintf(mf, "sample_fresh=%d\n", sample_fresh);
+        fprintf(mf, "sample_reproducible=%d\n", sample_reproducible);
+        fprintf(mf, "load_restored=%d\n", load_restored);
+        fprintf(mf, "new_fresh=%d\n", new_fresh);
+        fprintf(mf, "readonly=%d\n", readonly);
+        fprintf(mf, "new_digest=%s\n", new_digest);
+        fprintf(mf, "sample_digest=%s\n", sample_digest);
+        fprintf(mf, "load_digest=%s\n", load_digest);
+        fprintf(mf, "steps=%d\n", step);
+        fclose(mf);
+    }
+
+    free(depth);
+    ws_framebuffer_free(&fb);
+    ws_session_destroy(s);
+    if (ok) {
+        printf("LIVE_SELECT_OK choices=%d can_load=%d sample_reproducible=%d "
+               "load_restored=%d readonly=%d steps=%d dir=%s\n",
+               (int)WS_WORLD_CHOICE_COUNT, can_load, sample_reproducible,
+               load_restored, readonly, step, opts->out_dir);
+    }
+    return ok ? 0 : 1;
+}
+
 int ws_live_run(const ws_live_options *opts)
 {
     if (opts == NULL || !opts->enabled) {
@@ -688,6 +909,9 @@ int ws_live_run(const ws_live_options *opts)
     }
     if (opts->replay) {
         return run_replay(opts);
+    }
+    if (opts->worldselect) {
+        return run_worldselect(opts);
     }
     if (opts->headless) {
         return run_headless(opts);

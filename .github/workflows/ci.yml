@@ -192,12 +192,22 @@ jobs:
           grep -q "saved=1 loaded=1 roundtrip=1" evidence/live/tour-a.txt
           grep -q "single_step_verified=1" evidence/live/tour-a/manifest.txt
           grep -q "settings_menu_verified=1" evidence/live/tour-a/manifest.txt
+          grep -q "world_select_verified=1" evidence/live/tour-a/manifest.txt
           ./build/src/app/worldseed --live-tour evidence/live/tour-b --size 320x180 >/dev/null
           for f in evidence/live/tour-a/step-*.ppm; do
             b=$(basename "$f")
             cmp "$f" "evidence/live/tour-b/$b" \
               || { echo "live tour $b not reproducible"; exit 1; }
           done
+          # World selection (docs/17 "Ana deneyim"): create a new world, open the
+          # built-in sample world (reproducible) and load an existing checkpoint.
+          ./build/src/app/worldseed --live-select evidence/live/select --size 320x180 \
+            | tee evidence/live/select.txt
+          grep -q "LIVE_SELECT_OK" evidence/live/select.txt
+          grep -q "can_load=1" evidence/live/select/select-manifest.txt
+          grep -q "sample_reproducible=1" evidence/live/select/select-manifest.txt
+          grep -q "load_restored=1" evidence/live/select/select-manifest.txt
+          grep -q "readonly=1" evidence/live/select/select-manifest.txt
           # Replay (P11 item 8): re-observe recorded history. The newest recorded
           # sample must reproduce the live digest exactly, and leaving replay must
           # restore the live world bit-exactly.
@@ -433,6 +443,7 @@ jobs:
           if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "single_step_verified=1" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "settings_menu_verified=1" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "world_select_verified=1" -Quiet)) { exit 1 }
           & $exe --live-tour evidence/live/tour-b --size 320x180 | Out-Null
           Get-ChildItem evidence/live/tour-a/step-*.ppm | ForEach-Object {
             $b = Join-Path "evidence/live/tour-b" $_.Name
@@ -440,6 +451,12 @@ jobs:
               Write-Error "live tour $($_.Name) not reproducible"; exit 1
             }
           }
+          # World selection (docs/17 "Ana deneyim"): new / sample / load.
+          & $exe --live-select evidence/live/select --size 320x180 | Tee-Object -FilePath evidence/live/select.txt
+          if (-not (Select-String -Path evidence/live/select.txt -Pattern "LIVE_SELECT_OK" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/live/select/select-manifest.txt -Pattern "can_load=1" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/live/select/select-manifest.txt -Pattern "sample_reproducible=1" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/live/select/select-manifest.txt -Pattern "load_restored=1" -Quiet)) { exit 1 }
           # Replay (P11 item 8): the newest recorded sample reproduces the live
           # digest exactly, and leaving replay restores the live world.
           & $exe --live-replay evidence/live/replay --size 320x180 | Tee-Object -FilePath evidence/live/replay.txt
