@@ -27,6 +27,10 @@
 #define WS_SESSION_PATCH_CELLS 32u
 #define WS_SESSION_TREE_BUDGET 160u
 
+/* Solid obstacles the free camera collides with: the focus patch's tree trunks,
+ * bounded by the env scene's own tree cap. */
+#define WS_SESSION_MAX_OBSTACLES (WS_ENV_MAX_TREES)
+
 /* Replay ring: bounded history of periodic whole-world checkpoints (docs/17
  * item 8). 24 samples at one sample every 2 world seconds covers ~48 s of
  * history; at ~64 KB per sample this is ~1.5 MB, cheap enough to keep live. */
@@ -68,6 +72,16 @@ struct ws_session {
     int env_region_valid;
     int64_t env_region_x, env_region_y;
     uint32_t static_object_count;
+
+    /* Solid obstacles (tree trunks) from the focus patch, in region-local
+     * metres. Rebuilt with the env scene; the free camera is pushed out of
+     * these horizontally so it does not pass through trees (docs/17 "Kamera
+     * çarpışması ve fiziksel engel farkındalığı"). */
+    struct ws_session_obstacle {
+        double x, z;    /* region-local trunk centre, m */
+        double radius;  /* trunk radius at the base, m */
+    } obstacles[WS_SESSION_MAX_OBSTACLES];
+    uint32_t obstacle_count;
 
     ws_actor actors[WS_SESSION_MAX_ACTORS];
     uint32_t actor_count;
@@ -165,6 +179,42 @@ static double actor_ground_cb(void *ctx, double forward)
 
 /* --- environment scene (focus region) ----------------------------------- */
 
+/* Gather the focus patch's solid obstacles (tree trunks) in region-local
+ * metres, so the free camera can be pushed out of them. Only the trees the
+ * renderer actually draws are obstacles: the same even-stride selection the
+ * env scene uses (WS_ENV_MAX_TREES cap) is mirrored here, so the camera never
+ * stops against an invisible tree. The trunk radius is derived from the same
+ * cone scale the renderer uses (base radius = 0.5 * 0.42 * height), so the
+ * collision footprint matches what is drawn. */
+static void collect_obstacles(ws_session *s)
+{
+    s->obstacle_count = 0u;
+    uint32_t tree_total = 0u;
+    for (uint32_t i = 0; i < s->env.veg.count; ++i) {
+        if (s->env.veg.plants[i].kind == WS_PLANT_TREE) {
+            tree_total += 1u;
+        }
+    }
+    uint32_t stride = (tree_total > WS_ENV_MAX_TREES) ? (tree_total / WS_ENV_MAX_TREES) : 1u;
+    if (stride == 0u) {
+        stride = 1u;
+    }
+    uint32_t seen = 0u;
+    for (uint32_t i = 0; i < s->env.veg.count && s->obstacle_count < WS_SESSION_MAX_OBSTACLES; ++i) {
+        const ws_plant *p = &s->env.veg.plants[i];
+        if (p->kind != WS_PLANT_TREE) {
+            continue;
+        }
+        if ((seen++ % stride) != 0u) {
+            continue;
+        }
+        struct ws_session_obstacle *ob = &s->obstacles[s->obstacle_count++];
+        ob->x = p->position.x - s->env.terrain.origin_x;
+        ob->z = p->position.y - s->env.terrain.origin_y;
+        ob->radius = 0.5 * 0.42 * (double)p->height;
+    }
+}
+
 static ws_result rebuild_env(ws_session *s, int64_t rx, int64_t ry)
 {
     if (s->env_region_valid && s->env_region_x == rx && s->env_region_y == ry) {
@@ -187,6 +237,7 @@ static ws_result rebuild_env(ws_session *s, int64_t rx, int64_t ry)
     s->env_region_x = rx;
     s->env_region_y = ry;
     s->static_object_count = s->env.scene.object_count;
+    collect_obstacles(s);
     return WS_OK;
 }
 
@@ -1205,6 +1256,30 @@ ws_result ws_session_camera_input(ws_session *s, double forward, double right,
         if (eye.y < floor_y) {
             eye.y = floor_y;
         }
+        /* Solid-obstacle awareness: push the eye out of tree trunks
+         * horizontally, keeping a small margin, so the camera does not pass
+         * through a tree. The push is radial in the trunk's own frame and only
+         * moves the eye, never the world. */
+        for (uint32_t i = 0; i < s->obstacle_count; ++i) {
+            const struct ws_session_obstacle *ob = &s->obstacles[i];
+            double dx = eye.x - ob->x;
+            double dz = eye.z - ob->z;
+            double keep = ob->radius + WS_SESSION_CAM_OBSTACLE_MARGIN_M;
+            double d2 = dx * dx + dz * dz;
+            if (d2 < keep * keep) {
+                double d = sqrt(d2);
+                if (d < 1e-6) {
+                    /* Degenerate (eye exactly on the trunk axis): push along
+                     * +x, an arbitrary but deterministic direction. */
+                    eye.x = ob->x + keep;
+                    eye.z = ob->z;
+                } else {
+                    double inv = keep / d;
+                    eye.x = ob->x + dx * inv;
+                    eye.z = ob->z + dz * inv;
+                }
+            }
+        }
     } else if (eye.y < 1.5) {
         /* Collision off: still keep the eye above the absolute datum so the
          * view does not flip under the world. */
@@ -1300,6 +1375,39 @@ int ws_session_volume(const ws_session *s) { return s != NULL ? s->volume : 0; }
 int ws_session_camera_speed_pct(const ws_session *s) { return s != NULL ? s->cam_speed_pct : 100; }
 
 int ws_session_camera_collision(const ws_session *s) { return s != NULL ? s->cam_collision : 1; }
+
+uint32_t ws_session_camera_obstacle_count(const ws_session *s)
+{
+    return s != NULL ? s->obstacle_count : 0u;
+}
+
+ws_session_obstacle_view ws_session_camera_obstacle(const ws_session *s, uint32_t index)
+{
+    ws_session_obstacle_view v = {0, 0.0, 0.0, 0.0};
+    if (s == NULL || index >= s->obstacle_count) {
+        return v;
+    }
+    v.valid = 1;
+    v.x = s->obstacles[index].x;
+    v.z = s->obstacles[index].z;
+    v.radius = s->obstacles[index].radius;
+    return v;
+}
+
+ws_result ws_session_set_free_camera(ws_session *s, double x, double y, double z,
+                                     double yaw, double pitch)
+{
+    if (s == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    s->free_camera.eye = ws_vec3_make(x, y, z);
+    s->free_yaw = yaw;
+    s->free_pitch = pitch;
+    double cp = cos(pitch);
+    ws_vec3 dir = ws_vec3_make(cos(yaw) * cp, sin(pitch), sin(yaw) * cp);
+    s->free_camera.target = ws_vec3_add(s->free_camera.eye, dir);
+    return WS_OK;
+}
 
 double ws_session_camera_ground_height(const ws_session *s)
 {

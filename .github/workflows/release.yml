@@ -140,17 +140,19 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P11 - serbest kamera yer/su carpismasi)." \
+            "Worldseed Engine onizleme surumu (P11 - kamera agac kacinma)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
             "istatistikleri gorur, kaydedip geri yuklersiniz. Dunya, yonetmen ve ses kendi" \
-            "C17 kodumuzdadir. Bu surumun ana yeniligi KAMERA CARPISMASI: serbest kamera" \
-            "artik yere gomulmez. Goz, altindaki arazi yuksekliginin 1.5 m uzerinde tutulur" \
-            "ve su yuzeyinin altina inmez; arazi yuksekligi ve su seviyesi dunya konumunun" \
-            "saf fonksiyonlari oldugundan odak yamaginin disinda da gecerlidir. Ayar" \
-            "menusundeki 'Camera collision' satiri bunu acar/kapatir (varsayilan acik) ve" \
-            "kalici ayarlara yazilir. Carpisma gozlemci salt-okunurdur: dunyayi degistirmez." \
+            "C17 kodumuzdadir. Bu surumun ana yeniligi KAMERA AGAC KACINMA: serbest" \
+            "kamera artik agaclarin icinden gecmez. Goz, gordurulen agac govdelerinin" \
+            "disina yatay olarak itilir; itme yaricapi govde yaricapinin (cizilen koni" \
+            "olceginden turetilir) ustune 0.6 m pay birakir. Engel listesi renderer'in" \
+            "gercekten cizdigi agaclari yansitir, bu yuzden kamera gorunmeyen bir agaca" \
+            "takilmaz. Onceki kamera yer/su carpismasi (goz arazi ve su yuzeyinin" \
+            "ustunde kalir) ve ayar menusundeki 'Camera collision' satiri korunur;" \
+            "carpisma gozlemci salt-okunurdur: dunyayi degistirmez." \
             "P12 bu surumde iki is ekler: (1) CPU referans renderer" \
             "GORUNTUYU BIT-OZDES biraka hizlandirildi (baslikta satir ici matematik" \
             "yardimcilari, sRGB kodlama LUT'u, cok cekirdekli bant render; 1080p terrain_day" \
@@ -213,8 +215,9 @@ jobs:
             "olay-tabanli sinematik yonetmen ve prosedurel ses manzarasi; GPU icin OpenCL C 1.2" \
             "kernel + CPU fallback ve deterministik cok cekirdekli zamanlayici. GPU yalniz" \
             "gercek kazanc oldugunda kullanilir (ADR-001). Bu surum serbest kameraya" \
-            "yer/su carpismasi ekler (goz arazi ve su yuzeyinin ustunde kalir; ayar" \
-            "menusunden acilip kapatilir) ve dunya secim ekranini" \
+            "agac kacinma ekler (goz agac govdelerinin disina itilir; onceki yer/su" \
+            "carpismasi ve ayar menusundeki 'Camera collision' satiri korunur) ve dunya" \
+            "secim ekranini" \
             "FAREYLE tiklama destegiyle birlikte sunar (acilista yeni / mevcut / ornek dunya," \
             "fare veya klavye ile sec); onceki kalici ayarlar ve ayar paneli" \
             "(worldseed.cfg), P12 CPU render hizlandirmasi ve" \
@@ -224,8 +227,9 @@ jobs:
             "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
             "olceklendirilir; ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir);" \
             "fareyle tiklayarak secme artik calisir (ayar menusu ve dunya secim ekrani);" \
-            "kamera carpismasi yukseklik-alani tabanlidir (arazi + su yuzeyi), statik" \
-            "nesnelerin (agac, kaya) govdesine gore yatay itme henuz yoktur." \
+            "kamera carpismasi yukseklik-alani tabanli yere/suya ek olarak gorulen agac" \
+            "govdelerine yatay itme yapar; kayalarin ve canli hayvanlarin govdesine gore" \
+            "itme henuz yoktur." \
             "" \
             "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + MANIFEST.txt)," \
             "sha256 dosyasi, ekteki PNG kareleri ve CI artefaktlari." \

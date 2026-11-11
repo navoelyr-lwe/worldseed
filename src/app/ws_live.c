@@ -387,7 +387,7 @@ static const char *TOUR_STEPS[] = {
     "auto_day", "free_overview", "follow_deer", "map_overview",
     "auto_dusk", "follow_fox", "auto_night", "reload_check",
     "shadows_off", "shadows_on", "single_step", "settings_menu",
-    "world_select", "menu_click", "camera_collision",
+    "world_select", "menu_click", "camera_collision", "tree_avoidance",
 };
 
 static int capture_step(ws_session *s, ws_framebuffer *fb, float *depth,
@@ -704,6 +704,46 @@ static int run_tour(const ws_live_options *opts)
            collision_ok, collide_readonly);
     ok &= collision_ok && collide_readonly;
 
+    /* Step 16: solid-obstacle awareness (docs/17). Aim the free camera at a
+     * real tree trunk and drive straight at it; the eye must stay outside the
+     * trunk's keep radius the whole way and the world digest must be
+     * untouched. The step captures the camera held at the trunk. */
+    char tree_before[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, tree_before);
+    (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_FREE, 0.0);
+    uint32_t obs_n = ws_session_camera_obstacle_count(s);
+    int tree_ok = obs_n > 0u;
+    double tree_clear = 0.0;
+    if (tree_ok) {
+        ws_session_obstacle_view ob = ws_session_camera_obstacle(s, 0u);
+        tree_ok = ob.valid == 1;
+        if (tree_ok) {
+            double keep = ob.radius + WS_SESSION_CAM_OBSTACLE_MARGIN_M;
+            /* Start a few metres from the trunk, on a clear approach line, and
+             * face the trunk (yaw so +x points at it). */
+            (void)ws_session_set_free_camera(s, ob.x - 6.0, 6.0, ob.z, 0.0, 0.0);
+            double min_gap = 1e9;
+            for (int i = 0; i < 40; ++i) {
+                (void)ws_session_camera_input(s, 1.0, 0.0, 0.0, 0.0, 0.0, 0.1);
+                ws_camera cc = ws_session_camera(s);
+                double ddx = cc.eye.x - ob.x;
+                double ddz = cc.eye.z - ob.z;
+                double gap = sqrt(ddx * ddx + ddz * ddz);
+                if (gap < min_gap) { min_gap = gap; }
+            }
+            /* The eye never entered the trunk's keep radius. */
+            tree_ok = min_gap >= keep - 1e-6;
+            tree_clear = min_gap;
+        }
+    }
+    ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
+    char tree_after[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, tree_after);
+    int tree_readonly = strcmp(tree_before, tree_after) == 0;
+    printf("tour tree_avoidance obstacles=%u min_gap=%.3f ok=%d readonly=%d\n",
+           obs_n, tree_clear, tree_ok, tree_readonly);
+    ok &= tree_ok && tree_readonly;
+
     if (mf != NULL) {
         fprintf(mf, "# Worldseed Engine P11 live tour manifest\n");
         fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
@@ -718,6 +758,7 @@ static int run_tour(const ws_live_options *opts)
         fprintf(mf, "world_select_verified=%d\n", select_readonly && select_open == 1);
         fprintf(mf, "menu_click_verified=%d\n", menu_click_ok);
         fprintf(mf, "camera_collision_verified=%d\n", collision_ok && collide_readonly);
+        fprintf(mf, "tree_avoidance_verified=%d\n", tree_ok && tree_readonly);
         fprintf(mf, "steps=%d\n", step);
         fclose(mf);
     }

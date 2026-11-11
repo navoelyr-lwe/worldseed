@@ -134,10 +134,37 @@ ws_result ws_session_camera_input(ws_session *s, double forward, double right,
  * farkındalığı", docs/17). */
 #define WS_SESSION_CAM_CLEARANCE_M 1.5
 
+/* Horizontal margin kept between the free camera's eye and a tree trunk, on top
+ * of the trunk's own radius, so the camera is pushed clear of solid obstacles
+ * rather than grazing them (docs/17 "Kamera çarpışması ve fiziksel engel
+ * farkındalığı"). */
+#define WS_SESSION_CAM_OBSTACLE_MARGIN_M 0.6
+
 /* Whether free-camera ground collision is enabled (the "Camera collision" row).
  * On by default; when off the eye may pass below the terrain, which is useful
  * for inspection. Observer-only: it never changes the world. */
 int ws_session_camera_collision(const ws_session *s);
+
+/* Number of solid obstacles (tree trunks) the free camera is pushed out of.
+ * Zero when there is no session or the focus patch has no trees. */
+uint32_t ws_session_camera_obstacle_count(const ws_session *s);
+
+/* One solid obstacle in region-local metres: the trunk centre and its base
+ * radius. `valid` is 0 when the index is out of range. Used by tests and the
+ * deterministic tour to aim at a real trunk. */
+typedef struct ws_session_obstacle_view {
+    int valid;
+    double x, z;   /* region-local metres */
+    double radius; /* trunk base radius, m */
+} ws_session_obstacle_view;
+
+ws_session_obstacle_view ws_session_camera_obstacle(const ws_session *s, uint32_t index);
+
+/* Place the free camera at an explicit pose (region-local metres and radians).
+ * Used by evidence and tests to frame a scene deterministically; the pose is
+ * still clamped by the collision rules on the next camera input. Observer-only. */
+ws_result ws_session_set_free_camera(ws_session *s, double x, double y, double z,
+                                     double yaw, double pitch);
 
 /* Terrain height (metres, world) under the free camera's eye, for evidence and
  * the HUD. Returns 0 when there is no session. */
