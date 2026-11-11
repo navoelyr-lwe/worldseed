@@ -5,13 +5,19 @@
  */
 #include "ws_opencl.h"
 
+#include "ws_tilebin.h"
+
 #include "../platform/ws_dynlib.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-/* The raster kernel source, embedded at configure time (src/CMakeLists.txt). */
-extern const char ws_kernel_ws_raster[];
+/* The raster kernel sources, embedded at configure time (src/CMakeLists.txt) as
+ * arrays of string parts (the host concatenates them in one create call). */
+extern const char *const ws_kernel_ws_raster_parts[];
+extern const unsigned int ws_kernel_ws_raster_part_count;
+extern const char *const ws_kernel_ws_raster_tiled_parts[];
+extern const unsigned int ws_kernel_ws_raster_tiled_part_count;
 
 /* --- OpenCL 1.2 types and constants -------------------------------------- */
 typedef int32_t cl_int;
@@ -117,6 +123,7 @@ struct ws_opencl {
     cl_command_queue queue;
     cl_program program;
     cl_kernel kernel;
+    cl_kernel kernel_tiled;
     ws_opencl_info info;
     int available;
     int device_lost;
@@ -233,9 +240,31 @@ static ws_result build_kernel(ws_opencl *cl)
         return WS_ERR_UNSUPPORTED;
     }
 
-    const char *src = ws_kernel_ws_raster;
-    size_t src_len = strlen(src);
-    cl->program = cl->api.create_program_with_source(cl->context, 1u, &src, &src_len, &err);
+    /* Build one program from both kernel sources (reference + tiled). Passing
+     * the parts arrays lets the OpenCL implementation concatenate them, so no
+     * single C string literal exceeds the C99 4095-character guarantee. */
+    unsigned int nparts = ws_kernel_ws_raster_part_count + ws_kernel_ws_raster_tiled_part_count;
+    const char **srcs = (const char **)malloc((size_t)nparts * sizeof(*srcs));
+    size_t *lens = (size_t *)malloc((size_t)nparts * sizeof(*lens));
+    if (srcs == NULL || lens == NULL) {
+        free(srcs);
+        free(lens);
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+    unsigned int n = 0u;
+    for (unsigned int i = 0u; i < ws_kernel_ws_raster_part_count; ++i) {
+        srcs[n] = ws_kernel_ws_raster_parts[i];
+        lens[n] = strlen(ws_kernel_ws_raster_parts[i]);
+        n += 1u;
+    }
+    for (unsigned int i = 0u; i < ws_kernel_ws_raster_tiled_part_count; ++i) {
+        srcs[n] = ws_kernel_ws_raster_tiled_parts[i];
+        lens[n] = strlen(ws_kernel_ws_raster_tiled_parts[i]);
+        n += 1u;
+    }
+    cl->program = cl->api.create_program_with_source(cl->context, nparts, srcs, lens, &err);
+    free(srcs);
+    free(lens);
     if (cl->program == NULL || err != CL_SUCCESS) {
         return WS_ERR_UNSUPPORTED;
     }
@@ -245,6 +274,10 @@ static ws_result build_kernel(ws_opencl *cl)
     }
     cl->kernel = cl->api.create_kernel(cl->program, "ws_raster_flat", &err);
     if (cl->kernel == NULL || err != CL_SUCCESS) {
+        return WS_ERR_UNSUPPORTED;
+    }
+    cl->kernel_tiled = cl->api.create_kernel(cl->program, "ws_raster_tiled", &err);
+    if (cl->kernel_tiled == NULL || err != CL_SUCCESS) {
         return WS_ERR_UNSUPPORTED;
     }
     return WS_OK;
@@ -278,6 +311,9 @@ void ws_opencl_destroy(ws_opencl *cl)
     if (cl->lib != NULL) {
         if (cl->kernel != NULL) {
             cl->api.release_kernel(cl->kernel);
+        }
+        if (cl->kernel_tiled != NULL) {
+            cl->api.release_kernel(cl->kernel_tiled);
         }
         if (cl->program != NULL) {
             cl->api.release_program(cl->program);
@@ -332,6 +368,15 @@ static void *unconst(const void *p)
     return u.v;
 }
 
+/* Forward declaration: the shared dispatch helper (defined below) runs the
+ * chosen kernel over a batch. */
+static ws_result raster_dispatch(ws_opencl *cl, int which,
+                                 const float *vx, const float *vy, const float *vz,
+                                 const uint8_t *color, uint32_t triangle_count,
+                                 uint32_t width, uint32_t height,
+                                 const ws_tilebin *bin,
+                                 uint8_t *pixels, float *depth);
+
 ws_result ws_opencl_raster(ws_opencl *cl,
                            const float *vx, const float *vy, const float *vz,
                            const uint8_t *color, uint32_t triangle_count,
@@ -348,13 +393,8 @@ ws_result ws_opencl_raster(ws_opencl *cl,
         pixels == NULL || depth == NULL || width == 0u || height == 0u) {
         return WS_ERR_NULL_POINTER;
     }
-
-    const size_t pixel_count = (size_t)width * (size_t)height;
-    const size_t tri_floats = (size_t)triangle_count * 3u;
-    const size_t col_bytes = (size_t)triangle_count * 9u;
-    cl_int err = CL_SUCCESS;
-
     if (triangle_count == 0u) {
+        const size_t pixel_count = (size_t)width * (size_t)height;
         for (size_t i = 0; i < pixel_count; ++i) {
             pixels[i * 4u + 0u] = 0u;
             pixels[i * 4u + 1u] = 0u;
@@ -364,6 +404,25 @@ ws_result ws_opencl_raster(ws_opencl *cl,
         }
         return WS_OK;
     }
+    return raster_dispatch(cl, 0, vx, vy, vz, color, triangle_count, width, height,
+                           NULL, pixels, depth);
+}
+
+/* Shared buffer/arg plumbing for the raster kernels. `which` selects the kernel
+ * (0 = reference, 1 = tiled); the tiled kernel needs the bin buffers, passed
+ * through bin_tri/bin_off. Returns WS_OK or an error; on error the device is
+ * marked lost so the caller falls back to CPU. */
+static ws_result raster_dispatch(ws_opencl *cl, int which,
+                                 const float *vx, const float *vy, const float *vz,
+                                 const uint8_t *color, uint32_t triangle_count,
+                                 uint32_t width, uint32_t height,
+                                 const ws_tilebin *bin,
+                                 uint8_t *pixels, float *depth)
+{
+    const size_t pixel_count = (size_t)width * (size_t)height;
+    const size_t tri_floats = (size_t)triangle_count * 3u;
+    const size_t col_bytes = (size_t)triangle_count * 9u;
+    cl_int err = CL_SUCCESS;
 
     cl_mem b_vx = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                         tri_floats * sizeof(float), unconst(vx), &err);
@@ -377,31 +436,53 @@ ws_result ws_opencl_raster(ws_opencl *cl,
                                          pixel_count * 4u, NULL, &err);
     cl_mem b_depth = cl->api.create_buffer(cl->context, CL_MEM_WRITE_ONLY,
                                            pixel_count * sizeof(float), NULL, &err);
+    cl_mem b_tri = NULL;
+    cl_mem b_off = NULL;
+    if (which == 1) {
+        size_t tile_count = (size_t)bin->tiles_x * (size_t)bin->tiles_y;
+        size_t ref_count = (size_t)(bin->total_refs > 0u ? bin->total_refs : 1u);
+        b_tri = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                      ref_count * sizeof(uint32_t), unconst(bin->tri_index), &err);
+        b_off = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                      (tile_count + 1u) * sizeof(uint32_t), unconst(bin->tile_offset), &err);
+    }
     if (b_vx == NULL || b_vy == NULL || b_vz == NULL || b_col == NULL ||
-        b_out == NULL || b_depth == NULL) {
+        b_out == NULL || b_depth == NULL || (which == 1 && (b_tri == NULL || b_off == NULL))) {
         if (b_vx) { cl->api.release_mem_object(b_vx); }
         if (b_vy) { cl->api.release_mem_object(b_vy); }
         if (b_vz) { cl->api.release_mem_object(b_vz); }
         if (b_col) { cl->api.release_mem_object(b_col); }
         if (b_out) { cl->api.release_mem_object(b_out); }
         if (b_depth) { cl->api.release_mem_object(b_depth); }
+        if (b_tri) { cl->api.release_mem_object(b_tri); }
+        if (b_off) { cl->api.release_mem_object(b_off); }
         mark_lost(cl);
         return WS_ERR_OUT_OF_MEMORY;
     }
 
+    cl_kernel k = (which == 1) ? cl->kernel_tiled : cl->kernel;
     cl_uint a = 0u;
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_mem), &b_vx);
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_mem), &b_vy);
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_mem), &b_vz);
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_mem), &b_col);
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_uint), &triangle_count);
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_uint), &width);
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_uint), &height);
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_mem), &b_out);
-    cl->api.set_kernel_arg(cl->kernel, a++, sizeof(cl_mem), &b_depth);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_vx);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_vy);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_vz);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_col);
+    if (which == 1) {
+        cl_uint tiles_x = bin->tiles_x;
+        cl_uint tile_size = bin->tile_size;
+        cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_tri);
+        cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_off);
+        cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &tiles_x);
+        cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &tile_size);
+    } else {
+        cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &triangle_count);
+    }
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &width);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &height);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_out);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_depth);
 
     size_t global = pixel_count;
-    cl_int rc = cl->api.enqueue_ndrange_kernel(cl->queue, cl->kernel, 1u, NULL, &global, NULL,
+    cl_int rc = cl->api.enqueue_ndrange_kernel(cl->queue, k, 1u, NULL, &global, NULL,
                                                0u, NULL, NULL);
     if (rc == CL_SUCCESS) {
         rc = cl->api.finish(cl->queue);
@@ -424,10 +505,51 @@ ws_result ws_opencl_raster(ws_opencl *cl,
     cl->api.release_mem_object(b_col);
     cl->api.release_mem_object(b_out);
     cl->api.release_mem_object(b_depth);
+    if (b_tri) { cl->api.release_mem_object(b_tri); }
+    if (b_off) { cl->api.release_mem_object(b_off); }
 
     if (rc != CL_SUCCESS) {
         mark_lost(cl);
         return WS_ERR_UNSUPPORTED;
     }
     return WS_OK;
+}
+
+ws_result ws_opencl_raster_tiled(ws_opencl *cl,
+                                 const float *vx, const float *vy, const float *vz,
+                                 const uint8_t *color, uint32_t triangle_count,
+                                 uint32_t width, uint32_t height, uint32_t tile_size,
+                                 uint8_t *pixels, float *depth)
+{
+    if (cl == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (!ws_opencl_available(cl)) {
+        return WS_ERR_INVALID_STATE;
+    }
+    if (vx == NULL || vy == NULL || vz == NULL || color == NULL ||
+        pixels == NULL || depth == NULL || width == 0u || height == 0u) {
+        return WS_ERR_NULL_POINTER;
+    }
+
+    if (triangle_count == 0u) {
+        const size_t pixel_count = (size_t)width * (size_t)height;
+        for (size_t i = 0; i < pixel_count; ++i) {
+            pixels[i * 4u + 0u] = 0u;
+            pixels[i * 4u + 1u] = 0u;
+            pixels[i * 4u + 2u] = 0u;
+            pixels[i * 4u + 3u] = 255u;
+            depth[i] = 1.0e30f;
+        }
+        return WS_OK;
+    }
+
+    ws_tilebin bin;
+    if (ws_tilebin_build(&bin, vx, vy, triangle_count, width, height, tile_size) != WS_OK) {
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+    ws_result r = raster_dispatch(cl, 1, vx, vy, vz, color, triangle_count, width, height,
+                                  &bin, pixels, depth);
+    ws_tilebin_free(&bin);
+    return r;
 }

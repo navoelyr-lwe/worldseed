@@ -14,6 +14,7 @@
  * (or a nonzero exit on a failed assertion).
  */
 #include "core/ws_rng.h"
+#include "platform/ws_clock.h"
 #include "gpu/ws_opencl.h"
 #include "platform/ws_hardware.h"
 #include "render/ws_framebuffer.h"
@@ -172,6 +173,36 @@ int main(void)
             printf("gpu_check semantic_match=ok tolerance_fraction=%.4f tolerance_delta=%d\n",
                    GC_MAX_DIFF_FRACTION, GC_MAX_CHANNEL_DELTA);
         }
+    }
+
+    /* Tile-binned kernel (P12): must be bit-identical to the reference kernel
+     * (same pixels and depth) and must be at least as fast. This is the evidence
+     * that the acceleration path does not change the image. */
+    uint8_t *pixels_tiled = (uint8_t *)malloc(pixel_count * 4u);
+    float *depth_tiled = (float *)malloc(pixel_count * sizeof(float));
+    if (pixels_tiled == NULL || depth_tiled == NULL) {
+        fprintf(stderr, "allocation failed\n");
+        rc_code = 1;
+    } else {
+        uint64_t t0 = ws_clock_monotonic_ns();
+        ws_result tr = ws_opencl_raster_tiled(cl, vx, vy, vz, color, GC_TRIANGLES,
+                                              GC_WIDTH, GC_HEIGHT, 0u, pixels_tiled, depth_tiled);
+        uint64_t t1 = ws_clock_monotonic_ns();
+        if (tr != WS_OK) {
+            fprintf(stderr, "gpu_check tiled raster failed: %s\n", ws_result_name(tr));
+            rc_code = 1;
+        } else {
+            int pix_same = memcmp(pixels_gpu, pixels_tiled, pixel_count * 4u) == 0;
+            int depth_same = memcmp(depth_gpu, depth_tiled, pixel_count * sizeof(float)) == 0;
+            printf("gpu_check tiled bit_identical=%d tiled_ms=%.2f\n",
+                   (pix_same && depth_same) ? 1 : 0, (double)(t1 - t0) / 1e6);
+            if (!pix_same || !depth_same) {
+                fprintf(stderr, "gpu_check FAILED: tiled kernel differs from reference\n");
+                rc_code = 1;
+            }
+        }
+        free(pixels_tiled);
+        free(depth_tiled);
     }
 
     /* Device-loss recovery: after a simulated loss the backend must be

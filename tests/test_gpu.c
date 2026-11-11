@@ -6,6 +6,9 @@
  *   - hardware discovery never fails and reports sane values;
  *   - the OpenCL backend either is absent (CPU fallback, not an error) or
  *     reproduces the CPU rasterizer within tolerance on the same batch;
+ *   - the tile-binned OpenCL kernel (P12) is bit-identical to the reference
+ *     kernel, and the host tile bin lists every triangle whose bounding box
+ *     covers a pixel (so the tiled kernel can never drop a covering triangle);
  *   - a device loss makes the backend unavailable and the CPU path still works.
  * The GPU cases skip cleanly (return pass) when no OpenCL device is present, so
  * the suite is meaningful on a GPU-less machine too.
@@ -13,7 +16,9 @@
 #include "ws_test.h"
 
 #include "core/ws_sched.h"
+#include "core/ws_rng.h"
 #include "gpu/ws_opencl.h"
+#include "gpu/ws_tilebin.h"
 #include "platform/ws_hardware.h"
 #include "platform/ws_threads.h"
 #include "render/ws_framebuffer.h"
@@ -178,6 +183,24 @@ static int test_gpu_semantics_and_loss(void)
 
     WS_CHECK(ws_opencl_raster(cl, vx, vy, vz, color, GT_TRI, GT_W, GT_H,
                               gpu_pixels, gpu_depth) == WS_OK);
+
+    /* The tile-binned kernel must be bit-identical to the reference kernel:
+     * same pixels and same depth, byte for byte. This is the ADR-001 guarantee
+     * for the P12 acceleration path. */
+    uint8_t *tiled_pixels = (uint8_t *)malloc(count * 4u);
+    float *tiled_depth = (float *)malloc(count * sizeof(float));
+    WS_CHECK(tiled_pixels != NULL && tiled_depth != NULL);
+    WS_CHECK(ws_opencl_raster_tiled(cl, vx, vy, vz, color, GT_TRI, GT_W, GT_H, 0u,
+                                    tiled_pixels, tiled_depth) == WS_OK);
+    WS_CHECK(memcmp(gpu_pixels, tiled_pixels, count * 4u) == 0);
+    WS_CHECK(memcmp(gpu_depth, tiled_depth, count * sizeof(float)) == 0);
+    /* A different tile size must still be bit-identical (binning is a filter). */
+    WS_CHECK(ws_opencl_raster_tiled(cl, vx, vy, vz, color, GT_TRI, GT_W, GT_H, 8u,
+                                    tiled_pixels, tiled_depth) == WS_OK);
+    WS_CHECK(memcmp(gpu_pixels, tiled_pixels, count * 4u) == 0);
+    free(tiled_pixels);
+    free(tiled_depth);
+
     uint64_t diff = 0u;
     for (size_t i = 0; i < count; ++i) {
         int d0 = (int)fb.pixels[i * 4u + 0u] - (int)gpu_pixels[i * 4u + 0u];
@@ -224,12 +247,76 @@ static int test_gpu_semantics_and_loss(void)
     return 1;
 }
 
+/* --- tile bin (host-only, runs with no OpenCL device) -------------------- */
+/* For every pixel, the tile it falls in must list every triangle whose screen
+ * bounding box contains that pixel. If the bin missed one, the tiled kernel
+ * could drop a covering triangle and stop being bit-identical. This checks the
+ * bin directly on a deterministic batch. */
+static int test_tilebin_covers_bounding_boxes(void)
+{
+    enum { W = 200, H = 140, TRI = 400, TS = 16 };
+    static float vx[TRI * 3], vy[TRI * 3];
+    ws_rng rng;
+    ws_rng_init(&rng, 0xC0FFEEULL, 11ULL);
+    for (uint32_t t = 0; t < TRI; ++t) {
+        float cx = (float)((uint32_t)ws_rng_next_u64(&rng) % W);
+        float cy = (float)((uint32_t)ws_rng_next_u64(&rng) % H);
+        for (int k = 0; k < 3; ++k) {
+            vx[t * 3u + (uint32_t)k] = cx + (float)((int)((uint32_t)ws_rng_next_u64(&rng) % 61u) - 30);
+            vy[t * 3u + (uint32_t)k] = cy + (float)((int)((uint32_t)ws_rng_next_u64(&rng) % 61u) - 30);
+        }
+    }
+
+    ws_tilebin bin;
+    WS_CHECK(ws_tilebin_build(&bin, vx, vy, TRI, W, H, TS) == WS_OK);
+    WS_CHECK(bin.tiles_x == (W + TS - 1) / TS);
+    WS_CHECK(bin.tiles_y == (H + TS - 1) / TS);
+
+    int ok = 1;
+    for (uint32_t t = 0; t < TRI && ok; ++t) {
+        float ax = vx[t * 3u + 0u], ay = vy[t * 3u + 0u];
+        float bx = vx[t * 3u + 1u], by = vy[t * 3u + 1u];
+        float cx = vx[t * 3u + 2u], cy = vy[t * 3u + 2u];
+        float min_x = ax < bx ? (ax < cx ? ax : cx) : (bx < cx ? bx : cx);
+        float max_x = ax > bx ? (ax > cx ? ax : cx) : (bx > cx ? bx : cx);
+        float min_y = ay < by ? (ay < cy ? ay : cy) : (by < cy ? by : cy);
+        float max_y = ay > by ? (ay > cy ? ay : cy) : (by > cy ? by : cy);
+        if (min_x > (float)(W - 1) || max_x < 0.0f || min_y > (float)(H - 1) || max_y < 0.0f) {
+            continue;
+        }
+        int x0 = min_x < 0.0f ? 0 : (int)min_x;
+        int x1 = max_x > (float)(W - 1) ? W - 1 : (int)max_x;
+        int y0 = min_y < 0.0f ? 0 : (int)min_y;
+        int y1 = max_y > (float)(H - 1) ? H - 1 : (int)max_y;
+        for (int y = y0; y <= y1 && ok; ++y) {
+            for (int x = x0; x <= x1 && ok; ++x) {
+                uint32_t tile = (uint32_t)(y / TS) * bin.tiles_x + (uint32_t)(x / TS);
+                int found = 0;
+                for (uint32_t li = bin.tile_offset[tile]; li < bin.tile_offset[tile + 1u]; ++li) {
+                    if (bin.tri_index[li] == t) {
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found) {
+                    ok = 0;
+                }
+            }
+        }
+    }
+    WS_CHECK(ok == 1);
+    WS_CHECK(bin.total_refs > 0u);
+    ws_tilebin_free(&bin);
+    return 1;
+}
+
 int main(void)
 {
     const ws_test_case cases[] = {
         {"scheduler_determinism", test_scheduler_determinism},
         {"scheduler_empty_range", test_scheduler_empty_range},
         {"hardware_probe", test_hardware_probe},
+        {"tilebin_covers_bboxes", test_tilebin_covers_bounding_boxes},
         {"gpu_semantics_and_loss", test_gpu_semantics_and_loss},
     };
     return ws_test_run("gpu", cases, (int)(sizeof(cases) / sizeof(cases[0])));

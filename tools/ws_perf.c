@@ -316,6 +316,34 @@ int main(int argc, char **argv)
             printf("perf raster_gpu %ux%u device=\"%s\" ms=%.2f speedup_vs_cpu=%.2fx "
                    "diff_fraction=%.6f verdict=%s\n",
                    rw, rh, info->device_name, gpu_ms, speedup, frac, verdict);
+
+            /* Tile-binned kernel (P12): the scaling path for full scenes. Must
+             * be bit-identical to the reference kernel and faster on dense
+             * batches; the verdict drives whether the engine uses it. */
+            uint8_t *tiled_pixels = (uint8_t *)malloc(pixel_count * 4u);
+            float *tiled_depth = (float *)malloc(pixel_count * sizeof(float));
+            if (tiled_pixels != NULL && tiled_depth != NULL) {
+                ws_result tr = ws_opencl_raster_tiled(cl, vx, vy, vz, color, PERF_TRIANGLES,
+                                                      rw, rh, 0u, tiled_pixels, tiled_depth);
+                if (tr == WS_OK) {
+                    uint64_t t0 = ws_clock_monotonic_ns();
+                    tr = ws_opencl_raster_tiled(cl, vx, vy, vz, color, PERF_TRIANGLES,
+                                                rw, rh, 0u, tiled_pixels, tiled_depth);
+                    uint64_t t1 = ws_clock_monotonic_ns();
+                    double tiled_ms = ns_to_ms(t1 - t0);
+                    int identical = memcmp(gpu_pixels, tiled_pixels, pixel_count * 4u) == 0 &&
+                                    memcmp(gpu_depth, tiled_depth, pixel_count * sizeof(float)) == 0;
+                    double tspeed = tiled_ms > 0.0 ? gpu_ms / tiled_ms : 0.0;
+                    const char *tverdict = (identical && tspeed >= 1.0) ? "use_tiled" : "use_reference";
+                    printf("perf raster_gpu_tiled %ux%u ms=%.2f speedup_vs_reference=%.2fx "
+                           "identical=%d verdict=%s\n",
+                           rw, rh, tiled_ms, tspeed, identical, tverdict);
+                } else {
+                    printf("perf raster_gpu_tiled unavailable\n");
+                }
+            }
+            free(tiled_pixels);
+            free(tiled_depth);
         } else {
             printf("perf raster_gpu unavailable_after_create\n");
         }
