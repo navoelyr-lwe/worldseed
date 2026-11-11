@@ -57,3 +57,29 @@ Kullanıcıya teknik tercih sorusu sorma. Sabit belgelerde yer alan kararı uygu
 ## Tamamlandı tanımı
 
 Kod + otomatik test + gerçek çalışma kanıtı + benchmark (ilgiliyse) + doküman + bilinen sınırlama raporu olmadan görev tamamlanmış sayılmaz. GUI testi gerçek Windows penceresini çalıştırmalı. Ekran görüntüsü/video gerçek build ve seed ile ilişkilendirilmeli. Görsel regresyon estetik kaliteyi tek başına ispatlamaz; golden scene kalite protokolü de gerekir. Bilimsel model iddiası model kartı ve D0-D4 kanıt seviyesi olmadan yapılmaz.
+
+## Render performansı — bit-özdeşlik notları
+
+CPU renderer hızlandırması yalnız çıktı **bit-özdeş** kaldığında kabul edilir. Bu
+kural kanıtla uygulanır:
+
+- **Paralelleştirme güvenli:** Görüntü ve gölge haritası ayrık **satır bantlarına**
+  bölünür; her piksel tam bir banda ait olduğundan sonuç bant sayısından ve iş
+  parçacığı çizelgesinden bağımsız olarak seri sonuçla bit-özdeştir. Yeni paralel
+  yolun seri yolla eşitliği doğrudan test edilir (bkz. `shadow_build` testi).
+- **Örtülen pikseli atlamak güvenli:** Gökyüzü derinlik göndericisiyle
+  maskelenerek geometriden sonra çizilir; örtülen piksel iki kez gölgelenmez,
+  boş piksele yazılan değer değişmez.
+- **Libm yerine yaklaşım tablosu KULLANMA:** `exp()`/`pow()` yerine enterpolasyon
+  tablosu koymak 8-bit yuvarlama sınırında tek karede ~1 LSB sapma üretir; golden
+  kareler küçük olduğu için fark görünmeyebilir, 1080p'de görünür. Sis için
+  denendi ve **geri alındı** (4 sahnede 1 bayt/delta 1). Bit-özdeşlik kapısı
+  bunu reddeder.
+- **Bit-özdeşlik doğrulaması golden boyutundan büyük yapılmalı:** Küçük golden
+  kareler nadir yuvarlama farklarını gizler; en az bir ürün çözünürlüğünde
+  (1920×1080) piksel-piksel `cmp` ile doğrula.
+- **Sıradaki büyük fırsat — aşırı çizim (overdraw):** Ürün sahnelerinde
+  `terrain_day`/`world_stream` ~1.9x aşırı çizim gösterir (bir piksel ortalama iki
+  kez gölgeleniyor). Önden-arkaya (front-to-back) sıralama ile erken derinlik
+  eleme kazanç sağlar, ancak rasterleyiciye bant-içi sıralı karo kuyruğu eklemek
+  gerekir; beraberlik kırıcı deterministik anahtar şarttır.
