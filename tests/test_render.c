@@ -495,6 +495,76 @@ static int test_render_shadow_soft_penumbra(void)
     return 1;
 }
 
+/* The shadow map is rebuilt every frame from the live object list, so an
+ * occluder that moves between frames must move its shadow with it. This locks
+ * the per-frame behaviour the live product relies on (actors are re-added to
+ * the scene before every ws_session_render). */
+static int test_render_shadow_follows_moving_occluder(void)
+{
+    ws_vertex gverts[4];
+    uint32_t gidx[6];
+    const uint8_t white[3] = {255u, 255u, 255u};
+    ws_mesh ground;
+    WS_CHECK(ws_mesh_make_plane(&ground, gverts, 4u, gidx, 6u, 12.0, 1u, white) == WS_OK);
+
+    ws_vertex cverts[24];
+    uint32_t cidx[36];
+    ws_mesh block;
+    WS_CHECK(ws_mesh_make_cube(&block, cverts, 24u, cidx, 36u, white) == WS_OK);
+
+    ws_scene_object objects[2];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 2u) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene, &ground, ws_mat4_translation(ws_vec3_make(0.0, 0.0, 0.0)),
+                                 ws_material_make(0.8, 0.8, 0.8, 1.0, 0.0, 0.0)) == WS_OK);
+    ws_mat4 left = ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(-2.0, 1.2, 0.0)),
+                                    ws_mat4_scale(ws_vec3_make(0.5, 0.5, 0.5)));
+    uint32_t block_index = scene.object_count;
+    WS_CHECK(ws_scene_add_object(&scene, &block, left,
+                                 ws_material_make(0.8, 0.6, 0.4, 1.0, 0.0, 0.0)) == WS_OK);
+    scene.camera.eye = ws_vec3_make(0.0, 9.0, 0.0001);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, 0.0);
+    scene.camera.up = ws_vec3_make(0.0, 0.0, -1.0);
+    scene.camera.far_z = 100.0;
+    scene.light.direction = ws_vec3_normalize(ws_vec3_make(-0.5, -0.85, 0.0));
+    scene.settings = ws_render_settings_default();
+    scene.settings.shadows_enabled = 1;
+
+    ws_framebuffer at_left;
+    ws_framebuffer at_right;
+    ws_framebuffer repeat;
+    WS_CHECK(ws_framebuffer_create(&at_left, 128u, 128u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&at_right, 128u, 128u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&repeat, 128u, 128u) == WS_OK);
+    size_t count = (size_t)at_left.width * at_left.height;
+    float *depth = malloc(count * sizeof(float));
+    WS_CHECK(depth != NULL);
+
+    WS_CHECK(ws_render_scene(&scene, &at_left, depth, 16u, NULL) == WS_OK);
+    scene.objects[block_index].transform =
+        ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(2.0, 1.2, 0.0)),
+                         ws_mat4_scale(ws_vec3_make(0.5, 0.5, 0.5)));
+    WS_CHECK(ws_render_scene(&scene, &at_right, depth, 16u, NULL) == WS_OK);
+    WS_CHECK(ws_render_scene(&scene, &repeat, depth, 16u, NULL) == WS_OK);
+
+    /* Moving the occluder must visibly move its shadow. */
+    uint64_t changed = 0u;
+    for (size_t i = 0; i < count; ++i) {
+        if (memcmp(&at_left.pixels[i * 4u], &at_right.pixels[i * 4u], 4u) != 0) {
+            changed += 1u;
+        }
+    }
+    WS_CHECK(changed > 50u);
+    /* The rebuild stays deterministic frame to frame. */
+    WS_CHECK(memcmp(at_right.pixels, repeat.pixels, count * 4u) == 0);
+
+    free(depth);
+    ws_framebuffer_free(&at_left);
+    ws_framebuffer_free(&at_right);
+    ws_framebuffer_free(&repeat);
+    return 1;
+}
+
 static int test_ppm_roundtrip(void)
 {
     ws_framebuffer src;
@@ -1223,6 +1293,7 @@ int main(void)
         {"render depth occlusion", test_render_depth_occlusion},
         {"render shadow darkens occluded", test_render_shadow_darkens_occluded},
         {"render shadow soft penumbra", test_render_shadow_soft_penumbra},
+        {"render shadow follows moving occluder", test_render_shadow_follows_moving_occluder},
         {"render specular highlight", test_render_specular_highlight},
         {"render sky gradient", test_render_sky_gradient},
         {"render fog attenuates distance", test_render_fog_attenuates},
