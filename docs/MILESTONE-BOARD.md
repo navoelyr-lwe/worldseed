@@ -30,9 +30,12 @@ P5/P7/P9/P10/P11 satırlarındaki “prototip/dilim tamamlandı” ifadesi yaln�
 
 ## Açık blokajlar
 
-- **GitHub-hosted runner havuzu bu özel depo için erişilemez (2026-11-10).** Tüm hosted işler (plan bütünlüğü, README bağlantıları, Linux matris, MSVC, OpenCL) sıfır adımla anında düşüyor; aynı imza değişmemiş `main`'de ve tek adımlı bir `echo` probe iş akışında da oluşuyor. Bu bir kod hatası değil, hesap/depo düzeyinde bir runner erişim kısıtı; düzeltme yönetici erişimi gerektirir. Güvenli alternatif uygulandı: tüm kapılar yerelde tam matris olarak ve gerçek Windows self-hosted koşucuda çalıştırıldı; P12 gölge kapısı ve release paketleme (aynı `tools/package-windows.ps1`) self-hosted Windows işine eklendi. Ayrıntı: `docs/CI-VE-DAL-KORUMASI.md`.
-- Windows GUI self-hosted runner (etiketler: `self-hosted, windows, x64, worldseed-gui`) kayıtlı ve çalışıyor. `gui-windows.yml` artık `main` push'unda ve aynı depodan gelen PR'larda (fork değil) otomatik tetiklenir; gerçek Win32 penceresi açılır, ekran görüntüsü alınır ve kanıt artefaktı yüklenir. İzole runner kanıtı: run 42717394314 başarılı (1536×864 gerçek pencere görüntüsü); P12 gölge kanıtı run 42899644237 ve paketleme doğrulaması run 42903477873 başarılı.
-- Branch protection yönetici erişimi gerektirir (bkz. `CI-VE-DAL-KORUMASI.md`).
+- **Branch protection/ruleset durumu doğrulanamadı.** Bağlı GitHub entegrasyonuyla branch-protection okuması 403 döndürüyor; sunucu tarafı zorunlu kontrollerin etkin olduğu bu denetimde teyit edilemedi. Yetki sağlanana kadar koruma, PR akışı + workflow kapılarıyla uygulanır (bkz. `CI-VE-DAL-KORUMASI.md`).
+- **Gerçek GPU donanımında 4K benchmark ölçümü yok.** P12 performans sayıları CPU referansından ve OpenCL CPU ICD (pocl) kanıtındandır; gerçek GPU hızlanması ölçülmemiştir. Bu, P12'nin açık bir blokajı olarak kaydedilir.
+
+## Geçmiş altyapı olayları (güncel blokaj değil)
+
+- **GitHub-hosted runner havuzu (2026-11-10 olayı).** 2026-11-10'da bu özel depoda tüm hosted işler sıfır adımla düşüyordu (`runner_id=0`). Bu bir olay kaydıdır; kalıcı/güncel durum olarak okunmamalıdır. 2026-11-11'de aynı `main` commit'i (`f6d15ed8c54ef51183626aafb565ff817d0b45c0`) için CI run `42974024398` (Linux GCC/Clang Debug/Release, Windows MSVC Debug/Release, OpenCL CPU kernel, plan bütünlüğü, doküman bağlantıları), izole Windows GUI run `42974024303` ve release run `42974038527` başarıyla tamamlandı. Ayrıntı ve güncel durum: `docs/CI-VE-DAL-KORUMASI.md`.
 
 ## Notlar
 

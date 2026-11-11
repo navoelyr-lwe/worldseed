@@ -170,7 +170,7 @@ Henüz bulunmayanlar:
 - Deterministik golden görseller, aynı kodun aynı kareyi üretmesini kanıtlar; tek başına estetik/doğal görünüm kalitesini kanıtlamaz. docs/12 de bunu açıkça belirtir ve ayrıca görsel kalite kontrol listesi/referans kabul protokolü ister.
 - Ekoloji testleri sayısal sınır ve kararlılığı kanıtlar; ölçülmüş popülasyon zaman serisiyle nicel D3 doğrulaması değildir.
 - Branch protection/ruleset konusu hâlâ ayrı bir yönetişim riskidir. Mevcut repo belgeleri bu API erişiminin 403 verdiğini söylüyor; bu denetimde de bağlı GitHub entegrasyonuyla branch-protection okuması 403 döndü. Dolayısıyla zorunlu kontrollerin GitHub sunucu tarafında gerçekten kilitlendiği bu denetimde doğrulanamadı.
-- docs/MILESTONE-BOARD.md ve docs/CI-VE-DAL-KORUMASI.md GitHub-hosted runner'ların 10 Kasım 2026'da hâlâ engelli olduğunu söylüyor; ancak 11 Kasım 2026 tarihli run 42974024398'de Linux GCC/Clang, Windows MSVC, OpenCL, plan ve docs işleri başarılı. Eski engel notu tarihsel kalmalı; güncel durum olarak sunulmamalıdır.
+- docs/MILESTONE-BOARD.md ve docs/CI-VE-DAL-KORUMASI.md GitHub-hosted runner'ların 10 Kasım 2026'da hâlâ engelli olduğunu söylüyordu; ancak 11 Kasım 2026 tarihli run 42974024398'de Linux GCC/Clang, Windows MSVC, OpenCL, plan ve docs işleri başarılı. Bu denetimde her iki belgedeki eski engel notu tarihsel olaya dönüştürüldü; güncel durum olarak sunulmuyor.
 
 ## 5. Araştırma bulguları ve model tasarımına etkileri
 
