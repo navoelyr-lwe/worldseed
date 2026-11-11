@@ -156,7 +156,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P12 - CPU render performansi ve kalite kapisi)." \
+            "Worldseed Engine onizleme surumu (P12 - CPU render performansi, gorsel ve hareket kalite kapilari)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
@@ -272,6 +272,8 @@ jobs:
             evidence/live/export-a/export-manifest.txt \
             evidence/quality/quality.csv \
             evidence/quality/quality.txt \
+            evidence/motion/motion.csv \
+            evidence/motion/motion.txt \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md
