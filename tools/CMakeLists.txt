@@ -26,3 +26,6 @@ target_link_libraries(ws_perf PRIVATE worldseed_core)
 
 add_executable(ws_manifest ws_manifest.c)
 target_link_libraries(ws_manifest PRIVATE worldseed_core)
+
+add_executable(ws_quality ws_quality.c)
+target_link_libraries(ws_quality PRIVATE worldseed_core)

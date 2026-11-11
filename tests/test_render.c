@@ -8,9 +8,11 @@
 
 #include "core/ws_math.h"
 #include "render/ws_asset.h"
+#include "render/ws_catalog.h"
 #include "render/ws_framebuffer.h"
 #include "render/ws_image.h"
 #include "render/ws_mesh.h"
+#include "render/ws_quality.h"
 #include "render/ws_render.h"
 #include "render/ws_scene.h"
 #include "render/ws_showcase.h"
@@ -868,6 +870,149 @@ static int test_render_texture_changes_output(void)
 }
 
 
+/* The quality metrics must react to the frame: a flat frame has no contrast,
+ * variety or saturation, while a lit textured scene does. */
+static int test_quality_metrics_react_to_frame(void)
+{
+    ws_framebuffer flat;
+    WS_CHECK(ws_framebuffer_create(&flat, 64u, 64u) == WS_OK);
+    ws_framebuffer_clear(&flat, 128u, 128u, 128u, 255u);
+
+    ws_scene scene;
+    ws_scene_object storage[1];
+    WS_CHECK(ws_scene_init(&scene, storage, 1u) == WS_OK);
+    scene.background[0] = 24u; scene.background[1] = 28u; scene.background[2] = 36u;
+
+    ws_quality_metrics flat_m;
+    WS_CHECK(ws_quality_measure(&scene, &flat, 0u, 0u, 0u, &flat_m) == WS_OK);
+    WS_CHECK(APPROX(flat_m.luma_stddev, 0.0, 1e-9));
+    WS_CHECK(APPROX(flat_m.mean_saturation, 0.0, 1e-9));
+    WS_CHECK(APPROX(flat_m.colour_variety, 1.0, 1e-9)); /* one bucket */
+    WS_CHECK(APPROX(flat_m.mean_luma, 128.0, 0.5));
+    WS_CHECK(APPROX(flat_m.sky_gradient, 0.0, 1e-9));
+
+    ws_framebuffer_free(&flat);
+    return 1;
+}
+
+static int test_quality_specs_are_six_product_scenes(void)
+{
+    WS_CHECK(ws_quality_spec_count() == 6u);
+    const char *expected[6] = {"terrain_day", "ecosystem", "organism_forage",
+                               "creature_walk", "terrain_weather", "terrain_dusk"};
+    for (size_t i = 0; i < 6u; ++i) {
+        const ws_quality_spec *s = ws_quality_spec_at(i);
+        WS_CHECK(s != NULL);
+        WS_CHECK(strcmp(s->scene_id, expected[i]) == 0);
+        WS_CHECK(s->require_sky == 1);
+    }
+    WS_CHECK(ws_quality_spec_at(6u) == NULL);
+    return 1;
+}
+
+/* Every metric threshold must actually gate: feeding a metric just below the
+ * spec must fail with the matching bit, and one just above must pass. */
+static int test_quality_check_gates_each_metric(void)
+{
+    const ws_quality_spec *spec = ws_quality_spec_at(0);
+    WS_CHECK(spec != NULL);
+
+    ws_quality_metrics m;
+    memset(&m, 0, sizeof(m));
+    m.geometry_coverage = spec->min_geometry_coverage + 0.1;
+    m.coverage = spec->min_coverage + 0.1;
+    m.luma_stddev = spec->min_luma_stddev + 1.0;
+    m.colour_variety = spec->min_colour_variety + 1.0;
+    m.mean_saturation = spec->min_saturation + 0.1;
+    m.sky_gradient = spec->min_sky_gradient + 1.0;
+    m.object_count = spec->min_objects;
+    m.blown_fraction = 0.0;
+
+    uint32_t fail = 0xFFFFFFFFu;
+    WS_CHECK(ws_quality_check(spec, &m, &fail) == WS_OK);
+    WS_CHECK(fail == 0u);
+
+    ws_quality_metrics low = m;
+    low.luma_stddev = spec->min_luma_stddev - 0.5;
+    WS_CHECK(ws_quality_check(spec, &low, &fail) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK((fail & WS_QUALITY_FAIL_CONTRAST) != 0u);
+
+    low = m;
+    low.colour_variety = spec->min_colour_variety - 1.0;
+    WS_CHECK(ws_quality_check(spec, &low, &fail) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK((fail & WS_QUALITY_FAIL_VARIETY) != 0u);
+
+    low = m;
+    low.mean_saturation = spec->min_saturation - 0.05;
+    WS_CHECK(ws_quality_check(spec, &low, &fail) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK((fail & WS_QUALITY_FAIL_SATURATION) != 0u);
+
+    low = m;
+    low.sky_gradient = spec->min_sky_gradient - 0.1;
+    WS_CHECK(ws_quality_check(spec, &low, &fail) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK((fail & WS_QUALITY_FAIL_SKY) != 0u);
+
+    low = m;
+    low.geometry_coverage = spec->min_geometry_coverage - 0.1;
+    WS_CHECK(ws_quality_check(spec, &low, &fail) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK((fail & WS_QUALITY_FAIL_GEOMETRY) != 0u);
+
+    low = m;
+    low.object_count = spec->min_objects - 1u;
+    WS_CHECK(ws_quality_check(spec, &low, &fail) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK((fail & WS_QUALITY_FAIL_OBJECTS) != 0u);
+
+    low = m;
+    low.blown_fraction = spec->max_blown + 0.01;
+    WS_CHECK(ws_quality_check(spec, &low, &fail) == WS_ERR_INVALID_ARGUMENT);
+    WS_CHECK((fail & WS_QUALITY_FAIL_BLOWN) != 0u);
+    return 1;
+}
+
+/* The quality checklist must pass on every product reference scene built from
+ * the real catalog, with the same determinism the golden harness relies on. */
+static int test_quality_checklist_passes_on_product_scenes(void)
+{
+    ws_framebuffer fb;
+    WS_CHECK(ws_framebuffer_create(&fb, 320u, 180u) == WS_OK);
+    size_t pixels = (size_t)fb.width * (size_t)fb.height;
+    float *depth = malloc(pixels * sizeof(float));
+    WS_CHECK(depth != NULL);
+
+    size_t n = ws_catalog_count();
+    size_t checked = 0u;
+    for (size_t i = 0; i < n; ++i) {
+        const char *id = ws_catalog_id(i);
+        const ws_quality_spec *spec = NULL;
+        for (size_t s = 0; s < ws_quality_spec_count(); ++s) {
+            if (strcmp(ws_quality_spec_at(s)->scene_id, id) == 0) {
+                spec = ws_quality_spec_at(s);
+                break;
+            }
+        }
+        if (spec == NULL) {
+            continue;
+        }
+        ws_catalog catalog;
+        WS_CHECK(ws_catalog_build(&catalog, i, 20260101ULL) == WS_OK);
+        const ws_scene *scene = ws_catalog_scene(&catalog);
+        ws_render_stats stats;
+        WS_CHECK(ws_render_scene(scene, &fb, depth, 32u, &stats) == WS_OK);
+        ws_quality_metrics m;
+        WS_CHECK(ws_quality_measure(scene, &fb, stats.triangles_submitted,
+                                    stats.triangles_drawn, stats.pixels_shaded, &m) == WS_OK);
+        uint32_t fail = 0u;
+        WS_CHECK_MSG(ws_quality_check(spec, &m, &fail) == WS_OK, id);
+        checked += 1u;
+        ws_catalog_free(&catalog);
+    }
+    WS_CHECK(checked == ws_quality_spec_count());
+
+    free(depth);
+    ws_framebuffer_free(&fb);
+    return 1;
+}
+
 int main(void)
 {
     static const ws_test_case cases[] = {
@@ -903,6 +1048,11 @@ int main(void)
         {"showcase scenes", test_showcase_scenes},
         {"showcase deterministic", test_showcase_deterministic},
         {"image metrics", test_image_metrics},
+        {"quality metrics react to frame", test_quality_metrics_react_to_frame},
+        {"quality specs are six product scenes", test_quality_specs_are_six_product_scenes},
+        {"quality check gates each metric", test_quality_check_gates_each_metric},
+        {"quality checklist passes on product scenes",
+         test_quality_checklist_passes_on_product_scenes},
     };
     return ws_test_run("render", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

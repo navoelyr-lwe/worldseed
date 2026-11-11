@@ -13,6 +13,7 @@ Geliştirme ve release kabulünün normal yolu otomatik olmalıdır. Kullanıcı
 5. **Determinism:** seed, event order, checkpoint/replay, region regeneration.
 6. **Ecosystem:** çoklu tür, kaynak, popülasyon, uzun zaman ve çoklu seed.
 7. **Rendering golden scenes:** çözünürlük, referans görüntü, renk/derinlik, frame capture.
+7b. **Görsel kalite kontrol listesi:** altı ürün referans sahnesinde geometri/malzeme/ışık/gölge/atmosfer ölçülebilir eşikleri (`tools/ws_quality`, `docs/QUALITY-CHECKLIST.md`).
 8. **Cinematic:** yönetmen salt okunur, olay-kamera eşleşmesi, takip/shot continuity.
 9. **Audio:** PCM determinism, örnek sınırları, aygıt dropout.
 10. **GUI E2E:** gerçek Windows pencere, girdi, pencere resize, kamera, panel, tam ekran ve kapatma.
@@ -40,7 +41,7 @@ Kanıtlar `evidence/<milestone>/<task>/` altında sürümlenir. Büyük videolar
 - Gerçek uygulama tarafından üretilir; konsept görseli kanıt olamaz.
 - Seed, scene ID, commit, backend, çözünürlük, kalite preset'i ve cihaz kaydedilir.
 - Golden image farkı için SSIM/PSNR/pixel diff gibi teknik ölçüler kullanılabilir; toleranslar sabit ve gerekçeli olmalıdır.
-- Görsel regresyon aracı estetik kaliteyi tek başına ispatlamaz. Fotogerçekçilik hedefi için sahne bazlı görsel kalite kontrol listesi ve referans kabul protokolü gerekir.
+- Görsel regresyon aracı estetik kaliteyi tek başına ispatlamaz. Fotogerçekçilik hedefi için sahne bazlı görsel kalite kontrol listesi ve referans kabul protokolü gerekir. Bu protokol `docs/QUALITY-CHECKLIST.md` içinde tanımlıdır; altı ürün referans sahnesi `tools/ws_quality` ile ölçülür ve `ci.yml` "Product visual-quality checklist" adımı zorunlu kapı yapar (geometri/malzeme/ışık/gölge/atmosfer boyutları).
 - Video kanıtı olayın gerçek simülasyon durumundan üretildiğini event ID ile eşleştirir.
 
 ## CI güvenliği

@@ -139,6 +139,20 @@ jobs:
           # ecology run, so it is gated loosely like the other dynamic scenes.
           ./build/tools/ws_imgdiff evidence/golden/soundscape.ppm tests/golden/soundscape.ppm 3.0 0.80
 
+      - name: Product visual-quality checklist
+        run: |
+          # P12 acceptance (docs/13, docs/19): the six product reference scenes
+          # must pass a documented visual-quality checklist, not a golden hash
+          # alone. The harness renders them from the real catalog and gates
+          # geometry/material/light/shadow/atmosphere metrics (docs/QUALITY-CHECKLIST.md).
+          mkdir -p evidence/quality
+          ./build/tools/ws_quality evidence/quality 20260101 | tee evidence/quality/quality.txt
+          grep -q "WS_QUALITY_OK" evidence/quality/quality.txt
+          # Same seed must reproduce every scene's frame (determinism).
+          grep -q "reproducible=1" evidence/quality/quality.txt
+          test "$(grep -c 'verdict=PASS' evidence/quality/quality.txt)" = "6" \
+            || { echo "not all six product scenes passed the checklist"; exit 1; }
+
       - name: Asset pipeline
         run: |
           mkdir -p evidence/assets

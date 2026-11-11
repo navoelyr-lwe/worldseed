@@ -16,8 +16,9 @@ $exe       = "$BuildDir/src/app/Release/worldseed.exe"
 $audioExe  = "$BuildDir/tools/Release/ws_audio.exe"
 $perfExe   = "$BuildDir/tools/Release/ws_perf.exe"
 $mfExe     = "$BuildDir/tools/Release/ws_manifest.exe"
+$qualityExe = "$BuildDir/tools/Release/ws_quality.exe"
 
-foreach ($tool in @($exe, $audioExe, $perfExe, $mfExe)) {
+foreach ($tool in @($exe, $audioExe, $perfExe, $mfExe, $qualityExe)) {
     if (-not (Test-Path $tool)) { Write-Error "missing build output: $tool"; exit 1 }
 }
 
@@ -100,6 +101,16 @@ Get-ChildItem evidence/live/export-a/frame-*.ppm | Where-Object { $_.BaseName -m
 # reference-scene frame times.
 & $perfExe --quick | Tee-Object -FilePath evidence/preview/perf.txt
 
+# P12 product visual-quality checklist (docs/QUALITY-CHECKLIST.md): the six
+# product reference scenes must pass the documented quality gate, not just a
+# golden hash. The harness renders from the real catalog and reports metrics.
+$qualityExe = "$BuildDir/tools/Release/ws_quality.exe"
+if (-not (Test-Path $qualityExe)) { Write-Error "missing build output: $qualityExe"; exit 1 }
+New-Item -ItemType Directory -Force -Path evidence/quality | Out-Null
+& $qualityExe evidence/quality 20260101 | Tee-Object -FilePath evidence/quality/quality.txt
+if (-not (Select-String -Path evidence/quality/quality.txt -Pattern "WS_QUALITY_OK" -Quiet)) { exit 1 }
+if ((Select-String -Path evidence/quality/quality.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count -ne 6) { exit 1 }
+
 $stage = "stage/worldseed"
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item $exe "$stage/worldseed.exe"
@@ -117,6 +128,9 @@ New-Item -ItemType Directory -Force -Path "$stage/export" | Out-Null
 Copy-Item evidence/live/export-a/frame-*.png "$stage/export/"
 Copy-Item evidence/live/export-a/soundscape.wav "$stage/export/"
 Copy-Item evidence/live/export-a/export-manifest.txt "$stage/export/"
+New-Item -ItemType Directory -Force -Path "$stage/quality" | Out-Null
+Copy-Item evidence/quality/quality.csv "$stage/quality/"
+Copy-Item evidence/quality/quality.txt "$stage/quality/"
 @(
     "Worldseed Engine preview (P12 - CPU render performansi ve kalite kapisi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
@@ -149,6 +163,8 @@ $mfFiles += Get-ChildItem "$stage/export/*.png" | ForEach-Object { $_.FullName }
 $mfFiles += "$stage/export/soundscape.wav"
 $mfFiles += "$stage/preview/soundscape.wav"
 $mfFiles += "$stage/preview/perf.txt"
+$mfFiles += "$stage/quality/quality.csv"
+$mfFiles += "$stage/quality/quality.txt"
 & $mfExe --out "MANIFEST.txt" --version "$Version" @mfFiles
 if ($LASTEXITCODE -ne 0) { exit 1 }
 Copy-Item "MANIFEST.txt" "$stage/MANIFEST.txt"

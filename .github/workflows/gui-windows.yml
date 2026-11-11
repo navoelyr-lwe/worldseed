@@ -61,6 +61,19 @@ jobs:
             Tee-Object -FilePath evidence/gui/app/selftest.txt
           if (-not (Select-String -Path evidence/gui/app/selftest.txt -Pattern "APP_SELFTEST_OK" -Quiet)) { exit 1 }
 
+      - name: Product visual-quality checklist on isolated runner
+        shell: pwsh
+        run: |
+          # The same checklist the Linux CI gates must pass on the Windows MSVC
+          # build too (docs/QUALITY-CHECKLIST.md): the six product reference
+          # scenes, rendered from the real catalog, with metrics and determinism.
+          New-Item -ItemType Directory -Force -Path evidence/gui/quality | Out-Null
+          & build-gui/tools/Release/ws_quality.exe evidence/gui/quality 20260101 |
+            Tee-Object -FilePath evidence/gui/quality/quality.txt
+          if (-not (Select-String -Path evidence/gui/quality/quality.txt -Pattern "WS_QUALITY_OK" -Quiet)) { exit 1 }
+          $passes = (Select-String -Path evidence/gui/quality/quality.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count
+          if ($passes -ne 6) { Write-Error "quality: $passes/6 scenes passed"; exit 1 }
+
       - name: Real window launch and screenshot
         shell: pwsh
         run: |
