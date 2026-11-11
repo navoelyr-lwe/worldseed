@@ -80,6 +80,8 @@ jobs:
             evidence/live/export-a/soundscape.wav
             evidence/live/export-a/export-manifest.txt
             evidence/live/export.txt
+            evidence/quality/quality.csv
+            evidence/quality/quality.txt
 
   # Resilient path: build the identical package on the isolated self-hosted
   # Windows runner when the hosted pool is unavailable. The publish job consumes
@@ -128,6 +130,8 @@ jobs:
             evidence/live/export-a/soundscape.wav
             evidence/live/export-a/export-manifest.txt
             evidence/live/export.txt
+            evidence/quality/quality.csv
+            evidence/quality/quality.txt
 
   publish:
     name: publish prerelease
@@ -163,6 +167,13 @@ jobs:
             "zamanlari artik yuzdelik olarak raporlanir (--live-headless cikisinda p50/p95/" \
             "p99_ms) ve CI bu p95 kapisini zorunlu tutar; tek bir FPS orneklemesi yayin" \
             "olcutu sayilmaz." \
+            "" \
+            "Bu surumde GORSEL KALITE KONTROL LISTESI de eklendi: alti urun referans sahnesi" \
+            "(orman/cayir/gece/yagmur, ekosistem, canli yakin plan) geometri, isik/ton," \
+            "materyal/renk ve atmosfer olcutleriyle OLCULUR ve esikleri gecmesi zorunludur." \
+            "Ayni tohum iki kosuda bit-ozdes kare uretir. Golden hash tek basina estetik" \
+            "kaliteyi kanitlamadigi icin bu kontrol listesi ayri bir yayin kapisidir" \
+            "(docs/QUALITY-CHECKLIST.md); kanit quality/quality.csv icindedir." \
             "" \
             "Onceki surumlerin ozellikleri korunur: disa aktarma (zaman damgali kare dizisi" \
             "+ WAV), kamera yer/su carpismasi ve agac kacinma, ayarlar menusu (fare" \
@@ -249,6 +260,8 @@ jobs:
             evidence/live/export-a/frame-*.png \
             evidence/live/export-a/soundscape.wav \
             evidence/live/export-a/export-manifest.txt \
+            evidence/quality/quality.csv \
+            evidence/quality/quality.txt \
             --title "$tag" \
             --prerelease \
             --notes-file notes.md
