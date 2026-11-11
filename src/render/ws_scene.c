@@ -100,5 +100,6 @@ ws_render_settings ws_render_settings_default(void)
     s.shadow_strength = 1.0;
     s.shadow_bias = 0.0015;
     s.shadow_map_size = 1024u;
+    s.shadow_softness = 0.0;
     return s;
 }

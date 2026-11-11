@@ -231,6 +231,10 @@ static ws_result scene_shadows(ws_showcase *s)
     s->scene.light.direction = ws_vec3_normalize(ws_vec3_make(-0.55, -0.75, -0.35));
     s->scene.settings = ws_render_settings_default();
     s->scene.settings.shadows_enabled = 1;
+    /* Wider penumbra so the product shadow reference shows a soft contact
+     * shadow, not a hard PCF edge (P12 "wider penumbra" slice). The value is
+     * the filter radius in shadow-map texels. */
+    s->scene.settings.shadow_softness = 3.0;
     return WS_OK;
 }
 

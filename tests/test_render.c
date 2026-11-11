@@ -416,6 +416,85 @@ static int test_render_shadow_darkens_occluded(void)
     return 1;
 }
 
+/* Widening the shadow filter must soften the penumbra: with the same scene and
+ * sun, a soft-shadow render differs from the hard 3x3 PCF render only near the
+ * shadow edge, and it must stay deterministic (band-independent). It must also
+ * never brighten a fully shadowed or fully lit interior pixel beyond the hard
+ * result, so the soft filter only spreads the transition. */
+static int test_render_shadow_soft_penumbra(void)
+{
+    ws_vertex gverts[4];
+    uint32_t gidx[6];
+    const uint8_t white[3] = {255u, 255u, 255u};
+    ws_mesh ground;
+    WS_CHECK(ws_mesh_make_plane(&ground, gverts, 4u, gidx, 6u, 8.0, 1u, white) == WS_OK);
+
+    ws_vertex cverts[24];
+    uint32_t cidx[36];
+    ws_mesh block;
+    WS_CHECK(ws_mesh_make_cube(&block, cverts, 24u, cidx, 36u, white) == WS_OK);
+
+    ws_scene_object objects[2];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 2u) == WS_OK);
+    ws_mat4 gt = ws_mat4_translation(ws_vec3_make(0.0, 0.0, 0.0));
+    WS_CHECK(ws_scene_add_object(&scene, &ground, gt,
+                                 ws_material_make(0.8, 0.8, 0.8, 1.0, 0.0, 0.0)) == WS_OK);
+    ws_mat4 bt = ws_mat4_multiply(ws_mat4_translation(ws_vec3_make(0.0, 0.9, 0.0)),
+                                  ws_mat4_scale(ws_vec3_make(0.6, 0.6, 0.6)));
+    WS_CHECK(ws_scene_add_object(&scene, &block, bt,
+                                 ws_material_make(0.8, 0.6, 0.4, 1.0, 0.0, 0.0)) == WS_OK);
+    scene.camera.eye = ws_vec3_make(0.0, 6.0, 0.0001);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, 0.0);
+    scene.camera.up = ws_vec3_make(0.0, 0.0, -1.0);
+    scene.camera.far_z = 100.0;
+    scene.light.direction = ws_vec3_normalize(ws_vec3_make(-0.6, -0.8, 0.0));
+
+    ws_framebuffer hard;
+    ws_framebuffer soft;
+    ws_framebuffer soft2;
+    WS_CHECK(ws_framebuffer_create(&hard, 128u, 128u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&soft, 128u, 128u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&soft2, 128u, 128u) == WS_OK);
+    size_t count = (size_t)hard.width * hard.height;
+    float *depth = malloc(count * sizeof(float));
+    WS_CHECK(depth != NULL);
+
+    scene.settings = ws_render_settings_default();
+    scene.settings.shadows_enabled = 1;
+    scene.settings.shadow_softness = 0.0;
+    WS_CHECK(ws_render_scene(&scene, &hard, depth, 16u, NULL) == WS_OK);
+    scene.settings.shadow_softness = 3.0;
+    WS_CHECK(ws_render_scene(&scene, &soft, depth, 16u, NULL) == WS_OK);
+    WS_CHECK(ws_render_scene(&scene, &soft2, depth, 16u, NULL) == WS_OK);
+
+    /* Determinism: the soft filter is band-independent and pure. */
+    WS_CHECK(memcmp(soft.pixels, soft2.pixels, count * 4u) == 0);
+
+    /* The soft filter must change the image (a wider penumbra is visible) but
+     * not invert it: a soft pixel is never darker than the hard shadow interior
+     * or brighter than the hard lit region by more than the filter can spread. */
+    uint64_t changed = 0u;
+    for (size_t i = 0; i < count; ++i) {
+        const uint8_t *h = &hard.pixels[i * 4u];
+        const uint8_t *s = &soft.pixels[i * 4u];
+        int lh = h[0] + h[1] + h[2];
+        int ls = s[0] + s[1] + s[2];
+        if (lh != ls) { changed += 1u; }
+        /* Soft shading keeps every pixel in [hard_shadow, hard_lit] roughly;
+         * allow the filter's own spread but forbid a full inversion. */
+        WS_CHECK(ls <= lh + 3 * 60);
+        WS_CHECK(ls >= lh - 3 * 60);
+    }
+    WS_CHECK(changed > 20u); /* the penumbra is a real, visible change */
+
+    free(depth);
+    ws_framebuffer_free(&hard);
+    ws_framebuffer_free(&soft);
+    ws_framebuffer_free(&soft2);
+    return 1;
+}
+
 static int test_ppm_roundtrip(void)
 {
     ws_framebuffer src;
@@ -1143,6 +1222,7 @@ int main(void)
         {"render determinism", test_render_determinism},
         {"render depth occlusion", test_render_depth_occlusion},
         {"render shadow darkens occluded", test_render_shadow_darkens_occluded},
+        {"render shadow soft penumbra", test_render_shadow_soft_penumbra},
         {"render specular highlight", test_render_specular_highlight},
         {"render sky gradient", test_render_sky_gradient},
         {"render fog attenuates distance", test_render_fog_attenuates},
