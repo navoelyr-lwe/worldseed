@@ -312,6 +312,28 @@ void ws_live_startup_world_select(const ws_live_options *opts, ws_session *s)
 
 /* --- headless evidence run ---------------------------------------------- */
 
+static int cmp_double(const void *a, const void *b)
+{
+    double da = *(const double *)a;
+    double db = *(const double *)b;
+    if (da < db) { return -1; }
+    if (da > db) { return 1; }
+    return 0;
+}
+
+double ws_live_percentile_ms(double *samples, size_t count, double p)
+{
+    if (samples == NULL || count == 0u) {
+        return 0.0;
+    }
+    if (p < 0.0) { p = 0.0; }
+    if (p > 1.0) { p = 1.0; }
+    qsort(samples, count, sizeof(double), cmp_double);
+    size_t idx = (size_t)(p * (double)(count - 1u));
+    if (idx >= count) { idx = count - 1u; }
+    return samples[idx];
+}
+
 static int run_headless(const ws_live_options *opts)
 {
     ws_session *s = NULL;
@@ -341,6 +363,10 @@ static int run_headless(const ws_live_options *opts)
     double total_step_ms = 0.0;
     double total_render_ms = 0.0;
     double total_hud_ms = 0.0;
+    /* Frame-time samples for the documented percentile gate (docs/11: the
+     * release metric is p95, which a single FPS sample cannot stand in for). */
+    size_t cap = 4096u;
+    double *samples = (double *)malloc(cap * sizeof(double));
     for (int i = 0; i < steps; ++i) {
         uint64_t t0 = ws_clock_monotonic_ns();
         if (ws_session_step(s, dt) != WS_OK) {
@@ -363,6 +389,14 @@ static int run_headless(const ws_live_options *opts)
         ws_session_note_frame(s, ms);
         if (ms > worst_ms) { worst_ms = ms; }
         total_ms += ms;
+        if (samples != NULL) {
+            if (frames == cap) {
+                size_t ncap = cap * 2u;
+                double *grown = (double *)realloc(samples, ncap * sizeof(double));
+                if (grown != NULL) { samples = grown; cap = ncap; }
+            }
+            if (frames < cap) { samples[frames] = ms; }
+        }
         frames += 1u;
     }
 
@@ -376,8 +410,16 @@ static int run_headless(const ws_live_options *opts)
     char wdigest[WS_SESSION_DIGEST_HEX];
     (void)ws_session_digest(s, wdigest);
 
+    double p50 = 0.0, p95 = 0.0, p99 = 0.0;
+    if (samples != NULL && frames > 0u) {
+        p50 = ws_live_percentile_ms(samples, (size_t)frames, 0.50);
+        p95 = ws_live_percentile_ms(samples, (size_t)frames, 0.95);
+        p99 = ws_live_percentile_ms(samples, (size_t)frames, 0.99);
+    }
+
     printf("LIVE_HEADLESS_OK frames=%llu sim_seconds=%.1f world_tick=%llu "
            "avg_ms=%.2f step_ms=%.2f render_ms=%.2f hud_ms=%.2f worst_ms=%.2f fps=%.1f "
+           "p50_ms=%.2f p95_ms=%.2f p99_ms=%.2f "
            "coverage=%.4f frame_sha256=%s world_digest=%s pop=%u loaded=%u\n",
            (unsigned long long)frames, opts->seconds,
            (unsigned long long)ws_session_tick(s),
@@ -385,8 +427,9 @@ static int run_headless(const ws_live_options *opts)
            frames ? total_step_ms / (double)frames : 0.0,
            frames ? total_render_ms / (double)frames : 0.0,
            frames ? total_hud_ms / (double)frames : 0.0, worst_ms,
-           frames ? 1000.0 / (total_ms / (double)frames) : 0.0, coverage, hex,
+           frames ? 1000.0 / (total_ms / (double)frames) : 0.0, p50, p95, p99, coverage, hex,
            wdigest, ws_session_total_population(s), ws_session_loaded_regions(s));
+    free(samples);
 
     if (opts->capture_path != NULL) {
         if (ws_framebuffer_write_ppm(&fb, opts->capture_path) != WS_OK) {

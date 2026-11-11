@@ -15,6 +15,7 @@
 #ifndef WS_APP_LIVE_H
 #define WS_APP_LIVE_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "../core/ws_result.h"
@@ -87,6 +88,12 @@ void ws_live_startup_world_select(const ws_live_options *opts, ws_session *s);
  * window fields, to opts->settings_path. Called on a clean windowed exit; a
  * NULL settings_path or session is a no-op. */
 void ws_live_save_settings(const ws_live_options *opts, const ws_session *s);
+
+/* Sorted-percentile helper for the frame-time gate (docs/11). Sorts a copy of
+ * the caller's samples in place and returns the value at the given percentile
+ * (0.0..1.0) using the nearest-rank index; returns 0 for an empty set. Used by
+ * the headless performance report and its unit test. */
+double ws_live_percentile_ms(double *samples, size_t count, double p);
 
 /* Platform presentation hook (full-screen windowed). */
 int ws_live_present(const ws_live_options *opts);

@@ -7,6 +7,6 @@
 #ifndef WS_CORE_VERSION_H
 #define WS_CORE_VERSION_H
 
-#define WS_VERSION_STRING "0.21.0-preview"
+#define WS_VERSION_STRING "0.22.0-preview"
 
 #endif /* WS_CORE_VERSION_H */

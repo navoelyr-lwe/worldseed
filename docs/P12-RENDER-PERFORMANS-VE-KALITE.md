@@ -153,6 +153,19 @@ SHA-256 değerleri değişmedi):
   gölgeler) daha ince iş öğeleri zamanlayıcının yükü dengelemesini sağlar.
   Köşe hazırlığı paylaşıldığı için ek bantlar ucuzdur.
 
+### 7. Canlı ürün sahnesi kare-zamanı yüzdelik kapısı (bu PR)
+
+P12 kabul kapılarından biri, performansın **tam ürün sahnesinde** ölçülmesidir
+(yalnız test üçgeni çekirdeği değil) ve ölçüt tek bir FPS örneklemesi değil,
+kare-zamanı yüzdelikleridir (docs/11: p95 hedefi). `worldseed --live-headless`
+kanıt koşusu artık her karenin kare zamanını toplayıp `p50_ms`, `p95_ms` ve
+`p99_ms` değerlerini raporlar; bunlar canlı oturumun gerçek render + HUD yolunu
+kapsar (kamera, dünya, ekoloji ve HUD dâhil). Yüzdelik yardımcısı
+(`ws_live_percentile_ms`) bağımsız birim testiyle doğrulanır (`tests/test_live.c`
+`live_frame_percentiles`: sıralama, uç değerler, monotonluk, boş küme). `ci.yml`
+ve `gui-windows.yml` artık headless çıktısında `p95_ms=` alanını zorunlu kapı
+yapar; böylece performans iddiası otomatik ve makine-okunur kanıta bağlanır.
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):
@@ -166,6 +179,12 @@ SHA-256 değerleri değişmedi):
   çağrıları; sis kapatıldığında 1080p ~156 → ~141 ms, sis+speküler kapatıldığında
   ~101 ms. Bunlar sonraki dilimde (yaklaşım tabloları / GPU) hedeflenir.
 - `raster_cpu` 1080p / 2048 üçgen: ~35.6 ms.
+- **Canlı ürün sahnesi kare zamanı** (`--live-headless 5`, bu makine, 4 çekirdek,
+  CPU referans yolu; render + HUD, kamera/dünya/ekoloji dâhil):
+  - 1280×720: `avg_ms≈57.8`, `p50≈57.5`, `p95≈65.2`, `p99≈74.6` (~17 FPS).
+  - 1920×1080: `avg_ms≈123.2`, `p50≈123.2`, `p95≈140.6`, `p99≈150.4` (~8 FPS).
+  - Bu, test üçgeni çekirdeği değil gerçek ürün sahnesidir; 1080p p95 hedefi
+    (33,3 ms) CPU yolunda henüz tutulmuyor.
 - Zamanlayıcı: seri ~174 ms → paralel ~58 ms (`speedup≈3.0x`, `identical=1`).
 - `shadows` sahnesi 1920×1080: ~130 ms (gölge geçişi dâhil).
 - Döşemeli OpenCL raster (pocl CPU aygıtı, bu ortamda GPU yok):
