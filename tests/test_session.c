@@ -9,6 +9,7 @@
 
 #include "ui/ws_session.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -267,6 +268,54 @@ static int test_view_modes_cycle(void)
     WS_CHECK(ws_session_camera_input(s, 1.0, 0.0, 0.0, 0.0, 0.0, 0.1) == WS_OK);
     ws_camera c1 = ws_session_camera(s);
     WS_CHECK(c0.eye.x != c1.eye.x || c0.eye.z != c1.eye.z);
+    ws_session_destroy(s);
+    return 1;
+}
+
+static int test_camera_terrain_collision(void)
+{
+    /* Free-camera ground collision ("Kamera çarpışması ve fiziksel engel
+     * farkındalığı", docs/17): with collision on the eye is kept at least
+     * WS_SESSION_CAM_CLEARANCE_M above the terrain under it; with collision off
+     * the user may drive below the ground. Either way the world digest is
+     * untouched (the observer is read-only). */
+    ws_session *s = make(21ULL);
+    WS_CHECK(s != NULL);
+    WS_CHECK(ws_session_camera_collision(s) == 1);
+    (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_FREE, 0.0);
+
+    char before[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, before) == WS_OK);
+
+    /* Drive the camera hard towards the ground; it must stop on the clearance
+     * floor rather than sink into the terrain. */
+    for (int i = 0; i < 40; ++i) {
+        (void)ws_session_camera_input(s, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1);
+    }
+    ws_camera c = ws_session_camera(s);
+    double ground = ws_session_camera_ground_height(s);
+    WS_CHECK(isfinite(ground));
+    WS_CHECK(c.eye.y >= ground + WS_SESSION_CAM_CLEARANCE_M - 1e-6);
+    /* The eye actually reached the floor (it was not merely above it). */
+    WS_CHECK(c.eye.y <= ground + WS_SESSION_CAM_CLEARANCE_M + 1e-3);
+
+    /* With collision off the same input pushes the eye below the floor. */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_CAM_COLLISION) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0); /* off */
+    WS_CHECK(ws_session_camera_collision(s) == 0);
+    for (int i = 0; i < 40; ++i) {
+        (void)ws_session_camera_input(s, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1);
+    }
+    ws_camera below = ws_session_camera(s);
+    WS_CHECK(below.eye.y < ground + WS_SESSION_CAM_CLEARANCE_M);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0); /* on again */
+
+    char after[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, after) == WS_OK);
+    WS_CHECK(strcmp(before, after) == 0);
     ws_session_destroy(s);
     return 1;
 }
@@ -632,6 +681,16 @@ static int test_settings_menu(void)
     (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0);
     WS_CHECK(ws_session_look_sensitivity_pct(s) == 75);
 
+    /* The camera-collision row toggles the free-camera ground clearance. */
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_CAM_COLLISION) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    WS_CHECK(ws_session_camera_collision(s) == 1);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    WS_CHECK(ws_session_camera_collision(s) == 0);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0);
+    WS_CHECK(ws_session_camera_collision(s) == 1);
+
     /* The world is untouched by any of the menu work. */
     char after[WS_SESSION_DIGEST_HEX];
     WS_CHECK(ws_session_digest(s, after) == WS_OK);
@@ -643,6 +702,7 @@ static int test_settings_menu(void)
     WS_CHECK(ws_session_volume(s) == 70);
     WS_CHECK(ws_session_camera_speed_pct(s) == 100);
     WS_CHECK(ws_session_look_sensitivity_pct(s) == 100);
+    WS_CHECK(ws_session_camera_collision(s) == 1);
     WS_CHECK(ws_session_view_mode(s) == WS_VIEW_AUTO);
     WS_CHECK(ws_session_time_of_day_s(s) == 10.0 * 3600.0);
 
@@ -908,6 +968,7 @@ int main(void)
         {"session_save_load_roundtrip", test_save_load_roundtrip},
         {"session_render_signal", test_render_produces_signal},
         {"session_view_modes", test_view_modes_cycle},
+        {"session_camera_terrain_collision", test_camera_terrain_collision},
         {"session_stats_demography", test_stats_and_demography},
         {"session_shadows_toggle", test_shadows_toggle},
         {"session_settings_apply_readonly", test_settings_apply_and_readonly},

@@ -387,7 +387,7 @@ static const char *TOUR_STEPS[] = {
     "auto_day", "free_overview", "follow_deer", "map_overview",
     "auto_dusk", "follow_fox", "auto_night", "reload_check",
     "shadows_off", "shadows_on", "single_step", "settings_menu",
-    "world_select", "menu_click",
+    "world_select", "menu_click", "camera_collision",
 };
 
 static int capture_step(ws_session *s, ws_framebuffer *fb, float *depth,
@@ -677,6 +677,33 @@ static int run_tour(const ws_live_options *opts)
            click_row_ok, moved, activated, world_row_ok, world_moved, click_readonly);
     ok &= menu_click_ok;
 
+    /* Step 15: free-camera ground collision (docs/17 "Kamera çarpışması ve
+     * fiziksel engel farkındalığı"). Drive the free camera hard towards the
+     * ground; with collision on the eye stops at the clearance floor above the
+     * terrain, never sinking through it. Observer-only: the world digest is
+     * untouched. The step captures the camera resting on the ground. */
+    char collide_before[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, collide_before);
+    (void)ws_session_apply_command(s, WS_CMD_SET_VIEW_FREE, 0.0);
+    int collide_on = ws_session_camera_collision(s);
+    for (int i = 0; i < 60; ++i) {
+        (void)ws_session_camera_input(s, 0.0, 0.0, -1.0, 0.0, 0.0, 0.1);
+    }
+    ws_camera cam = ws_session_camera(s);
+    double ground = ws_session_camera_ground_height(s);
+    int collision_ok = collide_on == 1 &&
+                       cam.eye.y >= ground + WS_SESSION_CAM_CLEARANCE_M - 1e-6 &&
+                       cam.eye.y <= ground + WS_SESSION_CAM_CLEARANCE_M + 1e-3;
+    ok &= capture_step(s, &fb, depth, opts, TOUR_STEPS[step], step); step++;
+    char collide_after[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, collide_after);
+    int collide_readonly = strcmp(collide_before, collide_after) == 0;
+    printf("tour camera_collision on=%d eye_y=%.3f ground=%.3f clearance=%.3f "
+           "ok=%d readonly=%d\n",
+           collide_on, cam.eye.y, ground, WS_SESSION_CAM_CLEARANCE_M,
+           collision_ok, collide_readonly);
+    ok &= collision_ok && collide_readonly;
+
     if (mf != NULL) {
         fprintf(mf, "# Worldseed Engine P11 live tour manifest\n");
         fprintf(mf, "seed=%llu\n", (unsigned long long)opts->seed);
@@ -690,6 +717,7 @@ static int run_tour(const ws_live_options *opts)
         fprintf(mf, "settings_menu_verified=%d\n", menu_changed && menu_readonly);
         fprintf(mf, "world_select_verified=%d\n", select_readonly && select_open == 1);
         fprintf(mf, "menu_click_verified=%d\n", menu_click_ok);
+        fprintf(mf, "camera_collision_verified=%d\n", collision_ok && collide_readonly);
         fprintf(mf, "steps=%d\n", step);
         fclose(mf);
     }

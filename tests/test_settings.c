@@ -48,6 +48,7 @@ static int test_roundtrip(void)
     in.volume = 40;
     in.cam_speed = 250;
     in.look_sens = 175;
+    in.cam_collision = 0;
 
     char buf[512];
     size_t n = ws_settings_format(buf, sizeof(buf), &in);
@@ -70,6 +71,7 @@ static int test_roundtrip(void)
     WS_CHECK(out.volume == in.volume);
     WS_CHECK(out.cam_speed == in.cam_speed);
     WS_CHECK(out.look_sens == in.look_sens);
+    WS_CHECK(out.cam_collision == in.cam_collision);
     return 1;
 }
 
@@ -109,7 +111,8 @@ static int test_clamping(void)
         "hud_scale=9\n"
         "volume=999\n"
         "cam_speed=1\n"
-        "look_sens=99999\n";
+        "look_sens=99999\n"
+        "cam_collision=7\n";
     ws_settings s;
     WS_CHECK(ws_settings_parse(text, &s) == WS_OK);
     WS_CHECK(s.width == 16u);
@@ -123,6 +126,7 @@ static int test_clamping(void)
     WS_CHECK(s.volume == 100);
     WS_CHECK(s.cam_speed == 25);
     WS_CHECK(s.look_sens == 400);
+    WS_CHECK(s.cam_collision == 1);
     return 1;
 }
 

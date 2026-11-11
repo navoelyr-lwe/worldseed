@@ -137,6 +137,19 @@ anlamına gelir; böylece tek tuş hem canlı hem replay zaman çizelgesinde ile
 Tek adımla ilerletilen dünya, aynı tick sayısını normal kare zamanıyla ilerleten
 referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eşdeğerliği).
 
+### Serbest kamera yer çarpışması — `src/ui/ws_session.{h,c}`
+
+`docs/17` "Kamera kontrolleri" maddesinin kamera çarpışması/fiziksel engel
+farkındalığı kısmının uygulaması. Serbest kameranın gözü, altındaki arazi
+yüksekliğinin `WS_SESSION_CAM_CLEARANCE_M` (1.5 m) üzerinde tutulur ve su yüzeyinin
+altına inmez; arazi yüksekliği ve su seviyesi dünya konumunun saf fonksiyonları
+olduğundan (`ws_terrain_height_at`) kamera odak yamağının dışına çıksa bile yere
+gömülmez. Bu davranış ayarlar menüsündeki "Camera collision" satırıyla açılıp
+kapatılabilir (varsayılan açık); kapalıyken kullanıcı inceleme için yere inebilir ama
+göz mutlak datanın üstünde kalır. Kalıcı ayarlara eklendi (`cam_collision`). Gözlemci
+salt okunurdur: kamera hareketi dünya özetini değiştirmez (`tests/test_session.c`
+`session_camera_terrain_collision`).
+
 ## Kontroller (kullanıcıya görünür)
 
 | Tuş | İşlev |
@@ -177,11 +190,11 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   320×180'de `avg_ms=29.54 fps=33.8`, 640×360'ta `avg_ms=105.98 fps=9.4` verir —
   çözünürlük ölçeklemesi doğrusaldır ve pencere modunda otomatik ölçek devrededir.
 
-- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on dört adım
+- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on beş adım
   (auto gündüz, serbest genel görünüm, geyik takibi, harita, alacakaranlık, tilki
   takibi, gece+istatistik, kaydet→ilerlet→yükle, gölgeler kapalı, gölgeler açık, tek
-  adım, ayarlar menüsü, dünya seçimi, fare ile menü seçimi). Her adım gerçek PPM karesi
-  + SHA-256 ve manifest yazar. Bu makinede (1280×720):
+  adım, ayarlar menüsü, dünya seçimi, fare ile menü seçimi, kamera çarpışması). Her
+  adım gerçek PPM karesi + SHA-256 ve manifest yazar. Bu makinede (1280×720):
 
   ```
   tour step=00 auto_day     sha256=e31c82ce...  coverage=1.0000
@@ -190,7 +203,8 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   tour save_load saved=1 loaded=1 roundtrip=1
   tour single_step paused=1 from=580 to=585 ok=1
   tour menu_click settings_row=1 moved=1 activated=1 world_row=1 world_moved=1 readonly=1
-  LIVE_TOUR_OK steps=14
+  tour camera_collision on=1 eye_y=10.268 ground=8.768 clearance=1.500 ok=1 readonly=1
+  LIVE_TOUR_OK steps=15
   ```
 
   `roundtrip=1`, checkpoint kaydedildikten sonra dünyanın ilerletilip geri
@@ -200,7 +214,10 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   fareyle bir menü satırının seçildiğini (`moved=1`), ikinci tıklamanın satırı
   uyguladığını (`activated=1`), dünya seçim satırının da tıklamayla seçildiğini
   (`world_moved=1`) ve tüm bunların dünyayı değiştirmediğini (`readonly=1`) doğrular
-  (`manifest` içinde `menu_click_verified=1`).
+  (`manifest` içinde `menu_click_verified=1`). `camera_collision`, serbest kamera
+  yere doğru sürüldüğünde gözün arazinin `WS_SESSION_CAM_CLEARANCE_M` (1.5 m)
+  üzerinde durduğunu (`ok=1`) ve dünyayı değiştirmediğini (`readonly=1`) doğrular
+  (`manifest` içinde `camera_collision_verified=1`).
 
 - **Dünya seçimi kanıtı** — `worldseed.exe --live-select <dizin> --size WxH`
   (docs/17 "Ana deneyim": yeni dünya / mevcut dünyayı yükle / örnek dünyayı aç):
@@ -256,9 +273,9 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   içerir; `worldseed.exe --version` ile sürüm bildirir; `tools/ws_manifest` ile
   `MANIFEST.txt` üretilir; sürüm notu P11 canlı uygulamasını ve kalan sınırlamaları
   açıklar.
-- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.18.0-preview`
-  olarak hizalandı (fare ile menü seçimi dilimi); `worldseed.exe --version` aynı
-  dizeyi yazdırır.
+- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.19.0-preview`
+  olarak hizalandı (serbest kamera yer çarpışması dilimi); `worldseed.exe --version`
+  aynı dizeyi yazdırır.
 
 ## Bilinen sınırlamalar
 
@@ -273,8 +290,9 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   sürümdedir (`docs/10`, `docs/17`).
 - Ayarlar kalıcı olarak `worldseed.cfg` (anahtar=değer) dosyasında saklanır:
   çözünürlük, iç render ölçeği, başlangıç görünümü/saati, gölge/tam ekran, tohum,
-  metin boyutu, ana ses düzeyi, kamera hızı ve fare hassasiyeti. Açık komut satırı
-  bayrağı dosyayı geçersiz kılar; pencere temiz kapanışta dosyayı yazar.
+  metin boyutu, ana ses düzeyi, kamera hızı, fare hassasiyeti ve kamera çarpışması.
+  Açık komut satırı bayrağı dosyayı geçersiz kılar; pencere temiz kapanışta dosyayı
+  yazar.
   Etkileşimli ayar menüsü (`O`, `docs/17` madde 9) bu dilimde tamamlandı: menü
   gezilebilir ve değiştirilebilir, kaydet/geri yükle satırları dosyayı kullanır,
   çözünürlük satırı pencereyi yeniden boyutlandırır (tam ekranda değil). Dünya

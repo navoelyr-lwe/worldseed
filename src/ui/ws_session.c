@@ -35,6 +35,7 @@
 
 static ws_result session_serialize(ws_session *s, uint8_t **out_buf, size_t *out_len);
 static ws_result session_deserialize(ws_session *s, const uint8_t *bytes, size_t len);
+static ws_camera camera_for_view(const ws_session *s);
 
 typedef struct ws_actor {
     int active;
@@ -87,6 +88,7 @@ struct ws_session {
     int volume;            /* master audio volume percent 0..100 */
     int cam_speed_pct;     /* free-camera move speed percent 25..400 */
     int look_sens_pct;     /* mouse-look sensitivity percent 25..400 */
+    int cam_collision;     /* free-camera ground collision on/off (docs/17) */
     int speed_index;
     double time_of_day_s;
 
@@ -538,6 +540,7 @@ ws_result ws_session_create(ws_session **out, const ws_session_config *cfg)
     s->volume = 70;
     s->cam_speed_pct = 100;
     s->look_sens_pct = 100;
+    s->cam_collision = 1;
     s->settings_cursor = WS_SET_ITEM_WIDTH;
     snprintf(s->save_path, sizeof(s->save_path), "worldseed-checkpoint.wss");
     s->settings_path[0] = '\0';
@@ -670,6 +673,9 @@ static void settings_menu_adjust(ws_session *s, int delta)
         s->look_sens_pct += step * 25;
         if (s->look_sens_pct < 25) { s->look_sens_pct = 25; }
         if (s->look_sens_pct > 400) { s->look_sens_pct = 400; }
+        break;
+    case WS_SET_ITEM_CAM_COLLISION:
+        if (step != 0) { s->cam_collision = !s->cam_collision; }
         break;
     default:
         break;
@@ -1094,6 +1100,7 @@ ws_result ws_session_apply_settings(ws_session *s, const struct ws_settings *set
     ws_audio_set_master_gain(&s->audio, (double)s->volume / 100.0);
     s->cam_speed_pct = settings->cam_speed < 25 ? 25 : (settings->cam_speed > 400 ? 400 : settings->cam_speed);
     s->look_sens_pct = settings->look_sens < 25 ? 25 : (settings->look_sens > 400 ? 400 : settings->look_sens);
+    s->cam_collision = settings->cam_collision ? 1 : 0;
     return WS_OK;
 }
 
@@ -1119,6 +1126,7 @@ ws_result ws_session_get_settings(const ws_session *s, struct ws_settings *out)
     v.volume = s->volume;
     v.cam_speed = s->cam_speed_pct;
     v.look_sens = s->look_sens_pct;
+    v.cam_collision = s->cam_collision ? 1 : 0;
     *out = v;
     return WS_OK;
 }
@@ -1178,7 +1186,28 @@ ws_result ws_session_camera_input(ws_session *s, double forward, double right,
     eye = ws_vec3_add(eye, ws_vec3_scale(dir, forward * move));
     eye = ws_vec3_add(eye, ws_vec3_scale(rightv, right * move));
     eye.y += up * move;
-    if (eye.y < 1.5) {
+    if (s->cam_collision) {
+        /* Ground and water-surface collision ("Kamera çarpışması ve fiziksel
+         * engel farkındalığı", docs/17): keep the eye at least
+         * WS_SESSION_CAM_CLEARANCE_M above the terrain height under it, and
+         * never below the water surface. Both the height field and the water
+         * level are pure functions of world position, so the camera cannot sink
+         * into the ground or pass under the water even where it leaves the
+         * generated focus patch. */
+        double wx = eye.x + s->env.terrain.origin_x;
+        double wz = eye.z + s->env.terrain.origin_y;
+        double ground = ws_terrain_height_at(&s->env.terrain.config, wx, wz);
+        double floor_y = ground + WS_SESSION_CAM_CLEARANCE_M;
+        double water = s->env.terrain.config.water_level + WS_SESSION_CAM_CLEARANCE_M;
+        if (water > floor_y) {
+            floor_y = water;
+        }
+        if (eye.y < floor_y) {
+            eye.y = floor_y;
+        }
+    } else if (eye.y < 1.5) {
+        /* Collision off: still keep the eye above the absolute datum so the
+         * view does not flip under the world. */
         eye.y = 1.5;
     }
     s->free_camera.eye = eye;
@@ -1270,6 +1299,23 @@ int ws_session_volume(const ws_session *s) { return s != NULL ? s->volume : 0; }
 
 int ws_session_camera_speed_pct(const ws_session *s) { return s != NULL ? s->cam_speed_pct : 100; }
 
+int ws_session_camera_collision(const ws_session *s) { return s != NULL ? s->cam_collision : 1; }
+
+double ws_session_camera_ground_height(const ws_session *s)
+{
+    if (s == NULL) {
+        return 0.0;
+    }
+    const ws_camera c = camera_for_view(s);
+    double ground = ws_terrain_height_at(&s->env.terrain.config,
+                                         c.eye.x + s->env.terrain.origin_x,
+                                         c.eye.z + s->env.terrain.origin_y);
+    /* The collision surface is the higher of the terrain and the water level,
+     * matching the free-camera floor. */
+    double water = s->env.terrain.config.water_level;
+    return ground > water ? ground : water;
+}
+
 int ws_session_look_sensitivity_pct(const ws_session *s) { return s != NULL ? s->look_sens_pct : 100; }
 
 ws_result ws_session_settings_item(const ws_session *s, int item,
@@ -1342,6 +1388,10 @@ ws_result ws_session_settings_item(const ws_session *s, int item,
         snprintf(label, label_cap, "Look sensitivity");
         snprintf(value, value_cap, "%d%%", s->look_sens_pct);
         break;
+    case WS_SET_ITEM_CAM_COLLISION:
+        snprintf(label, label_cap, "Camera collision");
+        snprintf(value, value_cap, "%s", s->cam_collision ? "on" : "off");
+        break;
     case WS_SET_ITEM_SAVE:
         snprintf(label, label_cap, "Save settings now");
         snprintf(value, value_cap, "%s",
@@ -1377,6 +1427,7 @@ int ws_session_settings_item_value(const ws_session *s, int item)
     case WS_SET_ITEM_VOLUME: return s->volume;
     case WS_SET_ITEM_CAM_SPEED: return s->cam_speed_pct;
     case WS_SET_ITEM_LOOK_SENS: return s->look_sens_pct;
+    case WS_SET_ITEM_CAM_COLLISION: return s->cam_collision;
     case WS_SET_ITEM_SAVE: return s->settings_path[0] != '\0' ? 1 : 0;
     case WS_SET_ITEM_RELOAD: return s->settings_path[0] != '\0' ? 1 : 0;
     default: return -1;
