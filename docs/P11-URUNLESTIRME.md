@@ -177,11 +177,11 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   320×180'de `avg_ms=29.54 fps=33.8`, 640×360'ta `avg_ms=105.98 fps=9.4` verir —
   çözünürlük ölçeklemesi doğrusaldır ve pencere modunda otomatik ölçek devrededir.
 
-- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on üç adım
+- **Deterministik tur** — `worldseed.exe --live-tour <dizin> --size WxH`: on dört adım
   (auto gündüz, serbest genel görünüm, geyik takibi, harita, alacakaranlık, tilki
   takibi, gece+istatistik, kaydet→ilerlet→yükle, gölgeler kapalı, gölgeler açık, tek
-  adım, ayarlar menüsü, dünya seçimi). Her adım gerçek PPM karesi + SHA-256
-  ve manifest yazar. Bu makinede (1280×720):
+  adım, ayarlar menüsü, dünya seçimi, fare ile menü seçimi). Her adım gerçek PPM karesi
+  + SHA-256 ve manifest yazar. Bu makinede (1280×720):
 
   ```
   tour step=00 auto_day     sha256=e31c82ce...  coverage=1.0000
@@ -189,13 +189,18 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   tour step=06 auto_night   sha256=e02eb50c...
   tour save_load saved=1 loaded=1 roundtrip=1
   tour single_step paused=1 from=580 to=585 ok=1
-  LIVE_TOUR_OK steps=13
+  tour menu_click settings_row=1 moved=1 activated=1 world_row=1 world_moved=1 readonly=1
+  LIVE_TOUR_OK steps=14
   ```
 
   `roundtrip=1`, checkpoint kaydedildikten sonra dünyanın ilerletilip geri
   yüklendiğinde SHA-256 özetinin birebir aynı olduğunu kanıtlar. `single_step ok=1`,
   durakdayken beş tek adımın dünyayı tam beş tick ilerlettiğini ve duraklamayı
-  bozmadığını kanıtlar (`manifest` içinde `single_step_verified=1`).
+  bozmadığını kanıtlar (`manifest` içinde `single_step_verified=1`). `menu_click`,
+  fareyle bir menü satırının seçildiğini (`moved=1`), ikinci tıklamanın satırı
+  uyguladığını (`activated=1`), dünya seçim satırının da tıklamayla seçildiğini
+  (`world_moved=1`) ve tüm bunların dünyayı değiştirmediğini (`readonly=1`) doğrular
+  (`manifest` içinde `menu_click_verified=1`).
 
 - **Dünya seçimi kanıtı** — `worldseed.exe --live-select <dizin> --size WxH`
   (docs/17 "Ana deneyim": yeni dünya / mevcut dünyayı yükle / örnek dünyayı aç):
@@ -251,8 +256,8 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   içerir; `worldseed.exe --version` ile sürüm bildirir; `tools/ws_manifest` ile
   `MANIFEST.txt` üretilir; sürüm notu P11 canlı uygulamasını ve kalan sınırlamaları
   açıklar.
-- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.17.0-preview`
-  olarak hizalandı (dünya seçimi dilimi); `worldseed.exe --version` aynı
+- Sürüm: `CMakeLists.txt` proje sürümü ve `src/core/ws_version.h` `0.18.0-preview`
+  olarak hizalandı (fare ile menü seçimi dilimi); `worldseed.exe --version` aynı
   dizeyi yazdırır.
 
 ## Bilinen sınırlamalar
@@ -275,5 +280,9 @@ referans dünyayla bit-özdeş bir SHA-256 özeti verir (sabit zaman adımı eş
   çözünürlük satırı pencereyi yeniden boyutlandırır (tam ekranda değil). Dünya
   seçimi (`docs/17` "Ana deneyim") bu dilimde tamamlandı: uygulama açılışında yeni
   dünya / mevcut dünyayı yükle / örnek dünyayı aç seçim ekranı gösterilir. Menü ve
-  seçim satırlarında fareyle tıklayarak seçme sonraki dilimdedir.
+  seçim satırlarında fareyle tıklayarak seçme bu dilimde tamamlandı (`docs/17`
+  madde 9): bir sol tıklama üzerine geldiği satırı seçer, vurgulanan satıra ikinci
+  tıklama satırı klavyedeki `Enter` gibi uygular; HUD kendi çizdiği geometriyle
+  vuruş sınaması yapar, oturum API'si (`ws_session_settings_select_row`,
+  `ws_session_world_select_row`) platformdan bağımsız ve test edilebilirdir.
 - `1.0.0` yalnız `docs/00` bölüm 8'in bütün koşulları geçildiğinde yayımlanır.

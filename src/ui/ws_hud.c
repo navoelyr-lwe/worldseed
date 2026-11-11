@@ -335,23 +335,76 @@ static void draw_stats_panel(ws_framebuffer *fb, const ws_session *s, int scale)
 
 /* --- settings menu (docs/17 item 9) ------------------------------------- */
 
+/* Shared geometry for the two modal menus, so the draw code, the mouse
+ * hit-test and the tour evidence all agree on where a row sits. */
+typedef struct ws_hud_menu_layout {
+    int x, y;        /* panel top-left corner */
+    uint32_t w, h;   /* panel size */
+    int line_h;      /* row pitch in pixels */
+    int first_row_y; /* y of the first selectable row's text */
+    int rows;        /* number of selectable rows */
+} ws_hud_menu_layout;
+
+static ws_hud_menu_layout settings_menu_layout(uint32_t fb_w, uint32_t fb_h, int scale)
+{
+    ws_hud_menu_layout L;
+    L.line_h = (int)(WS_FONT_GLYPH_H * (uint32_t)scale + 3u);
+    L.w = 320u * (uint32_t)scale;
+    L.h = (uint32_t)L.line_h * (uint32_t)(WS_SET_ITEM_COUNT + 3) + 10u;
+    L.x = 6;
+    /* Sits below the info panel, but never pushed off a small window (or off
+     * the bottom under large text): clamp so the panel stays visible. */
+    int y = 6 + L.line_h * 12 + 8 + 6;
+    int y_max = (int)fb_h - (int)L.h - 6;
+    if (y > y_max) { y = y_max; }
+    if (y < 0) { y = 0; }
+    L.y = y;
+    L.first_row_y = L.y + L.line_h; /* the header line comes first */
+    L.rows = WS_SET_ITEM_COUNT;
+    (void)fb_w;
+    return L;
+}
+
+static ws_hud_menu_layout world_select_menu_layout(uint32_t fb_w, uint32_t fb_h, int scale)
+{
+    ws_hud_menu_layout L;
+    L.line_h = (int)(WS_FONT_GLYPH_H * (uint32_t)scale + 4u);
+    L.w = 360u * (uint32_t)scale;
+    L.h = (uint32_t)L.line_h * (uint32_t)(WS_WORLD_CHOICE_COUNT + 5u) + 12u;
+    L.x = ((int)fb_w - (int)L.w) / 2;
+    L.y = ((int)fb_h - (int)L.h) / 2;
+    L.first_row_y = L.y + 6 + L.line_h * 2; /* title, then a blank line */
+    L.rows = WS_WORLD_CHOICE_COUNT;
+    return L;
+}
+
+/* The row under a framebuffer point, or -1 if it is not on a selectable row. */
+static int menu_row_at(const ws_hud_menu_layout *L, int px, int py)
+{
+    int rel = py - L->first_row_y;
+    if (px < L->x || rel < 0) {
+        return -1;
+    }
+    int row = rel / L->line_h;
+    if (row < 0 || row >= L->rows) {
+        return -1;
+    }
+    return row;
+}
+
 static void draw_settings_panel(ws_framebuffer *fb, const ws_session *s, int scale)
 {
-    uint32_t line_h = WS_FONT_GLYPH_H * (uint32_t)scale + 3u;
-    int x = 6;
-    int y = 6 + (int)(line_h * 12u + 8u) + 6;
-    uint32_t w = 320u * (uint32_t)scale;
-    uint32_t h = line_h * (uint32_t)(WS_SET_ITEM_COUNT + 3) + 10u;
-    panel(fb, x - 3, y - 3, w, h);
+    ws_hud_menu_layout L = settings_menu_layout(fb->width, fb->height, scale);
+    panel(fb, L.x - 3, L.y - 3, L.w, L.h);
 
     int cursor = ws_session_settings_cursor(s);
     char label[64];
     char value[48];
     char buf[128];
-    int cy = y;
-    ws_font_draw(fb, x, cy, "SETTINGS  (up/down move, left/right change)", scale,
+    int cy = L.y;
+    ws_font_draw(fb, L.x, cy, "SETTINGS  (up/down move, left/right change)", scale,
                  COL_ACCENT);
-    cy += (int)line_h;
+    cy += L.line_h;
 
     for (int i = 0; i < WS_SET_ITEM_COUNT; ++i) {
         if (ws_session_settings_item(s, i, label, sizeof(label), value, sizeof(value)) != WS_OK) {
@@ -360,11 +413,11 @@ static void draw_settings_panel(ws_framebuffer *fb, const ws_session *s, int sca
         int sel = (i == cursor);
         const uint8_t *col = sel ? COL_ACCENT : COL_TEXT;
         snprintf(buf, sizeof(buf), "%c %-22s %s", sel ? '>' : ' ', label, value);
-        ws_font_draw(fb, x, cy, buf, scale, col);
-        cy += (int)line_h;
+        ws_font_draw(fb, L.x, cy, buf, scale, col);
+        cy += L.line_h;
     }
 
-    ws_font_draw(fb, x, cy, "O / Esc  close   B  reset defaults", scale, COL_DIM);
+    ws_font_draw(fb, L.x, cy, "O / Esc  close   B  reset defaults", scale, COL_DIM);
 }
 
 /* --- replay panel (docs/17 item 8) -------------------------------------- */
@@ -414,21 +467,17 @@ static void draw_replay_panel(ws_framebuffer *fb, const ws_session *s, int scale
 
 static void draw_world_select_panel(ws_framebuffer *fb, const ws_session *s, int scale)
 {
-    uint32_t line_h = WS_FONT_GLYPH_H * (uint32_t)scale + 4u;
-    uint32_t w = 360u * (uint32_t)scale;
-    uint32_t h = line_h * (uint32_t)(WS_WORLD_CHOICE_COUNT + 5u) + 12u;
-    int x = ((int)fb->width - (int)w) / 2;
-    int y = ((int)fb->height - (int)h) / 2;
-    panel(fb, x, y, w, h);
+    ws_hud_menu_layout L = world_select_menu_layout(fb->width, fb->height, scale);
+    panel(fb, L.x, L.y, L.w, L.h);
 
     int cursor = ws_session_world_select_cursor(s);
     char label[64];
     char value[48];
     char buf[160];
-    int cy = y + 6;
-    ws_font_draw(fb, x + 8, cy, "WORLDSEED  -  choose a world", scale, COL_ACCENT);
-    cy += (int)line_h;
-    cy += (int)line_h;
+    int cy = L.y + 6;
+    ws_font_draw(fb, L.x + 8, cy, "WORLDSEED  -  choose a world", scale, COL_ACCENT);
+    cy += L.line_h;
+    cy += L.line_h;
 
     for (int i = 0; i < WS_WORLD_CHOICE_COUNT; ++i) {
         if (ws_session_world_choice_item(s, i, label, sizeof(label), value, sizeof(value)) != WS_OK) {
@@ -438,14 +487,14 @@ static void draw_world_select_panel(ws_framebuffer *fb, const ws_session *s, int
         int sel = (i == cursor);
         const uint8_t *col = !enabled ? COL_DIM : (sel ? COL_ACCENT : COL_TEXT);
         snprintf(buf, sizeof(buf), "%c %-26s %s", sel ? '>' : ' ', label, value);
-        ws_font_draw(fb, x + 8, cy, buf, scale, col);
-        cy += (int)line_h;
+        ws_font_draw(fb, L.x + 8, cy, buf, scale, col);
+        cy += L.line_h;
     }
 
-    cy += (int)(line_h / 2u);
-    ws_font_draw(fb, x + 8, cy, "up/down  move    enter  open", scale, COL_TEXT);
-    cy += (int)line_h;
-    ws_font_draw(fb, x + 8, cy, "M / Esc  cancel (keep current world)", scale, COL_DIM);
+    cy += L.line_h / 2;
+    ws_font_draw(fb, L.x + 8, cy, "up/down  move    enter  open", scale, COL_TEXT);
+    cy += L.line_h;
+    ws_font_draw(fb, L.x + 8, cy, "M / Esc  cancel (keep current world)", scale, COL_DIM);
 }
 
 /* --- help overlay ------------------------------------------------------- */
@@ -462,6 +511,7 @@ static const char *HELP_LINES[] = {
     "  T          toggle directional shadows",
     "  O          toggle settings menu",
     "  (menu) up/down move, left/right change, enter apply",
+    "  (menu) click a row to select it, click again to apply",
     "  M          world selection (new / load / sample)",
     "  Arrow keys / WASD  fly the free camera",
     "  Mouse drag look (free view)",
@@ -525,4 +575,27 @@ void ws_hud_draw(ws_framebuffer *fb, const ws_session *s, const ws_hud_options *
     if (ws_session_world_select_visible(s)) {
         draw_world_select_panel(fb, s, scale);
     }
+}
+
+/* --- menu hit-testing (docs/17 item 9 / "Ana deneyim") ------------------ */
+
+/* The geometry below mirrors draw_settings_panel / draw_world_select_panel
+ * exactly (same panel origin, same line height, same row order), so a click
+ * lands on the row that is painted. A point on the header or the footer lines
+ * maps to -1. */
+
+int ws_hud_settings_row_at(uint32_t fb_w, uint32_t fb_h, int scale, int px, int py)
+{
+    (void)fb_w;
+    (void)fb_h;
+    if (scale < 1) { scale = 1; }
+    ws_hud_menu_layout L = settings_menu_layout(fb_w, fb_h, scale);
+    return menu_row_at(&L, px, py);
+}
+
+int ws_hud_world_select_row_at(uint32_t fb_w, uint32_t fb_h, int scale, int px, int py)
+{
+    if (scale < 1) { scale = 1; }
+    ws_hud_menu_layout L = world_select_menu_layout(fb_w, fb_h, scale);
+    return menu_row_at(&L, px, py);
 }

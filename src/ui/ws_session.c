@@ -856,6 +856,47 @@ ws_result ws_session_world_confirm(ws_session *s, int choice)
     return r;
 }
 
+/* Mouse-driven menu selection (docs/17 item 9 / "Ana deneyim"). A left click
+ * lands on a row id; the platform maps the pointer to that id with the HUD's
+ * own geometry, so the click target is exactly what is drawn. Selecting moves
+ * the cursor; activating runs the same action as the keyboard. */
+
+ws_result ws_session_settings_select_row(ws_session *s, int row)
+{
+    if (s == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (row < 0 || row >= WS_SET_ITEM_COUNT) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    s->settings_visible = 1;
+    if (s->settings_cursor == row) {
+        /* A second click on the highlighted row activates it, like Enter. */
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_APPLY, 0.0);
+    } else {
+        s->settings_cursor = row;
+    }
+    return WS_OK;
+}
+
+ws_result ws_session_world_select_row(ws_session *s, int row)
+{
+    if (s == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (row < 0 || row >= WS_WORLD_CHOICE_COUNT) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
+    s->world_select_visible = 1;
+    if (s->world_select_cursor == row) {
+        /* A second click opens the clicked world, like Enter. */
+        (void)ws_session_world_confirm(s, row);
+    } else {
+        s->world_select_cursor = row;
+    }
+    return WS_OK;
+}
+
 ws_result ws_session_apply_command(ws_session *s, int command, double arg)
 {
     if (s == NULL) {

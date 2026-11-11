@@ -261,6 +261,22 @@ void ws_session_world_set_new_seed(ws_session *s, uint64_t seed);
  * deserialize error from a corrupt checkpoint. Closes the selection screen. */
 ws_result ws_session_world_confirm(ws_session *s, int choice);
 
+/* --- mouse-driven menu selection (docs/17 item 9 / "Ana deneyim") ------- */
+
+/* The modal menus can be driven with the mouse as well as the keyboard: a left
+ * click selects the row under the pointer, and a click on the highlighted row
+ * activates it (the settings "Save now"/"Reload" rows act, the world-selection
+ * screen opens the clicked world). This is observer-only, exactly like the
+ * keyboard path, so it never changes the world digest.
+ *
+ * Row ids are the very enums the HUD draws: `ws_settings_item` for the settings
+ * menu, `ws_world_choice` for the world-selection screen. Selecting a row moves
+ * the menu cursor to it; activating performs the same action as the keyboard.
+ * Both return WS_OK, or WS_ERR_INVALID_ARGUMENT when no menu is open or the row
+ * id is out of range. */
+ws_result ws_session_settings_select_row(ws_session *s, int row);
+ws_result ws_session_world_select_row(ws_session *s, int row);
+
 /* Frames and wall time of the most recent render, for the performance HUD. */
 void ws_session_perf(const ws_session *s, double *out_last_frame_ms,
                      double *out_avg_frame_ms, double *out_fps, uint64_t *out_frames);

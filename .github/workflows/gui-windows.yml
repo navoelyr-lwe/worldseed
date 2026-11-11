@@ -146,6 +146,8 @@ jobs:
           if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "settings_menu_verified=1" -Quiet)) { exit 1 }
           # world-selection screen (docs/17 "Ana deneyim") is proven in the same manifest.
           if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "world_select_verified=1" -Quiet)) { exit 1 }
+          # mouse-driven menu selection (docs/17 item 9 / "Ana deneyim") is proven in the same manifest.
+          if (-not (Select-String -Path evidence/gui/live/tour/manifest.txt -Pattern "menu_click_verified=1" -Quiet)) { exit 1 }
           # The world-selection evidence mode proves new / load / sample choices.
           & build-gui/src/app/Release/worldseed.exe --live-select evidence/gui/live/select --size 640x360 |
             Tee-Object -FilePath evidence/gui/live/select.txt

@@ -172,6 +172,53 @@ static int test_hud_settings_panel(void)
     return 1;
 }
 
+static int test_hud_menu_hit_test(void)
+{
+    /* The hit-test must map a point to the row the HUD draws at that point.
+     * Scan the panel column and confirm every row id is reachable exactly once
+     * in order, and that points outside the menu return -1. */
+    const uint32_t W = 640u, H = 360u;
+    for (int scale = 1; scale <= 2; ++scale) {
+        int seen_settings[WS_SET_ITEM_COUNT];
+        for (int i = 0; i < WS_SET_ITEM_COUNT; ++i) { seen_settings[i] = 0; }
+        int prev = -1, ordered = 1;
+        for (int y = 0; y < (int)H; ++y) {
+            int row = ws_hud_settings_row_at(W, H, scale, 24, y);
+            if (row >= 0) {
+                if (row < prev) { ordered = 0; }
+                prev = row;
+                seen_settings[row] = 1;
+            }
+        }
+        for (int i = 0; i < WS_SET_ITEM_COUNT; ++i) {
+            WS_CHECK(seen_settings[i] == 1);
+        }
+        WS_CHECK(ordered);
+        /* Left of the panel is a miss. */
+        WS_CHECK(ws_hud_settings_row_at(W, H, scale, 0, 100) < 0);
+
+        int seen_world[WS_WORLD_CHOICE_COUNT];
+        for (int i = 0; i < WS_WORLD_CHOICE_COUNT; ++i) { seen_world[i] = 0; }
+        prev = -1;
+        ordered = 1;
+        for (int y = 0; y < (int)H; ++y) {
+            int row = ws_hud_world_select_row_at(W, H, scale, (int)W / 2, y);
+            if (row >= 0) {
+                if (row < prev) { ordered = 0; }
+                prev = row;
+                seen_world[row] = 1;
+            }
+        }
+        for (int i = 0; i < WS_WORLD_CHOICE_COUNT; ++i) {
+            WS_CHECK(seen_world[i] == 1);
+        }
+        WS_CHECK(ordered);
+        /* Above the panel is a miss. */
+        WS_CHECK(ws_hud_world_select_row_at(W, H, scale, (int)W / 2, 0) < 0);
+    }
+    return 1;
+}
+
 static int test_hud_world_select_panel(void)
 {
     ws_session *s = make(106ULL);
@@ -200,6 +247,7 @@ int main(void)
         {"hud_null_safe", test_hud_null_safe},
         {"hud_stats_panel", test_hud_stats_panel},
         {"hud_settings_panel", test_hud_settings_panel},
+        {"hud_menu_hit_test", test_hud_menu_hit_test},
         {"hud_world_select_panel", test_hud_world_select_panel},
     };
     return ws_test_run("hud", cases, (int)(sizeof(cases) / sizeof(cases[0])));

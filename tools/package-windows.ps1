@@ -43,6 +43,7 @@ if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "shadow
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "single_step_verified=1" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "settings_menu_verified=1" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "world_select_verified=1" -Quiet)) { exit 1 }
+if (-not (Select-String -Path evidence/live/tour-a/manifest.txt -Pattern "menu_click_verified=1" -Quiet)) { exit 1 }
 & $exe --live-tour evidence/live/tour-b --size 1280x720 | Out-Null
 Get-ChildItem evidence/live/tour-a/step-*.ppm | ForEach-Object {
     $b = Join-Path "evidence/live/tour-b" $_.Name
@@ -89,15 +90,16 @@ New-Item -ItemType Directory -Force -Path "$stage/select" | Out-Null
 Copy-Item evidence/live/select/*.png "$stage/select/"
 Copy-Item evidence/live/select/select-manifest.txt "$stage/select/"
 @(
-    "Worldseed Engine preview (P11 - dunya secimi).",
+    "Worldseed Engine preview (P11 - fare ile menu secimi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
     "Acilista dunya secim ekrani gelir: YENI dunya olustur, MEVCUT dunyayi yukle",
     "(kayit varsa) veya ORNEK dunyayi ac. Ok tuslari imleci tasir, Enter secer,",
-    "M/Esc vazgecer; canli gorunumde M ile yeniden acilir. Ornek dunya sabit tohumla",
-    "bit-ozdes uretilir; secim ekrani gozlemci salt-okunurdur.",
+    "M/Esc vazgecer; canli gorunumde M ile yeniden acilir. Bir satira fareyle",
+    "tiklamak imleci tasir, vurgulanan satira ikinci tiklama satiri uygular. Ornek",
+    "dunya sabit tohumla bit-ozdes uretilir; secim ekrani gozlemci salt-okunurdur.",
     "Kalici ayarlar: seciminiz worldseed.cfg dosyasina yazilir ve sonraki acilista geri yuklenir;",
     "pencerede O tusu etkilesimli ayar menusunu acar (up/down gez, left/right degistir, enter uygula,",
-    "B varsayilanlar, O/Esc kapat). Acik komut satiri bayragi dosyayi gecersiz kilar.",
+    "B varsayilanlar, O/Esc kapat). Menude fare ile secim de ayni sekilde calisir.",
     "Canli tuslar: O ayarlar, M dunya secimi, T yonlu golgeleri acar/kapatir (varsayilan kapali).",
     "Canli kanit (penceresiz): worldseed.exe --live-headless 3 --size 1280x720",
     "Sahneler: worldseed.exe --list  (shadows: yonlu golge eslemesi)",
