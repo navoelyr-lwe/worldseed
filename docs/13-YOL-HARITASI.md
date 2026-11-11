@@ -97,6 +97,50 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
 
 **Kabul:** `00-URUN-SOZLESMESI.md` bölüm 8 release şartlarının tamamı.
 
+## P12 — Render performansı ve ürün görsel kalitesi
+
+**Çıktı:** mevcut C17 CPU renderer korunarak tam sahne iş yükünün optimize edilmesi; OpenCL C 1.2 tam sahne compute yolunun aşamalı entegrasyonu; bitki/mesh LOD ve culling; altı ürün referans sahnesinde görsel kalite protokolü.
+
+**Kabul:** native 3840×2160 referans sahnelerde en az 10 dakikalık ölçüm boyunca p95 frame-time ≤33,3 ms; gerçek GPU cihazı/driver bilgisi ile ölçüm; CPU fallback doğruluğu ve performans raporu; geometri/malzeme/ışık/gölge/atmosfer/hareket kalite kontrol listesi. Yalnız OpenCL kernel testi veya golden hash geçişi tam sahne performans/görsel kalite kabulü değildir.
+
+**Durum:** Devam ediyor. P12 için mevcut benchmark ve bilinen sınırlamalar `P12-RENDER-PERFORMANS-VE-KALITE.md` içindedir.
+
+## P13 — Üç boyutlu tür biyomekaniği
+
+**Çıktı:** düzlemsel prototipin yerine bağımsız sağ/sol uzuvları olan 3B beden, eklem, temas, denge ve tür-özel hareket kontrolü. Kızıl geyik ilk yüksek ayrıntılı referans türdür.
+
+**Kabul:** yürüme/koşu/dönüş/yokuş/zemin senaryoları; 3B temas ve denge testleri; enerji maliyeti ve hareket kıyasları; veri kaynağı/belirsizlikleri belgeli D3 referans tür doğrulaması. Diğer üç türün beden ve gait parametreleri ayrı doğrulanır.
+
+## P14 — Çok duyulu algı ve doğal davranış
+
+**Çıktı:** görüş/örtülme, işitme, koku, iç durum, hafıza, öğrenme, sosyal bilgi ve habitat etkilerini birleştiren tür-özel algı/karar sistemi.
+
+**Kabul:** algı menzili ve çevre etkileri için testler; koku plume/rüzgâr, ses mesafe/engel/maskeleme ve görüş çizgisi; çoklu seed/mevsim/tehdit/kaynak senaryolarında davranış ölçümü; öğrenme iddiaları için nicel önce/sonra karşılaştırması.
+
+## P15 — 2 km habitat mozaiği ve ekolojik döngüler
+
+**Çıktı:** dört bağlı habitatta bitki, kaynak, hayvan, toprak ve mevsim süreçlerini ilişkilendiren ekosistem. Odak alanı yüksek ayrıntısı ile uzak alan aggregate düzeyleri açıkça tanımlanır.
+
+**Kabul:** 2.048 m × 2.048 m referans haritada dört habitatın dağılımı ve bağlantısı; türe/bitkiye özgü kaynak ve yaşam döngüleri; geyik örtü-yem dengesi, tilki alternatif diyet, tavşan warren/sosyal grup ve yaban domuzu mevsimsel omnivori/rooting; çoklu seed ve çok mevsimli uzun koşu; popülasyon/biomass/enerji/habitat kullanım raporu; parametre duyarlılığı ve belirsizlik analizi. Saha verisi olmayan sonuçlar kalibre edilmiş tahmin olarak sunulmaz.
+
+## P16 — Doğal ses manzarası ve mekânsal ses
+
+**Çıktı:** olay-tonu prototipinden çevresel ses katmanları, tür/davranış sesleri, fiziksel yayılım ve Windows canlı ses aygıtı çıkışına geçiş.
+
+**Kabul:** rüzgâr/yaprak, yağmur, su ve habitat ambiyansı; gerçek simülasyon olaylarından gelen tür/etkinlik sesleri; mesafe/yön/engel/zemin/atmosfer etkileri; canlı çıkış ve aygıt kaybı dayanıklılığı; deterministik WAV tekrar testi; akustik parametrelerin kaynak ve geçerlilik alanı.
+
+## P17 — Doğal gözlem ve sinematik yönetmen
+
+**Çıktı:** tek olay/tek konu yönetmeninden çok aktörlü, ortam ve sakin yaşam gözlemini de içeren salt-okunur sinematik yönetmene geçiş.
+
+**Kabul:** av-avcı, grup, anne-yavru ve türler arası kadraj; olay dışı doğal çevre planları; geniş/orta/yakın/takip planları; kamera sürekliliği/örtülme/ivme sınırları; her çekimin gerçek olay/snapshot kimliği ve zamanıyla eşleşmesi; ses ve replay zamanının tutarlılığı.
+
+## P18 — Entegrasyon ve V1.0 kabulü
+
+**Çıktı:** bütün alt sistemlerin gerçek Windows ürününde birlikte çalıştığı ilk kararlı sürüm.
+
+**Kabul:** `00-URUN-SOZLESMESI.md` bölüm 8'in tüm maddeleri; dört bağlı habitat; dört türde doğrulanmış tür-özel 3B beden/hareket; çalışan çoklu tür ekolojisi; kamera dışı ilerleme/kalıcılık/replay; doğal ses ve canlı çıkış; referans sahne görsel kalite protokolü; native 4K/30 FPS referans performansı; otomatik bilimsel/uzun süre/GUI/paket/temiz kurulum kapıları. Hiçbir eksik test atlanarak veya performans eşiği düşürülerek 1.0.0 yayımlanmaz.
+
 ## Bağımlılık prensibi
 
 - Render ve sinematik prototip erken görünür olmalı; ancak fiziksel/biyolojik simülasyonla karıştırılmamalı.
