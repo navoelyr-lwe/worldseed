@@ -84,14 +84,20 @@ kural kanıtla uygulanır:
   ışık frustum'u farklı olduğundan tüm nesneleri korur). Rasterleyici **uzak
   düzlemde kırpma yapmadığından** yalnız beş düzlem (sol/sağ/alt/üst/yakın)
   kullanılır; uzak düzlemi de elemek uzaktaki geometriyi yanlışlıkla siler.
-- **Önden-arkaya (front-to-back) sıralama bit-özdeş DEĞİL:** Aşırı çizimi
-  azaltmak için üçgenleri derinliğe göre sıralamak, z **beraberliğinde** hangi
-  üçgenin pikseli kazandığını değiştirir; `terrain_day`'de ölçüldü ve 4188 bayt
-  farklı çıktı. Bu yüzden aşırı çizim azaltma şu an bloke; yalnız beraberlik
-  kırıcı deterministik bir anahtarla (örneğin nesne indeksi) bit-özdeş hâle
-  getirilebilir.
-- **Sıradaki büyük fırsat — aşırı çizim (overdraw):** Ürün sahnelerinde
-  `terrain_day`/`world_stream` ~1.9x aşırı çizim gösterir (bir piksel ortalama iki
-  kez gölgeleniyor). Derinlik testi zaten gölgelemeden **önce** (erken-z) yapılır;
-  bu yüzden kazanç yalnız çizim sırasını değiştirmekle elde edilir ve bu da
-  yukarıdaki beraberlik sorunu nedeniyle henüz bit-özdeş değildir.
+- **Önden-arkaya (front-to-back) sıralama bit-özdeş DEĞİL:** Derinlik tamponu
+  `float32`'dir; iki yüzeyin derinliği **aynı float değerine yuvarlandığında**
+  hangi üçgenin önce yazıldığı kazananı belirler (ikinci yüzey kesin daha yakın
+  değilse reddedilir). Derinliğe göre sıralama bu "önce yazan" sırasını
+  değiştirdiğinden kazanan piksel değişir. Orijinal indekse dayalı kararlı bir
+  beraberlik kırıcı bunu düzeltmez: sıralama anahtarı (örneğin üçgen merkez
+  derinliği) piksel-başına yuvarlanmış derinlikten farklı olduğundan, örtüşen ve
+  aynı float'a yuvarlanan yüzeyler yine yer değiştirebilir. `terrain_day`'de
+  ölçüldü: 4188 bayt farklı çıktı (uzak mesafede float32 nicelemesi kaba olduğu
+  için çok sayıda yüzey aynı derinliğe çöküyor). Bu yüzden çizim sırasını
+  değiştiren aşırı-çizim azaltma bit-özdeş değildir ve bloke.
+- **Sıradaki büyük fırsat — aşırı çizim (overdraw):** Güncel ürün ölçümü
+  (1920×1080) `terrain_day` **1.31x** (ertelenmiş gökyüzü bunu önceki ~1.9x'ten
+  düşürdü), `ecosystem` 0.80x, `world_stream` 0.56x. Derinlik testi zaten
+  gölgelemeden **önce** (erken-z) yapılır; bu yüzden kazanç yalnız çizim sırasını
+  değiştirmekle elde edilir ve bu da yukarıdaki niceleme sorunu nedeniyle henüz
+  bit-özdeş değildir.

@@ -320,12 +320,14 @@ silinirdi). Gölge geçişi ışık frustum'u farklı olduğundan tüm nesneleri
 - **Yeni birim testi:** `render frustum cull is bit identical` — frustum dışı bir
   küpün elendiğini (`objects_culled == 1`) ve sahnenin o küp olmadan çizilen
   sürümle bit-özdeş kaldığını doğrular.
-- **Kalan engel (aşırı çizim):** `terrain_day`/`world_stream` ~1.9x aşırı çizim
-  gösterir. Derinlik testi zaten gölgelemeden önce (erken-z) yapılır; bu yüzden
-  kazanç yalnız çizim sırasını değiştirmekle gelir ve bu, z **beraberliğinde**
-  hangi üçgenin pikseli kazandığını değiştirdiğinden bit-özdeş değildir
-  (`terrain_day`'de ölçüldü: 4188 bayt farklı). Bu optimizasyon beraberlik kırıcı
-  deterministik bir anahtar bulunana kadar ertelenir.
+- **Kalan engel (aşırı çizim):** Güncel ölçüm (1920×1080) `terrain_day` aşırı
+  çizimi **1.31x** (ertelenmiş gökyüzü bunu önceki ~1.9x'ten düşürdü);
+  `ecosystem` 0.80x, `world_stream` 0.56x, `sky` 0.22x, `shadows` 0.37x. Derinlik
+  testi zaten gölgelemeden önce (erken-z) yapılır; bu yüzden kazanç yalnız çizim
+  sırasını değiştirmekle gelir ve bu, z **beraberliğinde** hangi üçgenin pikseli
+  kazandığını değiştirdiğinden bit-özdeş değildir (`terrain_day`'de ölçüldü:
+  4188 bayt farklı). Bu optimizasyon beraberlik kırıcı deterministik bir anahtar
+  bulunana kadar ertelenir.
 
 ## Ölçüm
 
