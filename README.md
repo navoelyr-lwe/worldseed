@@ -72,6 +72,7 @@ Tam ürün planı 22 dosyadır. İçerik `docs/plan-bundle/RESTORE.md` yönerges
 | `docs/life/MODEL-KARTI-DAVRANIS.md` | Fayda tabanlı davranış ve sınırlı öğrenme model kartı (P6) |
 | `docs/life/MODEL-KARTI-EKOLOJI.md` | Ekosistem ve popülasyon dinamiği model kartı (P7) |
 | `docs/life/MODEL-KARTI-POPULASYON.md` | Toplam bölge popülasyonu model kartı (P8) |
+| `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` | Frontal düzlem (lateral) denge ve dönüş model kartı (P13 ilk dilim) |
 | `docs/life/TUR-KARTI-KIZIL-GEYIK.md` | Kızıl geyik tür kartı (P7) |
 | `docs/life/TUR-KARTI-KIZIL-TILKI.md` | Kızıl tilki tür kartı (P7) |
 | `docs/life/TUR-KARTI-AVRUPA-TAVSANI.md` | Avrupa tavşanı tür kartı (P7) |

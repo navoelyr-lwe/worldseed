@@ -252,7 +252,7 @@ Kaynak:
 | Öncelik | Risk | Neden önemli | Önerilen çözüm |
 |---|---|---|---|
 | P0 / Blokaj | 4K/30 FPS ve tam sahne renderer entegrasyonu yok | 1.0 görsel/perf release kapısı karşılanmıyor | **Kısmen çözüldü (PR #64/#66/#67):** tam sahne OpenCL C 1.2 yolu canlı döngüye bağlı ve gerçek GPU'da native 4K `p95 ≈ 22 ms` (51 FPS) ölçüldü; kalan: 12 GB sınıfı referans donanım ve gölge-açık ölçüm |
-| P0 / Blokaj | Biyomekanik yalnız sagittal ortak model | Dört türde 3B beden/kontrol hedefi karşılanmıyor | 3B bağımsız uzuv/temas/denge, önce kızıl geyik D3 |
+| P0 / Blokaj | Biyomekanik yalnız sagittal ortak model | Dört türde 3B beden/kontrol hedefi karşılanmıyor | 3B bağımsız uzuv/temas/denge, önce kızıl geyik D3. **Kısmi ilerleme:** frontal düzlem (lateral) denge/dönüş modeli dört tür için eklendi (`src/life/ws_lateral.*`); tam 3B çözücü açık |
 | P0 / Blokaj | Ekoloji homojen ve kalibre edilmemiş | 2 km habitat mozaiği ve besin ağı hedefi karşılanmıyor | Tür/habitat/bitki katmanlarını bağla; D3 referans kıyası |
 | P1 / Yüksek | Ses olay-tonu düzeyinde | Orman/animal soundscape ürün deneyimi yok | Çevre tabakaları, tür sesleri, yayılım ve canlı cihaz çıkışı |
 | P1 / Yüksek | Yönetmen dar olay/tek konu/hard-cut davranışında | Doğa belgeseli anlatımı ve sakin gözlem eksik | Ortam planları, çok aktör, çekim geçişleri, event continuity |
@@ -289,6 +289,15 @@ Kabul kapıları:
 - Önce kızıl geyik için referans hareket ve enerji verileriyle D3 kıyas yapılır; veri olmayan parametreler varsayım ve belirsizlik aralığı olarak kalır.
 - Sonraki türlerin vücut oranı, kütle/atalet, ekstremite, ayak/pençe/toynak ve gait profilleri birbirinden ayrılır.
 - Görsel beden her zaman fiziksel state'ten türetilir; animasyon pozu fiziksel gerçeğin yerine geçmez.
+
+**İlerleme (2026-11):** İlk dilim tamamlandı — frontal düzlem (lateral) denge ve
+dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
+(`docs/life/MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.*`,
+`tools/ws_lateral_check.c`, `tests/test_lateral.c`). Bu model bağımsız sol/sağ
+duruş, LIPM + yakalama-noktası ayak yerleştirme, sönümlü yalpa ve tür-ölçekli
+dönüş sınırını içerir; **azaltılmış mertebedendir** ve sagittal çözücüye yazmaz.
+Yukarıdaki kapıların tam 3B kısmı (bağımsız 3B uzuv state'i, temas kuvveti,
+3B denge/enerji D3 kıyası, tür-özel 3B gait doğrulaması) **açıktır**.
 
 ### P14 — Çok duyulu algı ve doğal davranış
 

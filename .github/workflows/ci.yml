@@ -192,6 +192,18 @@ jobs:
           test "$(grep -c 'verdict=PASS' evidence/motion/motion.txt)" = "4" \
             || { echo "a species walk failed the motion checklist"; exit 1; }
 
+      - name: Lateral balance and turning evidence (P13)
+        run: |
+          # P13 adds the frontal plane the sagittal solver lacks. The lateral
+          # model is run straight and in a commanded turn for every species and
+          # gated on bounded sway/roll, steps actually taken, turn-rate tracking
+          # and determinism.
+          mkdir -p evidence/lateral
+          ./build/tools/ws_lateral_check evidence/lateral 20260101 | tee evidence/lateral/lateral.txt
+          grep -q "WS_LATERAL_OK" evidence/lateral/lateral.txt
+          test "$(grep -c 'verdict=PASS' evidence/lateral/lateral.txt)" = "4" \
+            || { echo "a species failed the lateral balance/turning checklist"; exit 1; }
+
       - name: Asset pipeline
         run: |
           mkdir -p evidence/assets

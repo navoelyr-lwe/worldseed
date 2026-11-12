@@ -68,6 +68,7 @@ add_library(worldseed_core STATIC
   physics/ws_wind.c
   life/ws_creature.c
   life/ws_quadruped.c
+  life/ws_lateral.c
   life/ws_perception.c
   life/ws_organism.c
   life/ws_agent.c
