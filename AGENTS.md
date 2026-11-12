@@ -179,13 +179,25 @@ kural kanıtla uygulanır:
   stride denetleyicisi denendi ve **işe yaramadı** (sistem yine kaotik); bu yüzden
   basit açık-çevrim + heading tutma tercih edildi.
 - **Sınır:** yalnız referans kızıl geyik kapılanır. Tilki/tavşan/domuz henüz aynı
-  standartta değil (küçük türler yavaş ilerliyor); koşu/yokuş/farklı zemin
+  standartta değil (küçük türler yavaş ilerliyor); koşu/farklı zemin
   senaryoları, dinamik temas kuvveti ve D3 kıyası açıktır.
+- **Üçüncü dilim — referans türde dönüş ve yokuş:** `ws_quad3_balance`'ın yaw
+  hız servosu **dünya baş açısı (heading) hedef izleme** terimine çevrildi.
+  Ders: "yaw hızı hedefi" ile "baş açısı hedefi" aynı şey değildir; baş açısı
+  tutma terimi hedefi **sıfıra** çektiği için komutlu dönüşü engelliyordu
+  (ölçüldü: komut 6 rad, gerçekleşen 0,1 rad). Hedef izleme terimi (hata
+  sarmalamasıyla) hedef sıfırken düz yürüyüşü korur, doğrusal artan hedefte
+  dönüşü izler. Kanıt: `tools/ws_body3d_check`'e **komutlu dönüş** (izleme
+  hatası < 0,25 rad, dik kalma > 0,9) ve **%10 eğimli rampada tırmanış** (> 0,5 m
+  tırmanış, ileri ilerleme, dik kalma) kapıları; `tests/test_body3d.c`'ye iki
+  birim testi (10/10). `tools/package-windows.ps1`'e 3B gövde kanıt kapısı
+  eklendi (sahne sayısı harness'ın kendi `WS_BODY3D_OK scenes=N` çıktısından
+  okunur, bayatlamaz). Zemin bir yükseklik fonksiyonudur; eğim bu yolla modellenir.
 - **Canlı-döngü GPU benchmark'ı zaten mevcut ve CI'da zorunlu:** `gui-windows.yml`
   `worldseed --live-bench 600 --live-gpu --size 3840x2160` koşar; gerçek dünya
   adımı + ekoloji + aktörler + kamera + render + HUD, `gpu_frames` == kare sayısı,
   `cpu_fallback_frames=0 gpu_errors=0`, ham `frames.csv`, `p95_ok=1`. Son
-  ölçüm (RTX 3060 Laptop, `main`=`cde1c12`): p95 21,15 ms / ~52 FPS. Bunu yeni bir
+  ölçüm (RTX 3060 Laptop, `main`=`b066d49`): p95 20,90 ms / ~52,6 FPS (run 43239422714). Bunu yeni bir
   iş sanma; mevcut kapıyı koru.
 - **Branch protection açığı sürüyor:** token ile `branches/main/protection` ve
   `rulesets` uç noktaları **403 "Resource not accessible by integration"** verir

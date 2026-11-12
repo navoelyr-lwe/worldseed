@@ -111,7 +111,7 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
 
 **Kabul:** yürüme/koşu/dönüş/yokuş/zemin senaryoları; 3B temas ve denge testleri; enerji maliyeti ve hareket kıyasları; veri kaynağı/belirsizlikleri belgeli D3 referans tür doğrulaması. Diğer üç türün beden ve gait parametreleri ayrı doğrulanır.
 
-**Durum:** Başladı (iki dilim).
+**Durum:** Başladı (üç dilim).
 
 - *Dilim 1 — frontal düzlem:* Frontal düzlem (lateral) denge, dört ayak teması ve
   dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
@@ -127,10 +127,18 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
   ayak teması CI'da kapılanıyor (`docs/life/MODEL-KARTI-UCD-BEDEN.md`,
   `tools/ws_body3d_check.c`, `tests/test_body3d.c`). Bu çözücü sagittal golden
   sahnelerden ayrıdır; golden CPU çıktısı bit-özdeş kalır.
+- *Dilim 3 — referans türde dönüş ve yokuş:* `ws_quad3_balance` yaw hız servosu
+  yerine **dünya baş açısı (heading) hedef izleme** terimine geçirildi; hedef
+  sıfırken düz yürüyüş korunur, doğrusal artan hedef komutlu dönüşü izler.
+  Referans geyik için **komutlu dönüş** (izleme hatası < 0,25 rad, dik kalma >
+  0,9) ve **%10 eğimli rampada tırmanış** (> 0,5 m tırmanış, ileri ilerleme, dik
+  kalma) CI kapısı olarak eklendi (`tools/ws_body3d_check.c`,
+  `tests/test_body3d.c`, `tools/package-windows.ps1`).
 
-**Açık:** koşu/yokuş/farklı zemin senaryoları, dinamik temas kuvveti ve 3B
-denge/enerji D3 kıyası, ve diğer üç türün (tilki, tavşan, domuz) aynı standartta
-3B doğrulaması.
+**Açık:** koşu (tırıstan hızlı), dinamik temas kuvveti ve 3B denge/enerji D3
+kıyası, ve diğer üç türün (tilki, tavşan, domuz) aynı standartta 3B doğrulaması
+(profil yürüyüş hızlarına ulaşmıyorlar; bacak boyu ve amplitüd ölçeklemesi
+gerekiyor).
 
 ## P14 — Çok duyulu algı ve doğal davranış
 

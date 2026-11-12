@@ -29,6 +29,13 @@ static double flat(void *ctx, double x, double y)
     return 0.0;
 }
 
+static double slope_ground(void *ctx, double x, double y)
+{
+    (void)y;
+    double grade = *(const double *)ctx;
+    return grade * x;
+}
+
 /* ---------- quaternion ---------- */
 
 static int test_quat_normalize_and_rotate(void)
@@ -257,6 +264,81 @@ static int test_lateral_independence(void)
     return 1;
 }
 
+/* ---------- turning and slope ---------- */
+
+static int test_quad3_turns(void)
+{
+    static ws_body3d c;
+    static ws_quad3_storage st;
+    static ws_quad3_parts parts;
+    ws_species_profile p = ws_species_red_deer();
+    WS_CHECK(ws_body3d_init(&c, DT, G, ITERS, BIAS, st.bodies, 16, st.joints, 16,
+                            st.feet, 8) == WS_OK);
+    ws_body3d_set_ground(&c, flat, NULL);
+    WS_CHECK(ws_quad3_build(&c, &st, &p, 0.0, &parts) == WS_OK);
+    ws_quad3_hold_rest(&c, &parts);
+    for (int s = 0; s < 480 * 3; ++s) {
+        ws_quad3_balance(&c, &parts, &p, 0.0);
+        ws_body3d_step(&c);
+    }
+    const double yaw_rate = 0.6;
+    double phase = 0.0;
+    int steps = 480 * 10;
+    for (int s = 0; s < steps; ++s) {
+        phase += 1.4 * DT;
+        double heading_cmd = yaw_rate * (double)s * DT;
+        ws_quad3_gait_targets(&c, &parts, &p, phase);
+        ws_quad3_balance(&c, &parts, &p, heading_cmd);
+        WS_CHECK(ws_body3d_step(&c) == WS_OK);
+    }
+    const ws_body3 *torso = &c.bodies[parts.torso];
+    ws_vec3 fwd = ws_quat_rotate(torso->orient, ws_vec3_make(1.0, 0.0, 0.0));
+    ws_vec3 up = ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
+    double heading = atan2(-fwd.z, fwd.x);
+    double err = heading - yaw_rate * (double)steps * DT;
+    err = atan2(sin(err), cos(err));
+    /* The servo tracks the commanded heading within a quarter radian and the
+     * body stays upright through the turn. */
+    WS_CHECK(fabs(err) < 0.25);
+    WS_CHECK(up.y > 0.9);
+    return 1;
+}
+
+static int test_quad3_climbs_slope(void)
+{
+    static ws_body3d c;
+    static ws_quad3_storage st;
+    static ws_quad3_parts parts;
+    ws_species_profile p = ws_species_red_deer();
+    WS_CHECK(ws_body3d_init(&c, DT, G, ITERS, BIAS, st.bodies, 16, st.joints, 16,
+                            st.feet, 8) == WS_OK);
+    static double grade = 0.10;
+    ws_body3d_set_ground(&c, slope_ground, &grade);
+    WS_CHECK(ws_quad3_build(&c, &st, &p, 0.0, &parts) == WS_OK);
+    ws_quad3_hold_rest(&c, &parts);
+    for (int s = 0; s < 480 * 3; ++s) {
+        ws_quad3_balance(&c, &parts, &p, 0.0);
+        ws_body3d_step(&c);
+    }
+    ws_vec3 a = ws_body3d_center_of_mass(&c);
+    double phase = 0.0;
+    for (int s = 0; s < 480 * 20; ++s) {
+        phase += 1.4 * DT;
+        ws_quad3_gait_targets(&c, &parts, &p, phase);
+        ws_quad3_balance(&c, &parts, &p, 0.0);
+        WS_CHECK(ws_body3d_step(&c) == WS_OK);
+    }
+    ws_vec3 b = ws_body3d_center_of_mass(&c);
+    const ws_body3 *torso = &c.bodies[parts.torso];
+    ws_vec3 up = ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
+    /* Climbs the ramp, keeps making forward progress and stays upright. */
+    WS_CHECK(b.y - a.y > 0.5);
+    WS_CHECK((b.x - a.x) / 20.0 > 0.2);
+    WS_CHECK(up.y > 0.9);
+    WS_CHECK(fabs(b.z - a.z) < 0.6);
+    return 1;
+}
+
 /* ---------- invalid input ---------- */
 
 static int test_invalid_input(void)
@@ -295,6 +377,8 @@ int main(void)
         {"determinism", test_determinism},
         {"quad3 stands", test_quad3_stands},
         {"quad3 walks forward", test_quad3_walks_forward},
+        {"quad3 turns in place", test_quad3_turns},
+        {"quad3 climbs slope", test_quad3_climbs_slope},
         {"lateral independence", test_lateral_independence},
         {"invalid input", test_invalid_input},
     };

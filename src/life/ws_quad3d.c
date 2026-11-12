@@ -313,7 +313,7 @@ void ws_quad3_gait_targets(ws_body3d *c, const ws_quad3_parts *parts,
 /* Body x is forward, y is up, z is lateral (right-handed). Roll is a rotation
  * about the forward (x) axis; pitch is a rotation about the lateral (z) axis. */
 void ws_quad3_balance(ws_body3d *c, const ws_quad3_parts *parts,
-                      const ws_species_profile *p, double yaw_rate_target)
+                      const ws_species_profile *p, double heading_target)
 {
     if (c == NULL || parts == NULL) {
         return;
@@ -341,19 +341,22 @@ void ws_quad3_balance(ws_body3d *c, const ws_quad3_parts *parts,
     ws_vec3 up_body = ws_quat_rotate(qc, ws_vec3_make(0.0, 1.0, 0.0));
     ws_vec3 fwd_body = ws_quat_rotate(qc, ws_vec3_make(1.0, 0.0, 0.0));
     ws_vec3 w_body = ws_quat_rotate(qc, b->omega);
-    /* Heading (yaw) of the torso's forward in the world x-z plane. The yaw servo
-     * holds that heading at zero (straight line) or tracks a turn rate; the
-     * heading term removes the slow curve an asymmetric gait would otherwise
-     * accumulate. */
+    /* Heading (yaw) of the torso's forward in the world x-z plane. The servo
+     * tracks an absolute heading target (zero for straight-line walking, a
+     * growing value for a commanded turn); the heading term also removes the
+     * slow curve an asymmetric gait would otherwise accumulate. */
     ws_vec3 fwd_world = ws_quat_rotate(b->orient, ws_vec3_make(1.0, 0.0, 0.0));
     double heading = atan2(-fwd_world.z, fwd_world.x);
+    double heading_err = heading - heading_target;
+    /* Wrap the error to (-pi, pi] so a target that crosses the atan2 seam does
+     * not demand a full spin. */
+    heading_err = atan2(sin(heading_err), cos(heading_err));
     /* Pitch (about z): level means world forward maps to body (1,0,0). A nose-up
      * pitch of +theta makes fwd_body.y = -sin(theta), so the corrective torque
      * is +kp*fwd_body.y. Roll (about x): a roll of +phi makes up_body.z =
      * -sin(phi), so the corrective torque is +kp*up_body.z. */
     ws_vec3 t_body = ws_vec3_make(kp * up_body.z - kd * w_body.x,
-                                  kyaw * (yaw_rate_target - w_body.y) -
-                                      khead * heading,
+                                  -kyaw * w_body.y - khead * heading_err,
                                   kp * fwd_body.y - kd * w_body.z);
     b->extra_torque = ws_quat_rotate(b->orient, t_body);
 }
