@@ -263,6 +263,18 @@ jobs:
           if (-not (Select-String -Path evidence/gui/perf/perf-4k.txt -Pattern "perf scene" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/gui/perf/perf-4k.txt -Pattern "3840x2160" -Quiet)) { Write-Error "no native 4K measurement produced"; exit 1 }
 
+      - name: Release package smoke on isolated runner
+        shell: pwsh
+        run: |
+          # Exercise the exact release packaging path (tools/package-windows.ps1)
+          # on the real runner so a stale gate in that script fails on the PR, not
+          # only at release time (a stale motion gate did exactly that). Uses a
+          # smoke version; nothing is published.
+          ./tools/package-windows.ps1 -BuildDir build-gui -Version smoke
+          if (-not (Test-Path worldseed-windows-x64.zip)) { Write-Error "no package zip produced"; exit 1 }
+          if (-not (Select-String -Path worldseed-windows-x64.zip.sha256 -Pattern "worldseed-windows-x64.zip" -Quiet)) { Write-Error "no package checksum"; exit 1 }
+          if (-not (Test-Path MANIFEST.txt)) { Write-Error "no package manifest"; exit 1 }
+
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
