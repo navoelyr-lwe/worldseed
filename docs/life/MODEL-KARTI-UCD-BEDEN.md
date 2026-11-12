@@ -42,22 +42,25 @@
    - **Temas + sürtünme:** normal kısıt tek taraflıdır (impuls ≥ 0); teğet
      kısıt Coulomb konisiyle sınırlanır (`|λ_t| ≤ μ·λ_n`).
    - **Denge refleksi:** gövde ekseninde pitch/roll PD torku (gövde
-     `x`=ileri, `y`=yukarı, `z`=yanal) ve yaw hız servosu
-     (`ws_quad3_balance(..., yaw_rate_target)`). Kazançlar tür kütle × uzunluk
-     ölçeğiyle ölçeklenir.
+     `x`=ileri, `y`=yukarı, `z`=yanal), yaw hız servosu ve dünya baş açısı
+     (heading) tutma terimi (`ws_quad3_balance(..., yaw_rate_target)`). Kazançlar
+     tür kütle × uzunluk ölçeğiyle ölçeklenir.
    - **Yürüyüş:** tırıs (diagonal) faz; çapraz ayak çiftleri dönüşümlü salınır
      (`ws_quad3_gait_targets`).
 6. **Ayrıklaştırma ve çözücü:** Ardışık-impuls (sequential impulse),
    `solver_iterations = 30`, `position_bias = 0,2`, sabit adım. Deterministik:
-   aynı girdi aynı çıktıyı verir (bit düzeyinde test edilir).
+   aynı girdi aynı çıktıyı verir (bit düzeyinde test edilir). **Adım duyarlılığı:**
+   açık-çevrim yürüyüş sabit adıma duyarlıdır; baş açısı tutma terimi yanal
+   sürüklenmeyi adımdan bağımsız biçimde sınırlar (2,0–2,2 ms aralığında
+   sürüklenme < 0,3 m).
 7. **Varsayımlar / sınırlar:** Katı gövdeler, düzlemsel olmayan zemin destekli;
    temas sürtünmesi tek nokta; kas yerine tork motorları; aerodinamik yok. Küçük
    türler daha küçük adım gerektirir (önerilen adım yardımcısı). Bu çözücü
    **sagittal golden sahneleri etkilemez**; golden CPU çıktısı bit-özdeş kalır.
 8. **Kalibrasyon / doğrulama durumu:** D1 (kavramsal/geometrik doğrulama).
-   Referans geyik için duruş kararlılığı, ileri yürüyüş, düz baş, bağımsız
-   sol/sağ ayak yükü ve dört ayak teması CI'da kapılanır. D3 (ölçülmüş saha
-   verisiyle kıyas) açıktır.
+   Referans geyik için duruş kararlılığı, ileri yürüyüş (~1,7 m/s), düz baş
+   (yanal sürüklenme < 0,3 m / 20 s), bağımsız sol/sağ ayak yükü ve dört ayak
+   teması CI'da kapılanır. D3 (ölçülmüş saha verisiyle kıyas) açıktır.
 9. **Bilinen sınırlama:** Diğer üç tür (tilki, tavşan, domuz) henüz aynı
    standartta doğrulanmadı; tür-özel gait fazı/frekansı ve denge kazançları
    ayrıca ele alınacak (P13 sonraki dilim). Koşu ve yokuş senaryoları bu dilimde

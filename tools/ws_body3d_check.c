@@ -185,8 +185,8 @@ int main(int argc, char **argv)
         double drift = sqrt(sm.dx * sm.dx + sm.dz * sm.dz);
         int gates = stand_ok && walk_ok && sm.finite && wm.finite &&
                     sm.dy > -0.2 && drift < 0.2 && sm.min_contacts >= 3 &&
-                    wm.v_fwd > 0.2 && wm.v_fwd < 1.6 && wm.height > 0.6 &&
-                    wm.lateral_drift < 1.0 && wm.max_lr_asymmetry > 0.01;
+                    wm.v_fwd > 0.3 && wm.v_fwd < 2.2 && wm.height > 0.6 &&
+                    wm.lateral_drift < 0.6 && wm.max_lr_asymmetry > 0.01;
         int is_ref = ((ws_species_kind)k == ref);
         if (is_ref && !gates) {
             failed = 1;

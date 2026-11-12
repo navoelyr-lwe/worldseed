@@ -217,8 +217,8 @@ static int test_quad3_walks_forward(void)
     ws_vec3 b = ws_body3d_center_of_mass(&c);
     double v = (b.x - a.x) / 20.0;
     /* Moves forward at a walking speed, stays upright and roughly straight. */
-    WS_CHECK(v > 0.2 && v < 1.6);
-    WS_CHECK(fabs(b.z - a.z) < 1.0);
+    WS_CHECK(v > 0.3 && v < 2.2);
+    WS_CHECK(fabs(b.z - a.z) < 0.6);
     WS_CHECK(b.y > 0.6);
     return 1;
 }

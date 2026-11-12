@@ -294,8 +294,8 @@ void ws_quad3_gait_targets(ws_body3d *c, const ws_quad3_parts *parts,
     if (p != NULL) {
         duty = p->duty_factor;
     }
-    const double hip_amp = 0.16;
-    const double knee_lift = 0.9;
+    const double hip_amp = 0.10;
+    const double knee_lift = 0.6;
     /* Diagonal pairs move together: FL & RR in phase, FR & RL half a cycle
      * later. */
     const double leg_phase[WS_LEG_COUNT] = {
@@ -333,6 +333,7 @@ void ws_quad3_balance(ws_body3d *c, const ws_quad3_parts *parts,
     const double kp = 4000.0 * torque_scale;
     const double kd = 500.0 * torque_scale;
     const double kyaw = 400.0 * torque_scale;
+    const double khead = 2500.0 * torque_scale;
     ws_body3 *b = &c->bodies[torso];
     /* World up and forward, then resolved into the body frame. */
     ws_quat qc = ws_quat_make(b->orient.w, -b->orient.x, -b->orient.y,
@@ -340,13 +341,19 @@ void ws_quad3_balance(ws_body3d *c, const ws_quad3_parts *parts,
     ws_vec3 up_body = ws_quat_rotate(qc, ws_vec3_make(0.0, 1.0, 0.0));
     ws_vec3 fwd_body = ws_quat_rotate(qc, ws_vec3_make(1.0, 0.0, 0.0));
     ws_vec3 w_body = ws_quat_rotate(qc, b->omega);
+    /* Heading (yaw) of the torso's forward in the world x-z plane. The yaw servo
+     * holds that heading at zero (straight line) or tracks a turn rate; the
+     * heading term removes the slow curve an asymmetric gait would otherwise
+     * accumulate. */
+    ws_vec3 fwd_world = ws_quat_rotate(b->orient, ws_vec3_make(1.0, 0.0, 0.0));
+    double heading = atan2(-fwd_world.z, fwd_world.x);
     /* Pitch (about z): level means world forward maps to body (1,0,0). A nose-up
      * pitch of +theta makes fwd_body.y = -sin(theta), so the corrective torque
      * is +kp*fwd_body.y. Roll (about x): a roll of +phi makes up_body.z =
-     * -sin(phi), so the corrective torque is +kp*up_body.z. Yaw (about y) is
-     * servoed to the requested turn rate. */
+     * -sin(phi), so the corrective torque is +kp*up_body.z. */
     ws_vec3 t_body = ws_vec3_make(kp * up_body.z - kd * w_body.x,
-                                  kyaw * (yaw_rate_target - w_body.y),
+                                  kyaw * (yaw_rate_target - w_body.y) -
+                                      khead * heading,
                                   kp * fwd_body.y - kd * w_body.z);
     b->extra_torque = ws_quat_rotate(b->orient, t_body);
 }
