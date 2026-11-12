@@ -279,16 +279,20 @@ static int test_render_frustum_cull_is_bit_identical(void)
     ws_mesh cube;
     WS_CHECK(ws_mesh_make_cube(&cube, verts, 24u, idx, 36u, color) == WS_OK);
 
-    ws_scene_object objects[2];
+    ws_scene_object objects[3];
     ws_scene scene;
-    WS_CHECK(ws_scene_init(&scene, objects, 2u) == WS_OK);
+    WS_CHECK(ws_scene_init(&scene, objects, 3u) == WS_OK);
     ws_material mat = ws_material_make(0.7, 0.6, 0.4, 0.8, 0.0, 0.0);
-    /* One cube in front of the camera, one far to the side and well outside the
-     * frustum. */
+    /* A culled cube first, then a visible one, then another culled cube. The
+     * culled object before the visible one exercises the prepass cursor
+     * bookkeeping: if a skipped object's vertices were not accounted for, the
+     * visible cube's prep offsets would collide and corrupt its geometry. */
     ws_mat4 near_m = ws_mat4_translation(ws_vec3_make(0.0, 0.4, 0.0));
-    ws_mat4 far_m = ws_mat4_translation(ws_vec3_make(400.0, 0.4, 0.0));
+    ws_mat4 far_a = ws_mat4_translation(ws_vec3_make(-400.0, 0.4, 0.0));
+    ws_mat4 far_b = ws_mat4_translation(ws_vec3_make(400.0, 0.4, 0.0));
+    WS_CHECK(ws_scene_add_object(&scene, &cube, far_a, mat) == WS_OK);
     WS_CHECK(ws_scene_add_object(&scene, &cube, near_m, mat) == WS_OK);
-    WS_CHECK(ws_scene_add_object(&scene, &cube, far_m, mat) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene, &cube, far_b, mat) == WS_OK);
     scene.camera = ws_camera_default();
 
     ws_framebuffer fb;
@@ -298,11 +302,11 @@ static int test_render_frustum_cull_is_bit_identical(void)
 
     ws_render_stats st;
     WS_CHECK(ws_render_scene(&scene, &fb, depth, 32u, &st) == WS_OK);
-    /* The far cube is outside the frustum and must be culled. */
-    WS_CHECK(st.objects_culled == 1u);
+    /* Both far cubes are outside the frustum and must be culled. */
+    WS_CHECK(st.objects_culled == 2u);
 
-    /* The same scene without the far cube renders bit-identically: the culled
-     * object contributed nothing. */
+    /* The same scene without the far cubes renders bit-identically: the culled
+     * objects contributed nothing. */
     ws_scene_object objects2[1];
     ws_scene scene2;
     WS_CHECK(ws_scene_init(&scene2, objects2, 1u) == WS_OK);

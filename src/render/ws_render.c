@@ -1228,6 +1228,13 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
             if (obj->mesh == NULL || obj->mesh->vertices == NULL) {
                 continue;
             }
+            /* A culled object is never drawn, so its prepass entries are never
+             * read; skipping the vertex work is a pure speed-up. Advance the
+             * cursor so every object keeps a distinct, stable base offset. */
+            if (obj_visible != NULL && !obj_visible[oi]) {
+                cursor += obj->mesh->vertex_count;
+                continue;
+            }
             ws_mat4 mvp = ws_mat4_multiply(view_proj, obj->transform);
             ws_mat3 normal_mat = ws_mat4_normal_matrix(obj->transform);
             const ws_mesh *mesh = obj->mesh;
