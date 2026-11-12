@@ -19,6 +19,7 @@ typedef struct ws_render_stats {
     uint64_t triangles_clipped; /* dropped by near-plane clipping */
     uint64_t triangles_drawn;
     uint64_t pixels_shaded;
+    uint64_t objects_culled; /* objects skipped by the camera frustum test */
 } ws_render_stats;
 
 /* Render `scene` into `fb`. `depth` is an optional width*height float buffer

@@ -295,6 +295,38 @@ bit-özdeş optimizasyon uygulandı:
   piksel gökyüzü-kapalı render'la, boş piksel saf gökyüzü render'ıyla birebir
   aynı). Test sayısı 41 → 43.
 
+### 12. Görünürlük (frustum) eleme — bit-özdeş (bu PR)
+
+Kamera frustumunun tamamen dışında kalan nesneler artık çizilmez. Her nesnenin
+dünya-uzayı eksen-hizalı kutusu (AABB) beş düzleme (sol/sağ/alt/üst/yakın) karşı
+sınanır; kutu bir düzlemin tamamen gerisindeyse nesne atlanır. Bu **bit-özdeş**
+bir hızlandırmadır: böyle bir kutunun içerdiği her üçgen zaten kırpılacağı için
+atlamak çıktıyı değiştirmez. Rasterleyici **uzak düzlemde kırpma yapmadığından**
+uzak düzlem eleme için kullanılmaz (aksi hâlde uzaktaki geometri yanlışlıkla
+silinirdi). Gölge geçişi ışık frustum'u farklı olduğundan tüm nesneleri korur.
+
+- **Kapsam:** `src/render/ws_render.c` (frustum düzlem çıkarımı, AABB sınama,
+  nesne görünürlük dizisi), `src/render/ws_render.h` (`objects_culled` sayacı).
+- **Fırsat (ölçüldü):** `terrain_day` üçgenlerinin ~%43'ü, `ecosystem`'in ~%97'si
+  frustum dışında; `world_stream`/`shadows`/`sky` sahnelerinde eleme yok.
+- **Kazanç:** Sahneler görünür-piksel gölgelemesine bağlı olduğundan eleme
+  kare-zamanını yalnız ~%1–2 düşürür (`terrain_day` 136.9 → 136.7 ms,
+  `ecosystem` 80.4 → 79.2 ms, 1080p). Eleme, ekran-dışı rasteri kaldırır; kalan
+  maliyet görünür piksellerin gölgelenmesidir. Yine de sıfır riskli ve P12
+  kapsamındadır (LOD/eleme).
+- **Bit-özdeşlik:** 17 golden sahnenin tamamı 1920×1080'de birebir aynı (`cmp`);
+  `terrain_day` ve `ecosystem` ayrıca **3840×2160**'ta da bit-özdeş (küçük kare
+  nadir farkları gizleyebildiği için ürün çözünürlüğünde doğrulandı).
+- **Yeni birim testi:** `render frustum cull is bit identical` — frustum dışı bir
+  küpün elendiğini (`objects_culled == 1`) ve sahnenin o küp olmadan çizilen
+  sürümle bit-özdeş kaldığını doğrular.
+- **Kalan engel (aşırı çizim):** `terrain_day`/`world_stream` ~1.9x aşırı çizim
+  gösterir. Derinlik testi zaten gölgelemeden önce (erken-z) yapılır; bu yüzden
+  kazanç yalnız çizim sırasını değiştirmekle gelir ve bu, z **beraberliğinde**
+  hangi üçgenin pikseli kazandığını değiştirdiğinden bit-özdeş değildir
+  (`terrain_day`'de ölçüldü: 4188 bayt farklı). Bu optimizasyon beraberlik kırıcı
+  deterministik bir anahtar bulunana kadar ertelenir.
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):
