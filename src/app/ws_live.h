@@ -32,7 +32,8 @@ enum {
     WS_LIVE_SET_VIEW = 1u << 2,
     WS_LIVE_SET_TIME = 1u << 3,
     WS_LIVE_SET_RENDER_SCALE = 1u << 4,
-    WS_LIVE_SET_FULLSCREEN = 1u << 5
+    WS_LIVE_SET_FULLSCREEN = 1u << 5,
+    WS_LIVE_SET_GPU = 1u << 6
 };
 
 typedef struct ws_live_options {

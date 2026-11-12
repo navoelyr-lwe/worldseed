@@ -456,6 +456,68 @@ static int test_shadows_toggle(void)
     return 1;
 }
 
+static int test_gpu_render_opt_in(void)
+{
+    /* The live product loop can render through the opt-in OpenCL full-scene
+     * path (P12). Off by default; when enabled the session still renders a
+     * complete frame and the world digest is unaffected (the renderer is an
+     * observer of the scene). On a device-less host ws_render_scene_gpu falls
+     * back to the CPU reference, so this passes everywhere. */
+    ws_session *s = make(9ULL);
+    WS_CHECK(s != NULL);
+    run_seconds(s, 1.0);
+
+    char before[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, before) == WS_OK);
+    WS_CHECK(ws_session_gpu_render_enabled(s) == 0);
+
+    ws_framebuffer cpu, gpu;
+    WS_CHECK(ws_framebuffer_create(&cpu, 320u, 180u) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&gpu, 320u, 180u) == WS_OK);
+    size_t bytes = (size_t)cpu.width * cpu.height * 4u;
+
+    WS_CHECK(ws_session_render(s, &cpu, NULL) == WS_OK);
+
+    /* Enable the GPU row through the menu and render again. */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_GPU_RENDER) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    WS_CHECK(ws_session_gpu_render_enabled(s) == 1);
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+
+    WS_CHECK(ws_session_render(s, &gpu, NULL) == WS_OK);
+    /* The GPU frame carries real signal (not a blank buffer). */
+    int nonzero = 0;
+    for (size_t i = 0; i < (size_t)gpu.width * gpu.height; ++i) {
+        if (gpu.pixels[i * 4u] | gpu.pixels[i * 4u + 1u] | gpu.pixels[i * 4u + 2u]) {
+            nonzero = 1;
+            break;
+        }
+    }
+    WS_CHECK(nonzero == 1);
+    /* Within the documented tie tolerance the two paths agree closely; a large
+     * structural mismatch would be a real bug. */
+    size_t big = 0u;
+    for (size_t i = 0; i < bytes; ++i) {
+        int d = (int)gpu.pixels[i] - (int)cpu.pixels[i];
+        if (d < 0) { d = -d; }
+        if (d > 32) { big += 1u; }
+    }
+    WS_CHECK(big * 100u <= bytes); /* < 1% of channels differ by > 32 */
+
+    /* The world is untouched by rendering through either path. */
+    char after[WS_SESSION_DIGEST_HEX];
+    WS_CHECK(ws_session_digest(s, after) == WS_OK);
+    WS_CHECK(strcmp(before, after) == 0);
+
+    ws_framebuffer_free(&cpu);
+    ws_framebuffer_free(&gpu);
+    ws_session_destroy(s);
+    return 1;
+}
+
 static int test_settings_apply_and_readonly(void)
 {
     /* Applying a persistent settings snapshot drives the observer (view, clock,
@@ -785,6 +847,18 @@ static int test_settings_menu(void)
     (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0);
     WS_CHECK(ws_session_camera_collision(s) == 1);
 
+    /* The GPU-render row opts into the OpenCL full-scene path; it is off by
+     * default (CPU stays the golden reference) and toggling it is observer-only
+     * for the world state. */
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_GPU_RENDER) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    WS_CHECK(ws_session_gpu_render_enabled(s) == 0);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    WS_CHECK(ws_session_gpu_render_enabled(s) == 1);
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, -1.0);
+    WS_CHECK(ws_session_gpu_render_enabled(s) == 0);
+
     /* The world is untouched by any of the menu work. */
     char after[WS_SESSION_DIGEST_HEX];
     WS_CHECK(ws_session_digest(s, after) == WS_OK);
@@ -1066,6 +1140,7 @@ int main(void)
         {"session_camera_obstacle_avoidance", test_camera_obstacle_avoidance},
         {"session_stats_demography", test_stats_and_demography},
         {"session_shadows_toggle", test_shadows_toggle},
+        {"session_gpu_render_opt_in", test_gpu_render_opt_in},
         {"session_settings_apply_readonly", test_settings_apply_and_readonly},
         {"session_replay_enter_seek_exit", test_replay_enter_seek_exit},
         {"session_replay_observation_only", test_replay_is_observation_only},

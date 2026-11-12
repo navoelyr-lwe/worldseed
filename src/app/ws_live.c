@@ -66,6 +66,11 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
             /* Ignore any saved settings file and do not write one (used by the
              * evidence runs so they stay independent of the developer's config). */
             opts->settings_path = NULL;
+        } else if (strcmp(a, "--live-gpu") == 0) {
+            /* Opt in to the OpenCL full-scene render path (CPU fallback). Off by
+             * default: the CPU renderer stays the golden/determinism reference. */
+            opts->enabled = 1;
+            opts->set_flags |= WS_LIVE_SET_GPU;
         } else if (strcmp(a, "--live-headless") == 0) {
             if (i + 1 >= argc) {
                 return WS_ERR_INVALID_ARGUMENT;
@@ -221,6 +226,9 @@ static void ws_live_merge_settings(ws_live_options *opts)
     }
     if ((opts->set_flags & WS_LIVE_SET_FULLSCREEN) != 0u) {
         saved.fullscreen = opts->fullscreen;
+    }
+    if ((opts->set_flags & WS_LIVE_SET_GPU) != 0u) {
+        saved.gpu_render = 1;
     }
 
     /* Write the effective values back so the rest of the app uses one source. */

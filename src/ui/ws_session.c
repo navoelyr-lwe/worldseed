@@ -103,6 +103,7 @@ struct ws_session {
     int cam_speed_pct;     /* free-camera move speed percent 25..400 */
     int look_sens_pct;     /* mouse-look sensitivity percent 25..400 */
     int cam_collision;     /* free-camera ground collision on/off (docs/17) */
+    int gpu_render;        /* opt-in OpenCL full-scene render path (P12) */
     int speed_index;
     double time_of_day_s;
 
@@ -601,6 +602,7 @@ ws_result ws_session_create(ws_session **out, const ws_session_config *cfg)
     s->cam_speed_pct = 100;
     s->look_sens_pct = 100;
     s->cam_collision = 1;
+    s->gpu_render = 0;
     s->settings_cursor = WS_SET_ITEM_WIDTH;
     snprintf(s->save_path, sizeof(s->save_path), "worldseed-checkpoint.wss");
     s->settings_path[0] = '\0';
@@ -736,6 +738,9 @@ static void settings_menu_adjust(ws_session *s, int delta)
         break;
     case WS_SET_ITEM_CAM_COLLISION:
         if (step != 0) { s->cam_collision = !s->cam_collision; }
+        break;
+    case WS_SET_ITEM_GPU_RENDER:
+        if (step != 0) { s->gpu_render = !s->gpu_render; }
         break;
     default:
         break;
@@ -1161,6 +1166,7 @@ ws_result ws_session_apply_settings(ws_session *s, const struct ws_settings *set
     s->cam_speed_pct = settings->cam_speed < 25 ? 25 : (settings->cam_speed > 400 ? 400 : settings->cam_speed);
     s->look_sens_pct = settings->look_sens < 25 ? 25 : (settings->look_sens > 400 ? 400 : settings->look_sens);
     s->cam_collision = settings->cam_collision ? 1 : 0;
+    s->gpu_render = settings->gpu_render ? 1 : 0;
     return WS_OK;
 }
 
@@ -1187,6 +1193,7 @@ ws_result ws_session_get_settings(const ws_session *s, struct ws_settings *out)
     v.cam_speed = s->cam_speed_pct;
     v.look_sens = s->look_sens_pct;
     v.cam_collision = s->cam_collision ? 1 : 0;
+    v.gpu_render = s->gpu_render ? 1 : 0;
     *out = v;
     return WS_OK;
 }
@@ -1312,6 +1319,7 @@ int ws_session_help_visible(const ws_session *s) { return s != NULL ? s->help_vi
 int ws_session_stats_visible(const ws_session *s) { return s != NULL ? s->stats_visible : 0; }
 int ws_session_settings_visible(const ws_session *s) { return s != NULL ? s->settings_visible : 0; }
 int ws_session_shadows_visible(const ws_session *s) { return s != NULL ? s->shadows_visible : 0; }
+int ws_session_gpu_render_enabled(const ws_session *s) { return s != NULL ? s->gpu_render : 0; }
 
 /* --- replay queries ----------------------------------------------------- */
 
@@ -1509,6 +1517,10 @@ ws_result ws_session_settings_item(const ws_session *s, int item,
         snprintf(label, label_cap, "Camera collision");
         snprintf(value, value_cap, "%s", s->cam_collision ? "on" : "off");
         break;
+    case WS_SET_ITEM_GPU_RENDER:
+        snprintf(label, label_cap, "GPU render (OpenCL)");
+        snprintf(value, value_cap, "%s", s->gpu_render ? "on" : "off");
+        break;
     case WS_SET_ITEM_SAVE:
         snprintf(label, label_cap, "Save settings now");
         snprintf(value, value_cap, "%s",
@@ -1545,6 +1557,7 @@ int ws_session_settings_item_value(const ws_session *s, int item)
     case WS_SET_ITEM_CAM_SPEED: return s->cam_speed_pct;
     case WS_SET_ITEM_LOOK_SENS: return s->look_sens_pct;
     case WS_SET_ITEM_CAM_COLLISION: return s->cam_collision;
+    case WS_SET_ITEM_GPU_RENDER: return s->gpu_render;
     case WS_SET_ITEM_SAVE: return s->settings_path[0] != '\0' ? 1 : 0;
     case WS_SET_ITEM_RELOAD: return s->settings_path[0] != '\0' ? 1 : 0;
     default: return -1;
@@ -1948,6 +1961,13 @@ ws_result ws_session_render(ws_session *s, ws_framebuffer *fb, float *depth)
      * shadow reference scene. */
     s->env.scene.settings.shadows_enabled = s->shadows_visible ? 1 : 0;
     s->env.scene.settings.shadow_softness = s->shadows_visible ? 2.0 : 0.0;
+    /* Opt-in GPU path (P12). The full-scene OpenCL kernel reproduces the CPU
+     * shading within a documented tie tolerance; the CPU renderer stays the
+     * default so golden/determinism gates are unaffected. Any device failure
+     * falls back to the CPU reference inside ws_render_scene_gpu. */
+    if (s->gpu_render) {
+        return ws_render_scene_gpu(&s->env.scene, fb, depth, 32u, NULL);
+    }
     return ws_render_scene(&s->env.scene, fb, depth, 32u, NULL);
 }
 
