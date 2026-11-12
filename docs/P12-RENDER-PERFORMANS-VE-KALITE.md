@@ -314,6 +314,11 @@ silinirdi). Gölge geçişi ışık frustum'u farklı olduğundan tüm nesneleri
   `ecosystem` 80.4 → 79.2 ms, 1080p). Eleme, ekran-dışı rasteri kaldırır; kalan
   maliyet görünür piksellerin gölgelenmesidir. Yine de sıfır riskli ve P12
   kapsamındadır (LOD/eleme).
+- **Köşe ön-geçişi atlaması:** Elenen nesnenin ön-geçiş (vertex prepass) köşeleri
+  hiçbir zaman okunmadığından, elenen nesneler için köşe hazırlığı da atlanır
+  (imleç yine ilerletilir, böylece her nesnenin taban uzaklığı benzersiz kalır).
+  Bu, eleme kazancının üzerine ölçülen ek kazanç: `terrain_day` 136.4 → 134.4 ms,
+  `ecosystem` 80.0 → 77.3 ms (1080p, üç koşu ortalaması); bit-özdeş.
 - **Bit-özdeşlik:** 17 golden sahnenin tamamı 1920×1080'de birebir aynı (`cmp`);
   `terrain_day` ve `ecosystem` ayrıca **3840×2160**'ta da bit-özdeş (küçük kare
   nadir farkları gizleyebildiği için ürün çözünürlüğünde doğrulandı).
