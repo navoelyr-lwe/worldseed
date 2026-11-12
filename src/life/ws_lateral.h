@@ -24,19 +24,26 @@
 
 /* Bump when the model's dynamics change, so a recorded motion is detected as
  * incompatible. */
-#define WS_LATERAL_VERSION 1u
+#define WS_LATERAL_VERSION 2u
+
+/* Number of independent feet: front-left, front-right, rear-left, rear-right.
+ * The P13 slice promotes the planar model's single left/right pair into four
+ * separately tracked feet with their own lateral position, contact state and
+ * vertical load. */
+#define WS_LATERAL_FEET 4
 
 typedef struct ws_lateral_params {
     double com_height;  /* m, CoM height above the ground */
     double track;       /* m, left-right foot separation (stance width) */
     double foot_reach;  /* m, max lateral foot placement from the midline */
     double omega;       /* 1/s, sqrt(g / com_height) for the LIPM */
-    double step_period; /* s, time one lateral support is loaded */
+    double step_period; /* s, half a stride (one lateral support interval) */
     double roll_omega;  /* 1/s, natural frequency of the roll righting reflex */
     double zeta;        /* roll damping ratio (0..1) */
     double yaw_tau;     /* s, first-order lag of achieved yaw rate */
     double yaw_max;     /* rad/s, bound on the achieved turn rate */
     double k_capture;   /* s, velocity-error gain of the foot-placement law */
+    double mass;        /* kg, body mass (sets the ground reaction load) */
 } ws_lateral_params;
 
 /* Fill the reduced-order lateral parameters for a species from its profile.
@@ -52,8 +59,11 @@ typedef struct ws_lateral_state {
     double phi_dot;       /* rad/s, roll rate */
     double yaw;           /* rad, heading in the ground plane */
     double yaw_rate;      /* rad/s, achieved turn rate */
-    double y_sup;         /* m, loaded-foot lateral position (support centre) */
-    double foot_y[2];     /* m, left(0)/right(1) foot lateral position */
+    double y_sup;         /* m, load-weighted support centre (lateral) */
+    double foot_y[WS_LATERAL_FEET];  /* m, per-foot lateral position:
+                                      * 0 FL, 1 FR, 2 RL, 3 RR */
+    double foot_contact[WS_LATERAL_FEET]; /* 1 in stance, 0 in swing */
+    double foot_load[WS_LATERAL_FEET];    /* N, vertical ground reaction */
     int support;          /* +1 left pair loaded, -1 right pair, 0 double */
     double step_timer;    /* s, time left in the current lateral support */
     double roll_drive;    /* rad/s^2, normalised roll drive applied this step */
@@ -68,6 +78,12 @@ void ws_lateral_init(ws_lateral_state *s, const ws_lateral_params *p);
  * if the pendulum is left uncontrolled. */
 double ws_lateral_capture_point(const ws_lateral_state *s,
                                 const ws_lateral_params *p);
+
+/* Load-weighted support centre (m): sum(foot_load * foot_y) / sum(foot_load),
+ * or the geometric mean of the stance feet when the total load is zero. This is
+ * the ground reference the LIPM is measured against; with four independent feet
+ * it moves smoothly as load shifts, instead of jumping at each step. */
+double ws_lateral_support_center(const ws_lateral_state *s);
 
 /* Advance one fixed step of dt seconds at forward speed `v_forward` (m/s) with
  * commanded turn rate `yaw_cmd` (rad/s). Deterministic; returns WS_OK or an
@@ -86,6 +102,9 @@ typedef struct ws_lateral_metrics {
     double turn_track_err;      /* mean |achieved - commanded| rate over the
                                  * second half (settled), rad/s */
     int support_changes;        /* lateral support switches (steps taken) */
+    int contact_changes;        /* total per-foot stance/swing transitions */
+    int min_stance_feet;        /* fewest feet in contact at any step */
+    double max_load_error;      /* peak |sum(foot_load) - m*g| in steady stance, N */
 } ws_lateral_metrics;
 
 /* Run the lateral model for `seconds` at a fixed forward speed and turn

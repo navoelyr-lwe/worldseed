@@ -19,7 +19,7 @@ model D3 diye tanıtılmaz.
 | `MODEL-KARTI-DAVRANIS.md` | Fayda tabanlı davranış ve sınırlı öğrenme | D2 (senaryo ve çok tohum testleri geçti) |
 | `MODEL-KARTI-EKOLOJI.md` | Popülasyon dinamiği, bitki üretimi, av-avcı, üreme/ölüm | D2 (korunum, sınır ve çok tohum testleri geçti) |
 | `MODEL-KARTI-POPULASYON.md` | Toplam bölge popülasyonu (P8 FAR/MID vekili) | D2 (korunum, sınır ve determinizm testleri geçti) |
-| `MODEL-KARTI-FRONTAL-DENGE.md` | Frontal düzlem (lateral) denge ve dönüş (P13 ilk dilim) | D2 (dört türde sınır, adım, dönüş izleme ve determinizm testleri geçti) |
+| `MODEL-KARTI-FRONTAL-DENGE.md` | Frontal düzlem (lateral) denge, dört ayak teması ve dönüş (P13) | D2 (dört türde sınır, temas, yük korunumu, dönüş izleme ve determinizm testleri geçti) |
 
 ## Tür kartları (P7)
 

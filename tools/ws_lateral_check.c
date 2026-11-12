@@ -28,7 +28,9 @@
 #define MAX_TURN_TRACK_ERR 0.05 /* rad/s */
 
 static int species_pass(const ws_species_info *si, double v_walk, double *out_max_y,
-                        double *out_max_phi, double *out_err)
+                        double *out_max_phi, double *out_err,
+                        int *out_contacts, int *out_min_stance,
+                        double *out_load_err)
 {
     ws_lateral_params p;
     ws_lateral_params_for(&si->body, &p);
@@ -62,8 +64,18 @@ static int species_pass(const ws_species_info *si, double v_walk, double *out_ma
     *out_max_y = straight.max_abs_y;
     *out_max_phi = straight.max_abs_phi;
     *out_err = turn.turn_track_err;
+    *out_contacts = straight.contact_changes;
+    *out_min_stance = straight.min_stance_feet;
+    *out_load_err = straight.max_load_error;
 
-    int ok = reproducible &&
+    /* Independent four-foot contact: a lateral pair is always loaded (2 feet),
+     * feet switch stance, and the ground reaction conserves the body weight
+     * every step. */
+    int contacts_ok = straight.min_stance_feet == 2 &&
+                      straight.contact_changes > 0 &&
+                      straight.max_load_error < 1e-6;
+
+    int ok = reproducible && contacts_ok &&
              straight.max_abs_y < sway_limit &&
              straight.max_abs_phi < MAX_ROLL_RAD &&
              (double)straight.support_changes >= min_steps &&
@@ -84,7 +96,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "cannot write %s (does the directory exist?)\n", csv_path);
         return 1;
     }
-    fprintf(csv, "species,max_sway_m,max_roll_rad,turn_track_err_rad_s,verdict\n");
+    fprintf(csv, "species,max_sway_m,max_roll_rad,turn_track_err_rad_s,"
+                 "contact_changes,min_stance,load_err_N,verdict\n");
 
     int failed = 0;
     int scenes = 0;
@@ -95,16 +108,21 @@ int main(int argc, char **argv)
         }
         double v_walk = ws_species_walk_speed((ws_species_kind)k);
         double max_y = 0.0, max_phi = 0.0, err = 0.0;
-        int ok = species_pass(si, v_walk, &max_y, &max_phi, &err);
+        int contacts = 0, min_stance = 0;
+        double load_err = 0.0;
+        int ok = species_pass(si, v_walk, &max_y, &max_phi, &err, &contacts,
+                              &min_stance, &load_err);
         if (!ok) {
             failed = 1;
         }
         scenes++;
-        fprintf(csv, "%s,%.4f,%.4f,%.4f,%s\n", si->name, max_y, max_phi, err,
+        fprintf(csv, "%s,%.4f,%.4f,%.4f,%d,%d,%.6f,%s\n", si->name, max_y,
+                max_phi, err, contacts, min_stance, load_err,
                 ok ? "PASS" : "FAIL");
         printf("lateral species=%s verdict=%s max_sway=%.4f max_roll=%.4f "
-               "turn_err=%.4f\n",
-               si->name, ok ? "PASS" : "FAIL", max_y, max_phi, err);
+               "turn_err=%.4f contacts=%d min_stance=%d load_err=%.6f\n",
+               si->name, ok ? "PASS" : "FAIL", max_y, max_phi, err, contacts,
+               min_stance, load_err);
     }
     fclose(csv);
 
