@@ -35,3 +35,6 @@ target_link_libraries(ws_quality PRIVATE worldseed_core)
 
 add_executable(ws_motion ws_motion.c)
 target_link_libraries(ws_motion PRIVATE worldseed_core)
+
+add_executable(ws_lateral_check ws_lateral_check.c)
+target_link_libraries(ws_lateral_check PRIVATE worldseed_core)

@@ -111,6 +111,12 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
 
 **Kabul:** yürüme/koşu/dönüş/yokuş/zemin senaryoları; 3B temas ve denge testleri; enerji maliyeti ve hareket kıyasları; veri kaynağı/belirsizlikleri belgeli D3 referans tür doğrulaması. Diğer üç türün beden ve gait parametreleri ayrı doğrulanır.
 
+**Durum:** Başladı (ilk dilim). Frontal düzlem (lateral) denge ve dönüş modeli
+dört tür için eklendi ve CI'da kapılanıyor
+(`docs/life/MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.*`,
+`tools/ws_lateral_check.c`). Tam 3B bağımsız uzuv state'i, temas kuvveti,
+3B denge/enerji D3 kıyası ve tür-özel 3B gait doğrulaması **açık**.
+
 ## P14 — Çok duyulu algı ve doğal davranış
 
 **Çıktı:** görüş/örtülme, işitme, koku, iç durum, hafıza, öğrenme, sosyal bilgi ve habitat etkilerini birleştiren tür-özel algı/karar sistemi.

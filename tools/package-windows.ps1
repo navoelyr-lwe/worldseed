@@ -151,6 +151,21 @@ if ($motionPassed -ne $motionExpected) {
     Write-Error "motion: $motionPassed/$motionExpected species passed"; exit 1
 }
 
+# P13 lateral balance and turning: the frontal-plane model is run straight and
+# in a commanded turn for every species and gated on bounded sway/roll, steps
+# taken, turn tracking and determinism.
+$lateralExe = "$BuildDir/tools/Release/ws_lateral_check.exe"
+if (-not (Test-Path $lateralExe)) { Write-Error "missing build output: $lateralExe"; exit 1 }
+New-Item -ItemType Directory -Force -Path evidence/lateral | Out-Null
+& $lateralExe evidence/lateral 20260101 | Tee-Object -FilePath evidence/lateral/lateral.txt
+if (-not (Select-String -Path evidence/lateral/lateral.txt -Pattern "WS_LATERAL_OK" -Quiet)) { exit 1 }
+$lateralRaw = Get-Content evidence/lateral/lateral.txt -Raw
+$lateralExpected = [int]([regex]::Match($lateralRaw, "WS_LATERAL_OK scenes=(\d+)").Groups[1].Value)
+$lateralPassed = (Select-String -Path evidence/lateral/lateral.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count
+if ($lateralPassed -ne $lateralExpected) {
+    Write-Error "lateral: $lateralPassed/$lateralExpected species passed"; exit 1
+}
+
 $stage = "stage/worldseed"
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item $exe "$stage/worldseed.exe"
@@ -177,6 +192,8 @@ Copy-Item evidence/quality/quality.csv "$stage/quality/"
 Copy-Item evidence/quality/quality.txt "$stage/quality/"
 Copy-Item evidence/motion/motion.csv "$stage/quality/"
 Copy-Item evidence/motion/motion.txt "$stage/quality/"
+Copy-Item evidence/lateral/lateral.csv "$stage/quality/"
+Copy-Item evidence/lateral/lateral.txt "$stage/quality/"
 @(
     "Worldseed Engine preview (P12 - CPU render performansi ve kalite kapisi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",
