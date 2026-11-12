@@ -21,6 +21,9 @@ target_link_libraries(ws_audio PRIVATE worldseed_core)
 add_executable(ws_gpu_check ws_gpu_check.c)
 target_link_libraries(ws_gpu_check PRIVATE worldseed_core)
 
+add_executable(ws_gpu_scene_check ws_gpu_scene_check.c)
+target_link_libraries(ws_gpu_scene_check PRIVATE worldseed_core)
+
 add_executable(ws_perf ws_perf.c)
 target_link_libraries(ws_perf PRIVATE worldseed_core)
 

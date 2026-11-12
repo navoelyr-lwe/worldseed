@@ -18,6 +18,8 @@ extern const char *const ws_kernel_ws_raster_parts[];
 extern const unsigned int ws_kernel_ws_raster_part_count;
 extern const char *const ws_kernel_ws_raster_tiled_parts[];
 extern const unsigned int ws_kernel_ws_raster_tiled_part_count;
+extern const char *const ws_kernel_ws_scene_parts[];
+extern const unsigned int ws_kernel_ws_scene_part_count;
 
 /* --- OpenCL 1.2 types and constants -------------------------------------- */
 typedef int32_t cl_int;
@@ -124,6 +126,7 @@ struct ws_opencl {
     cl_program program;
     cl_kernel kernel;
     cl_kernel kernel_tiled;
+    cl_kernel kernel_scene;
     ws_opencl_info info;
     int available;
     int device_lost;
@@ -243,7 +246,8 @@ static ws_result build_kernel(ws_opencl *cl)
     /* Build one program from both kernel sources (reference + tiled). Passing
      * the parts arrays lets the OpenCL implementation concatenate them, so no
      * single C string literal exceeds the C99 4095-character guarantee. */
-    unsigned int nparts = ws_kernel_ws_raster_part_count + ws_kernel_ws_raster_tiled_part_count;
+    unsigned int nparts = ws_kernel_ws_raster_part_count + ws_kernel_ws_raster_tiled_part_count +
+                          ws_kernel_ws_scene_part_count;
     const char **srcs = (const char **)malloc((size_t)nparts * sizeof(*srcs));
     size_t *lens = (size_t *)malloc((size_t)nparts * sizeof(*lens));
     if (srcs == NULL || lens == NULL) {
@@ -262,6 +266,11 @@ static ws_result build_kernel(ws_opencl *cl)
         lens[n] = strlen(ws_kernel_ws_raster_tiled_parts[i]);
         n += 1u;
     }
+    for (unsigned int i = 0u; i < ws_kernel_ws_scene_part_count; ++i) {
+        srcs[n] = ws_kernel_ws_scene_parts[i];
+        lens[n] = strlen(ws_kernel_ws_scene_parts[i]);
+        n += 1u;
+    }
     cl->program = cl->api.create_program_with_source(cl->context, nparts, srcs, lens, &err);
     free(srcs);
     free(lens);
@@ -278,6 +287,10 @@ static ws_result build_kernel(ws_opencl *cl)
     }
     cl->kernel_tiled = cl->api.create_kernel(cl->program, "ws_raster_tiled", &err);
     if (cl->kernel_tiled == NULL || err != CL_SUCCESS) {
+        return WS_ERR_UNSUPPORTED;
+    }
+    cl->kernel_scene = cl->api.create_kernel(cl->program, "ws_scene", &err);
+    if (cl->kernel_scene == NULL || err != CL_SUCCESS) {
         return WS_ERR_UNSUPPORTED;
     }
     return WS_OK;
@@ -314,6 +327,9 @@ void ws_opencl_destroy(ws_opencl *cl)
         }
         if (cl->kernel_tiled != NULL) {
             cl->api.release_kernel(cl->kernel_tiled);
+        }
+        if (cl->kernel_scene != NULL) {
+            cl->api.release_kernel(cl->kernel_scene);
         }
         if (cl->program != NULL) {
             cl->api.release_program(cl->program);
@@ -552,4 +568,144 @@ ws_result ws_opencl_raster_tiled(ws_opencl *cl,
                                   &bin, pixels, depth);
     ws_tilebin_free(&bin);
     return r;
+}
+
+ws_result ws_opencl_render_scene(ws_opencl *cl, const ws_gpu_scene_input *in,
+                                 uint32_t width, uint32_t height,
+                                 uint8_t *pixels, float *depth)
+{
+    if (cl == NULL || in == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+    if (!ws_opencl_available(cl)) {
+        return WS_ERR_INVALID_STATE;
+    }
+    if (in->verts == NULL || in->tri_obj == NULL || in->consts == NULL ||
+        in->triangle_count == 0u || width == 0u || height == 0u ||
+        pixels == NULL || depth == NULL) {
+        return WS_ERR_NULL_POINTER;
+    }
+
+    ws_tilebin bin;
+    if (ws_tilebin_build_strided(&bin, in->verts, 13u, 0u, 1u, in->triangle_count,
+                                 width, height, in->tile_size) != WS_OK) {
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+
+    const size_t pixel_count = (size_t)width * (size_t)height;
+    const size_t vert_floats = (size_t)in->triangle_count * 39u + 1u;
+    const size_t obj_floats = (size_t)in->object_count * 4u;
+    const size_t shadow_count = in->shadow_depth != NULL
+                                    ? (size_t)in->shadow_size * (size_t)in->shadow_size
+                                    : 0u;
+    cl_int err = CL_SUCCESS;
+
+    cl_mem b_verts = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                           vert_floats * sizeof(float), unconst(in->verts), &err);
+    cl_mem b_triobj = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                            (size_t)in->triangle_count * sizeof(uint32_t),
+                                            unconst(in->tri_obj), &err);
+    cl_mem b_mat = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         (obj_floats > 0u ? obj_floats : 1u) * sizeof(float),
+                                         unconst(in->obj_mat), &err);
+    size_t tile_count = (size_t)bin.tiles_x * (size_t)bin.tiles_y;
+    size_t ref_count = (size_t)(bin.total_refs > 0u ? bin.total_refs : 1u);
+    cl_mem b_tri = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         ref_count * sizeof(uint32_t), unconst(bin.tri_index), &err);
+    cl_mem b_off = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         (tile_count + 1u) * sizeof(uint32_t),
+                                         unconst(bin.tile_offset), &err);
+    cl_mem b_consts = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                            (size_t)in->const_count * sizeof(float),
+                                            unconst(in->consts), &err);
+    static const float identity16[16] = {1.0f, 0.0f, 0.0f, 0.0f,
+                                         0.0f, 1.0f, 0.0f, 0.0f,
+                                         0.0f, 0.0f, 1.0f, 0.0f,
+                                         0.0f, 0.0f, 0.0f, 1.0f};
+    cl_mem b_lvp = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                         16u * sizeof(float),
+                                         in->light_vp != NULL ? unconst(in->light_vp)
+                                                              : unconst(identity16), &err);
+    cl_mem b_shadow = cl->api.create_buffer(cl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                            (shadow_count > 0u ? shadow_count : 1u) * sizeof(float),
+                                            in->shadow_depth != NULL ? unconst(in->shadow_depth)
+                                                                     : unconst(identity16), &err);
+    cl_mem b_out = cl->api.create_buffer(cl->context, CL_MEM_WRITE_ONLY, pixel_count * 4u, NULL, &err);
+    cl_mem b_depth = cl->api.create_buffer(cl->context, CL_MEM_WRITE_ONLY,
+                                           pixel_count * sizeof(float), NULL, &err);
+
+    if (b_verts == NULL || b_triobj == NULL || b_mat == NULL || b_tri == NULL ||
+        b_off == NULL || b_consts == NULL || b_lvp == NULL || b_shadow == NULL ||
+        b_out == NULL || b_depth == NULL) {
+        if (b_verts) { cl->api.release_mem_object(b_verts); }
+        if (b_triobj) { cl->api.release_mem_object(b_triobj); }
+        if (b_mat) { cl->api.release_mem_object(b_mat); }
+        if (b_tri) { cl->api.release_mem_object(b_tri); }
+        if (b_off) { cl->api.release_mem_object(b_off); }
+        if (b_consts) { cl->api.release_mem_object(b_consts); }
+        if (b_lvp) { cl->api.release_mem_object(b_lvp); }
+        if (b_shadow) { cl->api.release_mem_object(b_shadow); }
+        if (b_out) { cl->api.release_mem_object(b_out); }
+        if (b_depth) { cl->api.release_mem_object(b_depth); }
+        ws_tilebin_free(&bin);
+        mark_lost(cl);
+        return WS_ERR_OUT_OF_MEMORY;
+    }
+
+    cl_kernel k = cl->kernel_scene;
+    cl_uint a = 0u;
+    cl_uint tiles_x = bin.tiles_x;
+    cl_uint tile_size = bin.tile_size;
+    cl_uint uwidth = width;
+    cl_uint uheight = height;
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_verts);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_triobj);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_mat);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_tri);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_off);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &tiles_x);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &tile_size);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &uwidth);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_uint), &uheight);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_consts);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_lvp);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_shadow);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_out);
+    cl->api.set_kernel_arg(k, a++, sizeof(cl_mem), &b_depth);
+
+    size_t global = pixel_count;
+    cl_int rc = cl->api.enqueue_ndrange_kernel(cl->queue, k, 1u, NULL, &global, NULL,
+                                               0u, NULL, NULL);
+    if (rc == CL_SUCCESS) {
+        rc = cl->api.finish(cl->queue);
+    }
+    if (rc == CL_SUCCESS) {
+        rc = cl->api.enqueue_read_buffer(cl->queue, b_out, 1u, 0u, pixel_count * 4u, pixels,
+                                         0u, NULL, NULL);
+    }
+    if (rc == CL_SUCCESS) {
+        rc = cl->api.enqueue_read_buffer(cl->queue, b_depth, 1u, 0u,
+                                         pixel_count * sizeof(float), depth, 0u, NULL, NULL);
+    }
+    if (rc == CL_SUCCESS) {
+        rc = cl->api.finish(cl->queue);
+    }
+
+    cl->api.release_mem_object(b_verts);
+    cl->api.release_mem_object(b_triobj);
+    cl->api.release_mem_object(b_mat);
+    cl->api.release_mem_object(b_tri);
+    cl->api.release_mem_object(b_off);
+    cl->api.release_mem_object(b_consts);
+    cl->api.release_mem_object(b_lvp);
+    cl->api.release_mem_object(b_shadow);
+    cl->api.release_mem_object(b_out);
+    cl->api.release_mem_object(b_depth);
+    ws_tilebin_free(&bin);
+
+    if (rc != CL_SUCCESS) {
+        mark_lost(cl);
+        return WS_ERR_UNSUPPORTED;
+    }
+    return WS_OK;
 }

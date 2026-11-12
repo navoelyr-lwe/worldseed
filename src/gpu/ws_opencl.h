@@ -62,4 +62,42 @@ ws_result ws_opencl_raster_tiled(ws_opencl *cl,
  * physical GPU removal. No-op when cl is NULL. */
 void ws_opencl_simulate_device_loss(ws_opencl *cl);
 
+/* --- Full-scene GPU path (P12) -------------------------------------------
+ *
+ * The raster kernels above are flat-shaded reference kernels. This entry point
+ * runs the whole product scene pipeline (interpolated world position/normal/
+ * albedo, Lambert + hemisphere ambient + specular, optional shadow map, fog,
+ * sky, encode) on the device. The CPU renderer stays the bit-identical golden
+ * reference; this path is the GPU accelerator and is compared to the CPU frame
+ * within a documented per-channel tolerance (ADR-001).
+ *
+ * The caller (ws_render_scene_gpu) marshals the scene into the flat arrays
+ * below using the same transform/clip/screen arithmetic as the CPU renderer.
+ */
+typedef struct ws_gpu_scene_input {
+    /* Per-triangle vertex data: 39 floats = 3 vertices x 13 floats
+     * (screen x, screen y, ndc z, inv_w, world xyz, normal xyz, albedo rgb).
+     * The array is padded with one extra trailing float so the last vertex's
+     * blue channel read stays in bounds. */
+    const float *verts;
+    const uint32_t *tri_obj;   /* object index per triangle */
+    const float *obj_mat;      /* 4 floats per object: shininess, mat_diffuse,
+                                  metallic, specular */
+    uint32_t triangle_count;
+    uint32_t object_count;
+    const float *consts;       /* scene constants; layout in ws_render.c */
+    uint32_t const_count;      /* number of floats in `consts` */
+    const float *light_vp;     /* 16 floats; ignored when shadow_depth is NULL */
+    const float *shadow_depth; /* shadow_size*shadow_size, or NULL */
+    uint32_t shadow_size;
+    uint32_t tile_size;        /* screen tile edge in pixels; 0 = default */
+} ws_gpu_scene_input;
+
+/* Run the full-scene kernel. `pixels` is width*height*4 RGBA8 and `depth` is
+ * width*height floats. Returns WS_OK, or an error (the caller then falls back to
+ * the CPU renderer). A NULL shadow_depth disables shadow sampling. */
+ws_result ws_opencl_render_scene(ws_opencl *cl, const ws_gpu_scene_input *in,
+                                 uint32_t width, uint32_t height,
+                                 uint8_t *pixels, float *depth);
+
 #endif /* WS_GPU_OPENCL_H */

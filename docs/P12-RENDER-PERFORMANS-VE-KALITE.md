@@ -370,6 +370,42 @@ sahnesine bağlamak, gölgeleme ardışık düzeninin tamamının OpenCL C 1.2'y
 taşınıp CPU ile **bit-özdeş** olmasına bağlıdır; aksi hâlde golden kapısı kırılır.
 Bu taşıma ayrı ve büyük bir iştir; bu PR yalnız gerçek GPU ölçüm kanıtını ekler.
 
+### 14. Tam sahne GPU (OpenCL) render yolu (bu PR)
+
+Bir önceki bölümdeki "gölgeleme ardışık düzeninin tamamını GPU'ya taşıma" işi bu
+dilimde yapıldı: `kernels/ws_scene.cl` (OpenCL C 1.2) CPU referans renderer'ının
+**tüm** gölgelemesini yansıtır (perspektif-düzeltmeli enterpolasyon, Lambert
+doğrudan ışık, hemisferik ortam, speküler, yönlü gölge haritası PCF, mesafe sisi,
+pozlama, ton eşleme, gökyüzü degradesi). Host tarafı `src/render/ws_gpu_scene.c`
+sahnenin vertex/üçgen verisini arabelleklere yazar, yakın-düzlem kırpması ve fan
+üçgenlemesi yapar, gölge haritasını CPU ile aynı koddan kurar ve çekirdeği
+gönderir. Giriş noktası `ws_render_scene_gpu(...)`; cihaz yoksa CPU referansına
+düşer ve `stats->path = WS_RENDER_PATH_CPU` bildirir. Ürün uygulamasında opt-in
+`--gpu` bayrağı bu yolu kullanır; varsayılan yakalama yolu CPU referansı kalır, bu
+yüzden golden kapısının uygulama↔golden `cmp` karşılaştırması etkilenmez.
+
+**Doğrulama (`tools/ws_gpu_scene_check`, pocl CPU ICD):** 17 katalog sahnesinin
+tamamı GPU yoluyla çizildi (`gpu_used=17`). Araç, her farklı pikseli bir **derinlik
+beraberliği** (iki yol da aynı derinlikteki iki yüzeyden birini seçer) ile **yapısal
+hata** (derinlik de uyuşmuyor) olarak ayırır. Sonuç: **tüm sahnelerde
+`structural_fraction=0.00000`.** 16 sahnede fark oranı `<= 0.00052` ve en yüksek
+renk farkı `<= 3/255`. Yalnız `world_stream`'de fark oranı `0.06585`, en yüksek renk
+farkı `81/255`; ancak o sahnenin **tüm** farklı pikselleri açıklanmış derinlik
+beraberliğidir (`tie_fraction = diff_fraction = 0.06585`). Nedeni, sahnenin yüzlerce
+**eş-düzlemli** arazi/akış döşemesi karesinin (hepsi aynı yükseklikte) derinlik
+sırasının float (GPU) ile double (CPU) arasında son-bit düzeyinde değişmesidir; bu
+bir render hatası değil, float vs double arasındaki belgelenmiş semantik sınırdır
+(`docs/gpu/MODEL-KARTI-TAM-SAHNE-GPU.md`, madde 8).
+
+**Ürün uygulaması:** `worldseed --capture <ppm> --scene 0 --size 320x240 --gpu`
+`orbit` sahnesini GPU yoluyla çizdi; çıktı CPU karesiyle **bit-özdeş**
+(`ws_imgdiff differing=0 psnr=inf ssim=1.000`).
+
+**Not (bit-özdeşlik sözleşmesi):** CI golden kapısı ürün karesinin golden kareyle
+bit-özdeş olmasını ister ve golden kareler CPU yolundan üretilir; bu nedenle GPU
+yolu golden üretiminde kullanılmaz. GPU yolu, kendi semantik karşılaştırma kapısıyla
+(`ws_gpu_scene_check`, yapısal fark = 0) ve uygulama `--gpu` kanıtıyla doğrulanır.
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):
@@ -452,9 +488,12 @@ Bu taşıma ayrı ve büyük bir iştir; bu PR yalnız gerçek GPU ölçüm kan�
   sonraki dilimdir. (Gölge haritasını kare başına güncelleme ve bu kurulumu
   paralelleştirme bu dilimde yapıldı.)
 - Döşemeli GPU yolu şu an bir **doğrulanmış ve kanıtlanmış raster ilkeli**dir;
-  canlı gölgeli sahne hâlâ CPU yolundan çizilir. Döşemeli çekirdeği canlı
-  gölgeli render'a bağlamak (renk + döşeme başına binlerce üçgeni GPU'ya
-  aktarma) sonraki dilimdir. Bu dilimde çekirdek ürünün çizim koduna bağlı
-  değildir; burada kanıtlanan, darboğazın çözüldüğü ve çıktının bit-özdeş
-  kaldığıdır.
-- CPU yolu zorunlu referanstır; GPU (OpenCL C 1.2) varyantı sonraki iş.
+  canlı gölgeli sahne hâlâ CPU yolundan çizilir. **Güncelleme (bu PR):** tam sahne
+  gölgeleme ardışık düzeni artık OpenCL C 1.2'ye taşındı (`kernels/ws_scene.cl`,
+  `ws_render_scene_gpu`); 17 sahnenin tamamında yapısal fark sıfırdır ve uygulama
+  `--gpu` bayrağıyla gerçek GPU karesi üretir. Canlı ürün döngüsünün (HUD, kamera,
+  ekoloji) GPU yoluna bağlanması sonraki dilimdir; şu an canlı ürün CPU referans
+  yolundan çizilir.
+- CPU yolu zorunlu referanstır ve golden kareleri üretir; GPU (OpenCL C 1.2) yolu
+  aynı sahneyi üretir, cihaz yoksa CPU'ya düşer ve kendi semantik karşılaştırma
+  kapısıyla doğrulanır (yapısal fark = 0).

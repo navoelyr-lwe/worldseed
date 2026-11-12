@@ -368,6 +368,17 @@ jobs:
           grep -q "tiled bit_identical=1" evidence/gpu/gpu_check.txt
           grep -q "device_loss_recovered=1" evidence/gpu/gpu_check.txt
 
+      - name: Full-scene GPU vs CPU reference (every catalog scene)
+        run: |
+          mkdir -p evidence/gpu
+          ./build/tools/ws_gpu_scene_check | tee evidence/gpu/gpu_scene.txt
+          grep -q "WS_GPU_SCENE_OK" evidence/gpu/gpu_scene.txt
+          # The full-scene OpenCL path must run on every catalog scene...
+          grep -q "gpu_used=17" evidence/gpu/gpu_scene.txt
+          # ...and every colour difference must be an explained depth tie, never
+          # a structural error (the CPU frame stays the golden reference).
+          grep -q "structural_fraction=0.00000" evidence/gpu/gpu_scene.txt
+
       - name: Performance and scaling evidence
         run: |
           mkdir -p evidence/perf
@@ -375,6 +386,7 @@ jobs:
           grep -q "WS_PERF_OK" evidence/perf/perf.txt
           grep -q "identical=1" evidence/perf/perf.txt
           grep -q "raster_gpu_tiled" evidence/perf/perf.txt
+          grep -q "scene_gpu scene=terrain_day" evidence/perf/perf.txt
 
       - name: Upload evidence
         uses: actions/upload-artifact@v4

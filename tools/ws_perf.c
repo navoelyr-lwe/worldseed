@@ -243,6 +243,104 @@ static void run_scene_frames(uint64_t seed, uint32_t width, uint32_t height, int
     ws_catalog_free(&catalog);
 }
 
+/* Full-scene OpenCL accelerator (P12) frame times and a semantic check against
+ * the CPU reference at the same resolution. Reports the speed-up so "GPU only
+ * when it actually helps" is measured on the whole scene, not a toy batch. */
+static void run_scene_frames_gpu(uint64_t seed, uint32_t width, uint32_t height, int frames)
+{
+    ws_catalog catalog;
+    memset(&catalog, 0, sizeof(catalog));
+    size_t showcase_count = ws_showcase_scene_count();
+    size_t day_index = showcase_count;
+    if (ws_catalog_build(&catalog, day_index, seed) != WS_OK) {
+        printf("perf scene_gpu unavailable\n");
+        return;
+    }
+    const ws_scene *scene = ws_catalog_scene(&catalog);
+
+    ws_framebuffer fb;
+    ws_framebuffer ref;
+    if (ws_framebuffer_create(&fb, width, height) != WS_OK ||
+        ws_framebuffer_create(&ref, width, height) != WS_OK) {
+        ws_catalog_free(&catalog);
+        printf("perf scene_gpu alloc_failed\n");
+        return;
+    }
+    size_t pixel_count = (size_t)width * (size_t)height;
+    float *depth = (float *)malloc(pixel_count * sizeof(float));
+    float *ref_depth = (float *)malloc(pixel_count * sizeof(float));
+    if (depth == NULL || ref_depth == NULL) {
+        free(depth);
+        free(ref_depth);
+        ws_framebuffer_free(&fb);
+        ws_framebuffer_free(&ref);
+        ws_catalog_free(&catalog);
+        printf("perf scene_gpu alloc_failed\n");
+        return;
+    }
+
+    ws_render_stats stats;
+    memset(&stats, 0, sizeof(stats));
+    (void)ws_render_scene_gpu(scene, &fb, depth, PERF_TILE, &stats);
+    if (stats.path != WS_RENDER_PATH_GPU) {
+        printf("perf scene_gpu gpu=unavailable\n");
+        free(depth);
+        free(ref_depth);
+        ws_framebuffer_free(&fb);
+        ws_framebuffer_free(&ref);
+        ws_catalog_free(&catalog);
+        return;
+    }
+
+    if (frames > 64) { frames = 64; }
+    if (frames < 1) { frames = 1; }
+    double times[64];
+    for (int i = 0; i < frames; ++i) {
+        uint64_t t0 = ws_clock_monotonic_ns();
+        (void)ws_render_scene_gpu(scene, &fb, depth, PERF_TILE, &stats);
+        uint64_t t1 = ws_clock_monotonic_ns();
+        times[i] = ns_to_ms(t1 - t0);
+    }
+    double sorted[64];
+    memcpy(sorted, times, (size_t)frames * sizeof(double));
+    qsort(sorted, (size_t)frames, sizeof(double), cmp_double);
+    double p50 = percentile(sorted, (size_t)frames, 0.50);
+    double p95 = percentile(sorted, (size_t)frames, 0.95);
+    double p99 = percentile(sorted, (size_t)frames, 0.99);
+    double avg = 0.0;
+    for (int i = 0; i < frames; ++i) {
+        avg += times[i];
+    }
+    avg /= (double)frames;
+
+    /* Semantic check: count pixels whose colour differs by more than the
+     * documented channel tolerance. Structural errors would show as a large
+     * fraction; depth-tie flips stay a small fraction and bounded in magnitude. */
+    (void)ws_render_scene(scene, &ref, ref_depth, PERF_TILE, NULL);
+    size_t big = 0u;
+    int worst = 0;
+    for (size_t i = 0; i < pixel_count; ++i) {
+        for (int c = 0; c < 3; ++c) {
+            int d = (int)fb.pixels[i * 4u + (size_t)c] - (int)ref.pixels[i * 4u + (size_t)c];
+            if (d < 0) { d = -d; }
+            if (d > worst) { worst = d; }
+            if (d > 16) { big += 1u; }
+        }
+    }
+    double frac = pixel_count ? (double)big / ((double)pixel_count * 3.0) : 0.0;
+
+    printf("perf scene_gpu scene=%s %ux%u frames=%d avg_ms=%.2f p50_ms=%.2f p95_ms=%.2f "
+           "p99_ms=%.2f avg_fps=%.1f diff_frac_gt16=%.5f worst_delta=%d\n",
+           ws_catalog_id(day_index), width, height, frames, avg, p50, p95, p99,
+           1000.0 / avg, frac, worst);
+
+    free(depth);
+    free(ref_depth);
+    ws_framebuffer_free(&fb);
+    ws_framebuffer_free(&ref);
+    ws_catalog_free(&catalog);
+}
+
 int main(int argc, char **argv)
 {
     int quick = 0;
@@ -359,8 +457,10 @@ int main(int argc, char **argv)
 
     if (quick) {
         run_scene_frames(20260101ULL, PERF_QUICK_WIDTH, PERF_QUICK_HEIGHT, PERF_QUICK_FRAMES);
+        run_scene_frames_gpu(20260101ULL, PERF_QUICK_WIDTH, PERF_QUICK_HEIGHT, PERF_QUICK_FRAMES);
     } else {
         run_scene_frames(20260101ULL, PERF_SCENE_WIDTH, PERF_SCENE_HEIGHT, PERF_SCENE_FRAMES);
+        run_scene_frames_gpu(20260101ULL, PERF_SCENE_WIDTH, PERF_SCENE_HEIGHT, PERF_SCENE_FRAMES);
     }
 
     printf("WS_PERF_OK\n");
