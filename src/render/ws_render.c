@@ -296,6 +296,83 @@ static void scene_world_bounds(const ws_scene *scene, ws_vec3 *lo, ws_vec3 *hi)
     *hi = ws_vec3_make(mx[0], mx[1], mx[2]);
 }
 
+/* Camera frustum planes in world space, extracted from the view-projection
+ * matrix (Gribb–Hartmann). Plane k is (a,b,c,d) with inward normal, so a point
+ * is inside when a*x + b*y + c*z + d >= 0. Only the five planes the renderer
+ * actually enforces are kept: left, right, bottom, top and near. There is no
+ * far-plane clip (geometry past far_z is still projected and drawn), so a box
+ * beyond the far plane must not be culled. */
+typedef struct frustum {
+    double plane[5][4];
+} frustum;
+
+static frustum frustum_from_view_proj(ws_mat4 m)
+{
+    /* Column-major: row i is (m[i], m[4+i], m[8+i], m[12+i]). */
+    const double *p = m.m;
+    double rows[4][4];
+    for (int i = 0; i < 4; ++i) {
+        rows[i][0] = p[i];
+        rows[i][1] = p[4 + i];
+        rows[i][2] = p[8 + i];
+        rows[i][3] = p[12 + i];
+    }
+    /* left = r3+r0, right = r3-r0, bottom = r3+r1, top = r3-r1, near = r3+r2
+     * (the near plane is ndc_z >= -1, i.e. clip.w + clip.z >= 0). */
+    int base[5] = {0, 0, 1, 1, 2};
+    int sign[5] = {1, -1, 1, -1, 1};
+    frustum f;
+    for (int k = 0; k < 5; ++k) {
+        for (int j = 0; j < 4; ++j) {
+            f.plane[k][j] = rows[3][j] + (double)sign[k] * rows[base[k]][j];
+        }
+    }
+    return f;
+}
+
+/* True when the world-space AABB is wholly outside at least one frustum plane.
+ * Such a box cannot contain a visible point, so every triangle of an object
+ * whose box this rejects would be clipped away; skipping the object is a pure
+ * speed-up and leaves the image bit-identical. */
+static int frustum_rejects_aabb(const frustum *f, const ws_aabb3 *b)
+{
+    for (int k = 0; k < 5; ++k) {
+        const double *pl = f->plane[k];
+        /* Signed distance of the AABB corner that is furthest along the inward
+         * normal. If even that corner is behind the plane the box is outside. */
+        double px = pl[0] >= 0.0 ? b->max.x : b->min.x;
+        double py = pl[1] >= 0.0 ? b->max.y : b->min.y;
+        double pz = pl[2] >= 0.0 ? b->max.z : b->min.z;
+        if (pl[0] * px + pl[1] * py + pl[2] * pz + pl[3] < 0.0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* World-space AABB of an object: its mesh bounds transformed by the model
+ * matrix. */
+static ws_aabb3 object_world_aabb(const ws_scene_object *obj)
+{
+    ws_aabb3 mb = ws_mesh_bounds(obj->mesh);
+    ws_aabb3 out;
+    out.min = ws_vec3_make(1.0e30, 1.0e30, 1.0e30);
+    out.max = ws_vec3_make(-1.0e30, -1.0e30, -1.0e30);
+    for (int ci = 0; ci < 8; ++ci) {
+        ws_vec3 c = ws_vec3_make((ci & 1) ? mb.max.x : mb.min.x,
+                                 (ci & 2) ? mb.max.y : mb.min.y,
+                                 (ci & 4) ? mb.max.z : mb.min.z);
+        ws_vec4 w = ws_mat4_mul_vec4(obj->transform, ws_vec4_make(c.x, c.y, c.z, 1.0));
+        if (w.x < out.min.x) { out.min.x = w.x; }
+        if (w.y < out.min.y) { out.min.y = w.y; }
+        if (w.z < out.min.z) { out.min.z = w.z; }
+        if (w.x > out.max.x) { out.max.x = w.x; }
+        if (w.y > out.max.y) { out.max.y = w.y; }
+        if (w.z > out.max.z) { out.max.z = w.z; }
+    }
+    return out;
+}
+
 /* Light view-projection covering the scene bounds. The light sits one scene
  * radius behind the centre along the light direction and looks at the centre. */
 static ws_mat4 shadow_light_matrix(const ws_scene *scene, ws_vec3 lo, ws_vec3 hi)
@@ -887,6 +964,7 @@ typedef struct band_job {
     const clip_vertex *prep;    /* per-frame vertex prepass (shared, read-only) */
     const screen_vertex *prep_scr; /* prepass screen coords (viewport-mapped) */
     const uint32_t *obj_base;   /* prep[] offset of each object's first vertex */
+    const unsigned char *obj_visible; /* per-object frustum-cull result (NULL = all) */
     int band_y0;
     int band_y1;
     int count_triangles;  /* only band 0 counts triangle-level stats */
@@ -940,6 +1018,9 @@ static void render_band(band_job *job)
     for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
         const ws_scene_object *obj = &scene->objects[oi];
         if (obj->mesh == NULL || obj->mesh->vertices == NULL || obj->mesh->indices == NULL) {
+            continue;
+        }
+        if (job->obj_visible != NULL && !job->obj_visible[oi]) {
             continue;
         }
         ws_mat4 mvp = ws_mat4_multiply(job->view_proj, obj->transform);
@@ -1056,6 +1137,30 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
     double aspect = (double)fb->width / (double)fb->height;
     ws_mat4 proj = ws_mat4_perspective(cam->fov_y_radians, aspect, cam->near_z, cam->far_z);
     ws_mat4 view_proj = ws_mat4_multiply(proj, view);
+
+    /* Frustum cull: mark each object whose world AABB lies wholly outside the
+     * camera frustum. Such an object's triangles would all be clipped away, so
+     * skipping it is a pure speed-up and leaves the frame bit-identical. The
+     * shadow pass keeps every object because the light frustum differs. */
+    frustum cam_frustum = frustum_from_view_proj(view_proj);
+    unsigned char *obj_visible = NULL;
+    if (scene->object_count > 0u) {
+        obj_visible = (unsigned char *)malloc((size_t)scene->object_count);
+    }
+    if (obj_visible != NULL) {
+        for (uint32_t oi = 0; oi < scene->object_count; ++oi) {
+            const ws_scene_object *obj = &scene->objects[oi];
+            int visible = 1;
+            if (obj->mesh != NULL && obj->mesh->vertices != NULL && obj->mesh->indices != NULL) {
+                ws_aabb3 b = object_world_aabb(obj);
+                visible = !frustum_rejects_aabb(&cam_frustum, &b);
+            }
+            obj_visible[oi] = (unsigned char)visible;
+            if (!visible && stats != NULL) {
+                stats->objects_culled += 1u;
+            }
+        }
+    }
 
     /* Optional directional shadow pass: build the light-space depth map once,
      * before the parallel image pass, so every band samples the same data. */
@@ -1187,6 +1292,7 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
         j->prep = prep;
         j->prep_scr = prep_scr;
         j->obj_base = obj_base;
+        j->obj_visible = obj_visible;
         j->band_y0 = (int)y0;
         j->band_y1 = (int)y1;
         j->count_triangles = (active == 0u);
@@ -1209,6 +1315,7 @@ ws_result ws_render_scene(const ws_scene *scene, ws_framebuffer *fb,
     free(prep);
     free(prep_scr);
     free(obj_base);
+    free(obj_visible);
 
     if (stats != NULL) {
         /* Triangle-level counters come from band 0 alone (they are image-wide);

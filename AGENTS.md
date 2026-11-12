@@ -78,8 +78,20 @@ kural kanıtla uygulanır:
 - **Bit-özdeşlik doğrulaması golden boyutundan büyük yapılmalı:** Küçük golden
   kareler nadir yuvarlama farklarını gizler; en az bir ürün çözünürlüğünde
   (1920×1080) piksel-piksel `cmp` ile doğrula.
+- **Görünürlük (frustum) eleme güvenli:** Kamera frustumunun dışındaki bir
+  nesnenin eksen-hizalı kutusu tamamen bir düzlem gerisindeyse o nesnenin tüm
+  üçgenleri kırpılır; nesneyi atlamak bit-özdeş bir hızlandırmadır (gölge geçişi
+  ışık frustum'u farklı olduğundan tüm nesneleri korur). Rasterleyici **uzak
+  düzlemde kırpma yapmadığından** yalnız beş düzlem (sol/sağ/alt/üst/yakın)
+  kullanılır; uzak düzlemi de elemek uzaktaki geometriyi yanlışlıkla siler.
+- **Önden-arkaya (front-to-back) sıralama bit-özdeş DEĞİL:** Aşırı çizimi
+  azaltmak için üçgenleri derinliğe göre sıralamak, z **beraberliğinde** hangi
+  üçgenin pikseli kazandığını değiştirir; `terrain_day`'de ölçüldü ve 4188 bayt
+  farklı çıktı. Bu yüzden aşırı çizim azaltma şu an bloke; yalnız beraberlik
+  kırıcı deterministik bir anahtarla (örneğin nesne indeksi) bit-özdeş hâle
+  getirilebilir.
 - **Sıradaki büyük fırsat — aşırı çizim (overdraw):** Ürün sahnelerinde
   `terrain_day`/`world_stream` ~1.9x aşırı çizim gösterir (bir piksel ortalama iki
-  kez gölgeleniyor). Önden-arkaya (front-to-back) sıralama ile erken derinlik
-  eleme kazanç sağlar, ancak rasterleyiciye bant-içi sıralı karo kuyruğu eklemek
-  gerekir; beraberlik kırıcı deterministik anahtar şarttır.
+  kez gölgeleniyor). Derinlik testi zaten gölgelemeden **önce** (erken-z) yapılır;
+  bu yüzden kazanç yalnız çizim sırasını değiştirmekle elde edilir ve bu da
+  yukarıdaki beraberlik sorunu nedeniyle henüz bit-özdeş değildir.

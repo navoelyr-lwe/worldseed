@@ -271,6 +271,59 @@ static int test_render_produces_content(void)
     return 1;
 }
 
+static int test_render_frustum_cull_is_bit_identical(void)
+{
+    const uint8_t color[3] = {180u, 150u, 90u};
+    ws_vertex verts[24];
+    uint32_t idx[36];
+    ws_mesh cube;
+    WS_CHECK(ws_mesh_make_cube(&cube, verts, 24u, idx, 36u, color) == WS_OK);
+
+    ws_scene_object objects[2];
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, objects, 2u) == WS_OK);
+    ws_material mat = ws_material_make(0.7, 0.6, 0.4, 0.8, 0.0, 0.0);
+    /* One cube in front of the camera, one far to the side and well outside the
+     * frustum. */
+    ws_mat4 near_m = ws_mat4_translation(ws_vec3_make(0.0, 0.4, 0.0));
+    ws_mat4 far_m = ws_mat4_translation(ws_vec3_make(400.0, 0.4, 0.0));
+    WS_CHECK(ws_scene_add_object(&scene, &cube, near_m, mat) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene, &cube, far_m, mat) == WS_OK);
+    scene.camera = ws_camera_default();
+
+    ws_framebuffer fb;
+    WS_CHECK(ws_framebuffer_create(&fb, 160u, 120u) == WS_OK);
+    float *depth = (float *)malloc((size_t)fb.width * fb.height * sizeof(float));
+    WS_CHECK(depth != NULL);
+
+    ws_render_stats st;
+    WS_CHECK(ws_render_scene(&scene, &fb, depth, 32u, &st) == WS_OK);
+    /* The far cube is outside the frustum and must be culled. */
+    WS_CHECK(st.objects_culled == 1u);
+
+    /* The same scene without the far cube renders bit-identically: the culled
+     * object contributed nothing. */
+    ws_scene_object objects2[1];
+    ws_scene scene2;
+    WS_CHECK(ws_scene_init(&scene2, objects2, 1u) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene2, &cube, near_m, mat) == WS_OK);
+    scene2.camera = ws_camera_default();
+    ws_framebuffer fb2;
+    WS_CHECK(ws_framebuffer_create(&fb2, 160u, 120u) == WS_OK);
+    float *depth2 = (float *)malloc((size_t)fb2.width * fb2.height * sizeof(float));
+    WS_CHECK(depth2 != NULL);
+    ws_render_stats st2;
+    WS_CHECK(ws_render_scene(&scene2, &fb2, depth2, 32u, &st2) == WS_OK);
+    WS_CHECK(st2.objects_culled == 0u);
+    WS_CHECK(memcmp(fb.pixels, fb2.pixels, (size_t)fb.width * fb.height * 4u) == 0);
+
+    free(depth);
+    free(depth2);
+    ws_framebuffer_free(&fb);
+    ws_framebuffer_free(&fb2);
+    return 1;
+}
+
 static int test_render_tile_invariance(void)
 {
     render_fixture a;
@@ -1426,6 +1479,7 @@ int main(void)
         {"texture bilinear interpolation", test_texture_bilinear},
         {"texture noise reproducible", test_texture_noise_reproducible},
         {"render produces content", test_render_produces_content},
+        {"render frustum cull is bit identical", test_render_frustum_cull_is_bit_identical},
         {"render tile invariance", test_render_tile_invariance},
         {"render determinism", test_render_determinism},
         {"render depth occlusion", test_render_depth_occlusion},
