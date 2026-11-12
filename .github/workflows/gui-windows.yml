@@ -226,6 +226,43 @@ jobs:
           $sm = [regex]::Match(($diff -join " "), "signed_mean a-b: r=(-?[0-9.]+)")
           if ([double]$sm.Groups[1].Value -lt 0) { Write-Error "shadowed frame brighter than unshadowed"; exit 1 }
 
+      - name: GPU capability and CPU/GPU raster decision on isolated runner
+        shell: pwsh
+        run: |
+          # P10/P12 GPU path: does this runner expose an OpenCL device? ws_gpu_check
+          # always runs; with no device it prints gpu=unavailable and still verifies
+          # the CPU reference. ws_perf measures CPU vs GPU raster on the same batch
+          # and only recommends the GPU when it is both correct and faster, so "GPU
+          # only when it actually helps" is measured here, not assumed.
+          New-Item -ItemType Directory -Force -Path evidence/gui/gpu | Out-Null
+          & build-gui/tools/Release/ws_gpu_check.exe |
+            Tee-Object -FilePath evidence/gui/gpu/gpu-check.txt
+          if (-not (Select-String -Path evidence/gui/gpu/gpu-check.txt -Pattern "WS_GPU_CHECK_OK" -Quiet)) { exit 1 }
+          # Report the device state plainly; unavailability is not a failure.
+          if (Select-String -Path evidence/gui/gpu/gpu-check.txt -Pattern "gpu=unavailable" -Quiet) {
+            Write-Output "runner has no OpenCL device: CPU fallback verified"
+          } else {
+            Write-Output "runner has an OpenCL device: see gpu-check.txt"
+          }
+          & build-gui/tools/Release/ws_perf.exe --quick |
+            Tee-Object -FilePath evidence/gui/gpu/perf-quick.txt
+          if (-not (Select-String -Path evidence/gui/gpu/perf-quick.txt -Pattern "WS_PERF_OK" -Quiet)) { exit 1 }
+
+      - name: Native 4K reference-scene performance on isolated runner
+        shell: pwsh
+        run: |
+          # P12 release metric: native 3840x2160 frame times with p50/p95/p99 (a
+          # single FPS sample is not a release gate, docs/11). This is the real
+          # hardware measurement behind the release performance report. It runs on
+          # the isolated Windows runner; the CPU path is expected to be well under
+          # 30 FPS, which is recorded honestly rather than hidden.
+          New-Item -ItemType Directory -Force -Path evidence/gui/perf | Out-Null
+          & build-gui/tools/Release/ws_perf.exe |
+            Tee-Object -FilePath evidence/gui/perf/perf-4k.txt
+          if (-not (Select-String -Path evidence/gui/perf/perf-4k.txt -Pattern "WS_PERF_OK" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/gui/perf/perf-4k.txt -Pattern "perf scene" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/gui/perf/perf-4k.txt -Pattern "3840x2160" -Quiet)) { Write-Error "no native 4K measurement produced"; exit 1 }
+
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
