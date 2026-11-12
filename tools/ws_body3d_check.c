@@ -22,7 +22,6 @@
 #define G 9.80665
 #define ITERS 30
 #define BIAS 0.2
-#define GAIT_FREQ 1.4
 
 static double flat(void *ctx, double x, double y)
 {
@@ -120,12 +119,14 @@ static int run_walk(const ws_species_profile *p, double seconds,
     }
     ws_vec3 a = ws_body3d_center_of_mass(&c);
     double phase = 0.0;
+    /* The species' own walk cadence, not a single fixed rate for all species. */
+    ws_quad3_gait gait = ws_quad3_gait_walk(p);
     m->max_lr_asymmetry = 0.0;
     m->finite = 1;
     int steps = (int)(seconds / dt);
     for (int s = 0; s < steps; ++s) {
-        phase += GAIT_FREQ * dt;
-        ws_quad3_gait_targets(&c, &parts, p, phase);
+        phase += gait.freq * dt;
+        ws_quad3_gait_apply(&c, &parts, &gait, phase);
         ws_quad3_balance(&c, &parts, p, 0.0);
         if (ws_body3d_step(&c) != WS_OK) {
             m->finite = 0;
@@ -187,13 +188,14 @@ static int run_turn(const ws_species_profile *p, double yaw_rate, double seconds
         ws_body3d_step(&c);
     }
     double phase = 0.0;
+    ws_quad3_gait gait = ws_quad3_gait_walk(p);
     m->finite = 1;
     int steps = (int)(seconds / dt);
     for (int s = 0; s < steps; ++s) {
-        phase += GAIT_FREQ * dt;
+        phase += gait.freq * dt;
         /* Commanded heading ramps at yaw_rate; the servo tracks it. */
         double heading_cmd = yaw_rate * (double)s * dt;
-        ws_quad3_gait_targets(&c, &parts, p, phase);
+        ws_quad3_gait_apply(&c, &parts, &gait, phase);
         ws_quad3_balance(&c, &parts, p, heading_cmd);
         if (ws_body3d_step(&c) != WS_OK) {
             m->finite = 0;
@@ -315,11 +317,12 @@ static int run_slope(const ws_species_profile *p, double grade, double seconds,
     }
     ws_vec3 a = ws_body3d_center_of_mass(&c);
     double phase = 0.0;
+    ws_quad3_gait gait = ws_quad3_gait_walk(p);
     m->finite = 1;
     int steps = (int)(seconds / dt);
     for (int s = 0; s < steps; ++s) {
-        phase += GAIT_FREQ * dt;
-        ws_quad3_gait_targets(&c, &parts, p, phase);
+        phase += gait.freq * dt;
+        ws_quad3_gait_apply(&c, &parts, &gait, phase);
         ws_quad3_balance(&c, &parts, p, 0.0);
         if (ws_body3d_step(&c) != WS_OK) {
             m->finite = 0;

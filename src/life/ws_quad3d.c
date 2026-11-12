@@ -45,13 +45,25 @@ static void ik_angles(double hip_x, double hip_y, double foot_x, double foot_y,
     *out_lower = atan2(foot_y - ky, foot_x - kx);
 }
 
+/* Suggested fixed step for a species. The contact/joint solver's stability
+ * limit scales with the leg length (measured on this solver: a limb up to
+ * ~0.0056 x leg_upper stays put; beyond it the stand drifts and the body
+ * falls), so the step is proportional to leg length, capped at the reference
+ * deer's calibrated 2 ms. The earlier 3/4-power-of-shoulder rule is not
+ * physical: it gave the smaller species a step that was far too small, which
+ * over-damped the open-loop trot and stalled them (measured: fox ~0.15 m/s).
+ * The leg-proportional step lifts the fox to ~0.66 m/s at the same gains and
+ * keeps every species standing. */
 double ws_quad3_suggested_dt(const ws_species_profile *p)
 {
-    double scale = 1.0;
-    if (p != NULL && p->shoulder_h > 0.0) {
-        scale = p->shoulder_h / 1.05;
+    double leg = 0.60;
+    if (p != NULL && p->leg_upper > 0.0) {
+        leg = p->leg_upper;
     }
-    double dt = 0.002 * pow(scale, 0.75);
+    double dt = 0.0030 * (leg / 0.60);
+    if (dt > 0.002) {
+        dt = 0.002;
+    }
     if (dt < 2.0e-4) {
         dt = 2.0e-4;
     }
