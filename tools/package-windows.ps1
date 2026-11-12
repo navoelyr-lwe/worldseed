@@ -109,7 +109,14 @@ if (-not (Test-Path $qualityExe)) { Write-Error "missing build output: $qualityE
 New-Item -ItemType Directory -Force -Path evidence/quality | Out-Null
 & $qualityExe evidence/quality 20260101 | Tee-Object -FilePath evidence/quality/quality.txt
 if (-not (Select-String -Path evidence/quality/quality.txt -Pattern "WS_QUALITY_OK" -Quiet)) { exit 1 }
-if ((Select-String -Path evidence/quality/quality.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count -ne 6) { exit 1 }
+# Every reference scene the harness ran must pass; the expected count is read
+# from the harness's own "WS_QUALITY_OK scenes=N" report so it cannot go stale.
+$qualityRaw = Get-Content evidence/quality/quality.txt -Raw
+$qualityExpected = [int]([regex]::Match($qualityRaw, "WS_QUALITY_OK scenes=(\d+)").Groups[1].Value)
+$qualityPassed = (Select-String -Path evidence/quality/quality.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count
+if ($qualityPassed -ne $qualityExpected) {
+    Write-Error "quality: $qualityPassed/$qualityExpected scenes passed"; exit 1
+}
 
 # P12 product motion-quality checklist (docs/QUALITY-CHECKLIST.md): a still
 # frame cannot cover motion, so the reference quadruped is driven through the
@@ -120,7 +127,15 @@ if (-not (Test-Path $motionExe)) { Write-Error "missing build output: $motionExe
 New-Item -ItemType Directory -Force -Path evidence/motion | Out-Null
 & $motionExe evidence/motion 20260101 | Tee-Object -FilePath evidence/motion/motion.txt
 if (-not (Select-String -Path evidence/motion/motion.txt -Pattern "WS_MOTION_OK" -Quiet)) { exit 1 }
-if ((Select-String -Path evidence/motion/motion.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count -ne 1) { exit 1 }
+# Every species the harness ran must pass. The expected count is read from the
+# harness's own "WS_MOTION_OK scenes=N" report so this gate cannot go stale when
+# the species set changes.
+$motionRaw = Get-Content evidence/motion/motion.txt -Raw
+$motionExpected = [int]([regex]::Match($motionRaw, "WS_MOTION_OK scenes=(\d+)").Groups[1].Value)
+$motionPassed = (Select-String -Path evidence/motion/motion.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count
+if ($motionPassed -ne $motionExpected) {
+    Write-Error "motion: $motionPassed/$motionExpected species passed"; exit 1
+}
 
 $stage = "stage/worldseed"
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
