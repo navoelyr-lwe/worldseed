@@ -287,15 +287,45 @@ static void leg_target(double phase, double duty, double hip_amp,
 void ws_quad3_gait_targets(ws_body3d *c, const ws_quad3_parts *parts,
                            const ws_species_profile *p, double phase)
 {
-    if (c == NULL || parts == NULL) {
+    ws_quad3_gait g = ws_quad3_gait_walk(p);
+    ws_quad3_gait_apply(c, parts, &g, phase);
+}
+
+ws_quad3_gait ws_quad3_gait_walk(const ws_species_profile *p)
+{
+    ws_quad3_gait g;
+    g.freq = 1.4;
+    g.hip_amp = 0.10;
+    g.knee_lift = 0.6;
+    g.duty = 0.6;
+    if (p != NULL) {
+        g.freq = p->gait_freq;
+        g.duty = p->duty_factor;
+    }
+    return g;
+}
+
+ws_quad3_gait ws_quad3_gait_run(const ws_species_profile *p)
+{
+    ws_quad3_gait g = ws_quad3_gait_walk(p);
+    /* A run raises the cadence and roughly doubles the stride, which is what
+     * lifts the reference deer from ~1.8 m/s to ~2.1 m/s while it stays
+     * upright. The stance fraction is unchanged: shortening it below the
+     * trot's diagonal overlap destabilises the open-loop driver at this step. */
+    g.freq *= 1.4;
+    g.hip_amp *= 2.0;
+    return g;
+}
+
+void ws_quad3_gait_apply(ws_body3d *c, const ws_quad3_parts *parts,
+                         const ws_quad3_gait *g, double phase)
+{
+    if (c == NULL || parts == NULL || g == NULL) {
         return;
     }
-    double duty = 0.6;
-    if (p != NULL) {
-        duty = p->duty_factor;
-    }
-    const double hip_amp = 0.10;
-    const double knee_lift = 0.6;
+    const double duty = g->duty;
+    const double hip_amp = g->hip_amp;
+    const double knee_lift = g->knee_lift;
     /* Diagonal pairs move together: FL & RR in phase, FR & RL half a cycle
      * later. */
     const double leg_phase[WS_LEG_COUNT] = {
