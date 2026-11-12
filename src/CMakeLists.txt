@@ -29,6 +29,18 @@ add_custom_command(
   COMMENT "Embedding OpenCL kernel ws_raster_tiled.cl")
 add_custom_target(ws_kernel_tiled_gen DEPENDS ${WS_KERNEL_TILED_GEN})
 
+set(WS_KERNEL_SCENE_GEN ${CMAKE_CURRENT_BINARY_DIR}/ws_kernel_ws_scene.c)
+add_custom_command(
+  OUTPUT ${WS_KERNEL_SCENE_GEN}
+  COMMAND ${CMAKE_COMMAND}
+          -DKERNEL_IN=${WS_KERNEL_DIR}/ws_scene.cl
+          -DKERNEL_OUT=${WS_KERNEL_SCENE_GEN}
+          -DKERNEL_NAME=ws_scene
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/embed_kernel.cmake
+  DEPENDS ${WS_KERNEL_DIR}/ws_scene.cl ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/embed_kernel.cmake
+  COMMENT "Embedding OpenCL kernel ws_scene.cl")
+add_custom_target(ws_kernel_scene_gen DEPENDS ${WS_KERNEL_SCENE_GEN})
+
 add_library(worldseed_core STATIC
   core/ws_result.c
   core/ws_math.c
@@ -90,10 +102,12 @@ add_library(worldseed_core STATIC
   platform/ws_clock.c
   gpu/ws_opencl.c
   gpu/ws_tilebin.c
+  render/ws_gpu_scene.c
   ${WS_KERNEL_GEN}
-  ${WS_KERNEL_TILED_GEN})
+  ${WS_KERNEL_TILED_GEN}
+  ${WS_KERNEL_SCENE_GEN})
 
-add_dependencies(worldseed_core ws_kernel_gen ws_kernel_tiled_gen)
+add_dependencies(worldseed_core ws_kernel_gen ws_kernel_tiled_gen ws_kernel_scene_gen)
 
 target_include_directories(worldseed_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(worldseed_core PUBLIC ${WS_COMMON_FLAGS_TARGET})

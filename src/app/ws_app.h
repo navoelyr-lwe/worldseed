@@ -23,6 +23,7 @@ typedef struct ws_app_options {
     int headless;             /* never open a window */
     int selftest;             /* render every scene, verify, print result, exit */
     int capture;              /* write a PPM for the selected scene and exit */
+    int gpu;                  /* opt in to the OpenCL accelerator (CPU fallback) */
     int scene_index;          /* scene to display or capture */
     uint64_t seed;            /* scene seed */
     uint32_t width;           /* render width */

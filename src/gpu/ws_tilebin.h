@@ -55,4 +55,14 @@ ws_result ws_tilebin_build(ws_tilebin *out,
 
 void ws_tilebin_free(ws_tilebin *bin);
 
+/* Strided variant used by the full-scene path. The vertex array is flat:
+ * vertex k of triangle t occupies floats
+ * [((t*3 + k) * vert_stride + x_off) .. ], with the screen x/y at x_off and
+ * y_off. Semantics match ws_tilebin_build (conservative filter, ascending
+ * triangle order per tile). */
+ws_result ws_tilebin_build_strided(ws_tilebin *out,
+                                   const float *tri_verts, uint32_t vert_stride,
+                                   uint32_t x_off, uint32_t y_off, uint32_t count,
+                                   uint32_t width, uint32_t height, uint32_t tile_size);
+
 #endif /* WS_GPU_TILEBIN_H */

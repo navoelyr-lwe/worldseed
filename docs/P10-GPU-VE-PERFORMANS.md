@@ -56,6 +56,23 @@ thread sayısına göre sınırlanır; `0` worker deterministik seri fallback'ti
 - Her API çağrısı kontrol edilir. Cihaz kaybı bayrağı `ws_opencl_device_lost` ile
   bildirilir; çağıran CPU'ya düşer.
 
+### Tam sahne GPU yolu — `kernels/ws_scene.cl`, `src/render/ws_gpu_scene.c`
+
+- `kernels/ws_scene.cl` (OpenCL C 1.2), CPU referans renderer'ının **tüm gölgeleme
+  ardışık düzenini** yansıtır: perspektif-düzeltmeli enterpolasyon, Lambert doğrudan
+  ışık, hemisferik ortam, speküler, yönlü gölge haritası (PCF), mesafe sisi, pozlama
+  ve ton eşleme, gökyüzü degrade. Vertex kaydı 13 float (`sx,sy,z,invw, wx,wy,wz,
+  nx,ny,nz, r,g,b`); tile-bin girdisi üçgen başına 39 float'tır.
+- `src/render/ws_gpu_scene.c` host tarafı: sahnenin nesne/vertex/üçgen verisini
+  arabelleklere yazar, yakın-düzlem kırpma ve fan üçgenlemeyi yapar, gölge haritasını
+  CPU ile aynı koddan (`ws_render_shadow_build_for_test`) kurar ve çekirdeği
+  gönderir. `ws_render_scene_gpu(...)` giriş noktasıdır; cihaz yoksa CPU referansına
+  düşer ve `stats->path = WS_RENDER_PATH_CPU` bildirir.
+- Renk uzayı sözleşmesi: çekirdek, gölgeleme ara değerlerini **linear** uzayda tutar
+  ve CPU'daki `encode_display_u8` (sRGB) ile aynı kuantalama adımını uygular; bu
+  yüzden float ile double arasındaki fark yalnız son 8-bit yuvarlama basamağına
+  düşer.
+
 GPU, otoritatif simülasyonu etkilemez (ADR-001): yalnız kararı verilmiş kareyi
 hızlandırır.
 
@@ -72,6 +89,21 @@ hızlandırır.
   görüntüsünün bit-özdeş kaldığını doğrular: `device_loss_recovered=1`.
 - **GPU yokluğu** — cihaz yoksa araç CPU referansını yine doğrular ve
   `gpu=unavailable` yazar; CI GPU'suz runner'da yanlış hata üretmez.
+- **Tam sahne GPU/CPU karşılaştırması** — `tools/ws_gpu_scene_check`: 17 katalog
+  sahnesinin **tamamı** OpenCL tam-sahne yoluyla çizilir ve CPU referansıyla
+  karşılaştırılır. Araç, her farklı pikseli bir **derinlik beraberliği** (iki yol da
+  aynı derinlikteki iki yüzeyden birini seçer; float/double farkı) ile **yapısal
+  hata** (derinlik de uyuşmuyor) olarak ayırır. Ölçülen sonuç (pocl CPU ICD):
+  `gpu_used=17`, tüm sahnelerde `structural_fraction=0.00000`; en yüksek renk farkı
+  `world_stream`'de 81/255'tir ve o sahnenin **tüm** farklı pikselleri açıklanmış
+  derinlik beraberliğidir (6,6%). Eş-düzlemli yüzeylerin (bitişik arazi/akış
+  döşemeleri) derinlik sırası float ile double arasında son-bit düzeyinde
+  değişebilir; bu bir hata değil, belgelenmiş semantik sınırdır.
+- **Ürün uygulaması GPU karesi** — `worldseed --capture ... --gpu` opt-in bayrağı
+  aynı sahneyi OpenCL tam-sahne yoluyla çizer; `orbit` sahnesinde GPU karesi CPU
+  karesiyle **bit-özdeş** (`ws_imgdiff differing=0`). Varsayılan yakalama yolu CPU
+  referansıdır, bu yüzden golden kapısının uygulama↔golden `cmp` karşılaştırması
+  etkilenmez.
 - **Zamanlayıcı determinizmi** — `tests/test_gpu.c`: seri ve paralel sonuç
   bit-özdeş (`identical=1`); ikinci gönderim havuzu yeniden kullanır; sıfır-worker
   havuzu seri fallback'tir; boş aralık iş göndermez.
@@ -111,7 +143,10 @@ gerçek cihaz ölçümü olmadan yapılmaz.
   donanımda yapılmalıdır.
 - Kernel yalnız düz gölgeli üçgen rasterleme yapar (semantik karşılaştırma için
   referansla eşleşen alt küme). Tam sahne GPU rasterleme/pixel-buffer sunumu
-  sonraki dilimdedir.
+  sonraki dilimdedir. **Güncelleme:** tam sahne GPU yolu artık uygulandı ve her
+  katalog sahnesinde CPU referansıyla karşılaştırıldı (bkz. yukarıda "Tam sahne
+  GPU/CPU karşılaştırması"); eş-düzlemli yüzeylerde son-bit derinlik beraberliği
+  nedeniyle tam bit-özdeşlik yerine belgelenmiş bir semantik sınır geçerlidir.
 - Çok çekirdekli zamanlayıcı altyapısı hazırdır ve ölçülmüştür; otoritatif
   simülasyon adımının paralelleştirilmesi (bölge/canlı işleri) determinizm kanıtıyla
   birlikte sonraki dilimlere bırakılmıştır.

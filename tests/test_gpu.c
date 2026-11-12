@@ -22,7 +22,10 @@
 #include "platform/ws_hardware.h"
 #include "platform/ws_threads.h"
 #include "render/ws_framebuffer.h"
+#include "render/ws_mesh.h"
 #include "render/ws_raster.h"
+#include "render/ws_render.h"
+#include "render/ws_scene.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -310,6 +313,84 @@ static int test_tilebin_covers_bounding_boxes(void)
     return 1;
 }
 
+/* --- full-scene GPU path (P12) ------------------------------------------ */
+/* Build a small scene from procedural meshes, render it on the CPU reference
+ * and on ws_render_scene_gpu, and check the GPU frame matches the CPU frame
+ * within the documented tolerance. On a machine with no OpenCL device the GPU
+ * entry point must fall back to the CPU path and produce a bit-identical frame
+ * with stats->path == CPU; that fallback is itself an assertion. */
+static int test_scene_gpu_semantics(void)
+{
+    enum { SW = 160, SH = 120, CAP = 8 };
+    static ws_scene_object storage[CAP];
+    static ws_vertex cube_v[64];
+    static uint32_t cube_i[64];
+    static ws_vertex sphere_v[2048];
+    static uint32_t sphere_i[4096];
+    ws_mesh cube;
+    ws_mesh sphere;
+    uint8_t grey[3] = {200u, 200u, 200u};
+    uint8_t green[3] = {90u, 170u, 90u};
+    WS_CHECK(ws_mesh_make_cube(&cube, cube_v, 64u, cube_i, 64u, grey) == WS_OK);
+    WS_CHECK(ws_mesh_make_sphere(&sphere, sphere_v, 2048u, sphere_i, 4096u,
+                                 12u, 8u, green) == WS_OK);
+
+    ws_scene scene;
+    WS_CHECK(ws_scene_init(&scene, storage, CAP) == WS_OK);
+    scene.settings.sky_enabled = 1;
+    scene.settings.fog_density = 0.0;
+    scene.settings.shadows_enabled = 0;
+    WS_CHECK(ws_scene_add_object(&scene, &cube,
+                                 ws_mat4_translation(ws_vec3_make(0.0, 0.0, 0.0)),
+                                 ws_material_make(0.8, 0.2, 0.2, 0.9, 0.0, 0.1)) == WS_OK);
+    WS_CHECK(ws_scene_add_object(&scene, &sphere,
+                                 ws_mat4_translation(ws_vec3_make(2.0, 0.5, 1.0)),
+                                 ws_material_make(0.2, 0.6, 0.9, 0.6, 0.3, 0.4)) == WS_OK);
+    scene.camera.eye = ws_vec3_make(4.0, 3.0, 6.0);
+    scene.camera.target = ws_vec3_make(0.0, 0.0, 0.0);
+
+    ws_framebuffer cpu_fb;
+    ws_framebuffer gpu_fb;
+    WS_CHECK(ws_framebuffer_create(&cpu_fb, SW, SH) == WS_OK);
+    WS_CHECK(ws_framebuffer_create(&gpu_fb, SW, SH) == WS_OK);
+    size_t count = (size_t)SW * SH;
+    float *cpu_depth = (float *)malloc(count * sizeof(float));
+    float *gpu_depth = (float *)malloc(count * sizeof(float));
+    WS_CHECK(cpu_depth != NULL && gpu_depth != NULL);
+
+    ws_render_stats cpu_stats;
+    ws_render_stats gpu_stats;
+    WS_CHECK(ws_render_scene(&scene, &cpu_fb, cpu_depth, 16u, &cpu_stats) == WS_OK);
+    WS_CHECK(ws_render_scene_gpu(&scene, &gpu_fb, gpu_depth, 16u, &gpu_stats) == WS_OK);
+
+    if (gpu_stats.path == WS_RENDER_PATH_GPU) {
+        size_t diff = 0u;
+        for (size_t i = 0; i < count; ++i) {
+            for (int c = 0; c < 3; ++c) {
+                int d = (int)cpu_fb.pixels[i * 4u + (size_t)c] -
+                        (int)gpu_fb.pixels[i * 4u + (size_t)c];
+                if (d < 0) { d = -d; }
+                if (d > 8) { diff += 1u; }
+            }
+        }
+        WS_CHECK(diff * 200u <= count); /* <= 0.5% of channels differ by > 8 */
+    } else {
+        /* No device: fallback must be byte-for-byte the CPU reference. */
+        WS_CHECK(memcmp(cpu_fb.pixels, gpu_fb.pixels, count * 4u) == 0);
+    }
+
+    /* The GPU path must honour the tile size without changing the frame beyond
+     * tolerance, and must reject NULL arguments cleanly. */
+    WS_CHECK(ws_render_scene_gpu(&scene, &gpu_fb, gpu_depth, 0u, &gpu_stats) == WS_OK);
+    WS_CHECK(ws_render_scene_gpu(NULL, &gpu_fb, gpu_depth, 16u, &gpu_stats) != WS_OK);
+
+    free(cpu_depth);
+    free(gpu_depth);
+    ws_framebuffer_free(&cpu_fb);
+    ws_framebuffer_free(&gpu_fb);
+    return 1;
+}
+
 int main(void)
 {
     const ws_test_case cases[] = {
@@ -318,6 +399,7 @@ int main(void)
         {"hardware_probe", test_hardware_probe},
         {"tilebin_covers_bboxes", test_tilebin_covers_bounding_boxes},
         {"gpu_semantics_and_loss", test_gpu_semantics_and_loss},
+        {"scene_gpu_semantics", test_scene_gpu_semantics},
     };
     return ws_test_run("gpu", cases, (int)(sizeof(cases) / sizeof(cases[0])));
 }

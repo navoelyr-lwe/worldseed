@@ -588,6 +588,15 @@ ws_result ws_render_shadow_build_for_test(const ws_scene *scene, float *depth,
     if (size == 0u) {
         return WS_ERR_INVALID_ARGUMENT;
     }
+    return ws_render_shadow_map(scene, depth, size, band_count, NULL);
+}
+
+ws_result ws_render_shadow_map(const ws_scene *scene, float *depth, unsigned size,
+                               unsigned band_count, ws_mat4 *out_light_vp)
+{
+    if (scene == NULL || depth == NULL || scene->objects == NULL || size == 0u) {
+        return WS_ERR_INVALID_ARGUMENT;
+    }
     ws_vec3 lo, hi;
     scene_world_bounds(scene, &lo, &hi);
     ws_mat4 light_vp = shadow_light_matrix(scene, lo, hi);
@@ -595,6 +604,9 @@ ws_result ws_render_shadow_build_for_test(const ws_scene *scene, float *depth,
     (void)ws_sched_create_default(&sched);
     shadow_build(scene, light_vp, depth, size, sched, band_count);
     ws_sched_destroy(sched);
+    if (out_light_vp != NULL) {
+        *out_light_vp = light_vp;
+    }
     return WS_OK;
 }
 

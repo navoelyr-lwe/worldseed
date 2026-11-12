@@ -247,6 +247,13 @@ jobs:
           & build-gui/tools/Release/ws_perf.exe --quick |
             Tee-Object -FilePath evidence/gui/gpu/perf-quick.txt
           if (-not (Select-String -Path evidence/gui/gpu/perf-quick.txt -Pattern "WS_PERF_OK" -Quiet)) { exit 1 }
+          # Full-scene GPU path on this runner's real device: the OpenCL path must
+          # run every catalog scene and match the CPU reference (structural error
+          # fraction zero). On a device-less runner the tool reports the CPU
+          # fallback and still passes.
+          & build-gui/tools/Release/ws_gpu_scene_check.exe |
+            Tee-Object -FilePath evidence/gui/gpu/gpu-scene.txt
+          if (-not (Select-String -Path evidence/gui/gpu/gpu-scene.txt -Pattern "WS_GPU_SCENE_OK" -Quiet)) { exit 1 }
 
       - name: Native 4K reference-scene performance on isolated runner
         shell: pwsh

@@ -22,6 +22,7 @@ ws_result ws_app_parse_options(int argc, char **argv, ws_app_options *opts)
     opts->headless = 0;
     opts->selftest = 0;
     opts->capture = 0;
+    opts->gpu = 0;
     opts->scene_index = 0;
     opts->seed = 20260101ULL;
     opts->width = APP_DEFAULT_WIDTH;
@@ -42,6 +43,8 @@ ws_result ws_app_parse_options(int argc, char **argv, ws_app_options *opts)
             }
             opts->capture = 1;
             opts->capture_path = argv[++i];
+        } else if (strcmp(a, "--gpu") == 0) {
+            opts->gpu = 1;
         } else if (strcmp(a, "--scene") == 0) {
             if (i + 1 >= argc) {
                 return WS_ERR_INVALID_ARGUMENT;
@@ -83,7 +86,14 @@ static ws_result render_into(const ws_app_options *opts, size_t scene_index,
     if (r != WS_OK) {
         return r;
     }
-    r = ws_render_scene(ws_catalog_scene(&catalog), fb, depth, 32u, NULL);
+    if (opts->gpu) {
+        /* Opt-in accelerator: OpenCL path when a device exists, CPU otherwise.
+         * The default capture path stays the bit-identical CPU reference so the
+         * golden gate's strict app-vs-harness comparison is unaffected. */
+        r = ws_render_scene_gpu(ws_catalog_scene(&catalog), fb, depth, 32u, NULL);
+    } else {
+        r = ws_render_scene(ws_catalog_scene(&catalog), fb, depth, 32u, NULL);
+    }
     ws_catalog_free(&catalog);
     return r;
 }
