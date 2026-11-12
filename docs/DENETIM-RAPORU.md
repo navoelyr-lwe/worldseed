@@ -49,6 +49,6 @@ Bu rapor ilk görevin plan denetimini, bulunan çelişkileri ve yapılan düzelt
 
 ## 6. Kalan riskler
 
-- Windows GUI self-hosted runner henüz mevcut değil; `gui-windows.yml` runner kayıtlı olduğunda gerçek pencere testiyle genişletilecek. Runner yokken bu iş "çalıştı" sayılmaz.
-- Branch protection yönetici yetkili erişim gerektirir; sağlanınca kurulacak.
-- GPU kernel derleme/çalıştırma P10'a bırakıldı; bu spike yalnız keşif yapar.
+- **Güncel (12 Kasım 2026):** izole Windows self-hosted runner artık kayıtlı ve gerçek pencere testini koşuyor. `gui-windows.yml` smoke + tur + gölge farkı + native 4K referans perf + **native 4K canlı ürün döngüsü GPU benchmark'ı** (10 dk, `--live-gpu`) adımlarını gerçek GPU'da (NVIDIA GeForce RTX 3060 Laptop, OpenCL 3.0 CUDA, 30 birim, 6 GB) tamamladı; son `main` koşusu başarılı. (Bu rapordaki ilk spike notu tarihsel kayıttır.)
+- **Branch protection açığı sürüyor:** bağlı entegrasyon token'ı ile `branches/main/protection` ve `rulesets` uç noktaları hâlâ **403** döndürüyor (repo `permissions.admin=true` bildirse de). Dal koruması kurulmuş gibi işaretlenmez; yönetici yetkili erişim gerektirir. Zorunlu kapılar şimdilik workflow tanımlarıyla uygulanır.
+- GPU kernel derleme/çalıştırma tamamlandı: `kernels/ws_scene.cl` (tam sahne OpenCL C 1.2 gölgeleme, 17/17 sahne yapısal fark 0) ve döşemeli raster çekirdeği gerçek GPU'da CI'da koşar; canlı döngü opt-in GPU yolu ve benchmark'ı eklendi.

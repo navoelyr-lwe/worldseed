@@ -19,7 +19,7 @@ Bu belge ilk görevde kurulan geliştirme altyapısını ve tespit edilen erişi
 
 ## Branch protection kurulumu (yönetici erişimi gerektirir)
 
-Depo private ve klasik branch protection / ruleset API'si mevcut token için 403 döndürüyor. Yönetici yetkili erişim sağlandığında aşağıdaki ayarlar uygulanır:
+Depo public; klasik branch protection / ruleset API'si mevcut bağlı entegrasyon token'ı için **403 "Resource not accessible by integration"** döndürüyor (`branches/main/protection`, `rulesets`, `--input` PUT/POST hepsi). Repo `permissions.admin=true` bildirse de token'ın `administration` yetkisi yoktur; bu nedenle koruma ayarları bu token ile **otomatik kurulamaz ve doğrulanamaz**. `main` için `protected:false` durumu sürüyor. Bu, kurulmuş gibi işaretlenmez. Yönetici yetkili erişim sağlandığında aşağıdaki ayarlar uygulanır:
 
 1. `main` için: PR zorunlu, en az 1 onay, "Require status checks to pass" açık, zorunlu kontroller = `ci.yml` işleri (`linux-matrix`, `windows-msvc`, `plan-integrity`, `docs-links`).
 2. "Require branches to be up to date before merging" açık.
@@ -94,6 +94,8 @@ GUI testi "çalıştı" olarak raporlanmaz.
   erişim kısıtı (ör. Actions dakika/spending limiti veya hosted runner izni).
 
 Bu durum 10 Kasım 2026 tarihli bir olay kaydıdır; kalıcı/güncel runner durumu olarak okunmamalıdır. 11 Kasım 2026'da `main` commit'i `f6d15ed8c54ef51183626aafb565ff817d0b45c0` için CI run `42974024398` başarıyla tamamlandı. Bu çalıştırmada Linux GCC/Clang Debug/Release, Windows MSVC Debug/Release, OpenCL CPU kernel, plan bütünlüğü ve doküman bağlantısı işleri başarılıdır. Aynı commit için izole Windows GUI run `42974024303` ve release run `42974038527` da başarılıdır.
+
+**Güncel (12 Kasım 2026):** hosted ve self-hosted runner erişimi düzenli çalışmaktadır. PR #71 (`main` = `9fef00d`) için CI run `43239423033` ve izole Windows GUI run `43239422714` **10/10 kontrol yeşil** tamamlandı; GUI işi smoke + tur + gölge farkı + native 4K referans perf + **native 4K canlı ürün döngüsü GPU benchmark'ı** (10 dk, `--live-gpu`) adımlarını gerçek GPU'da koştu. GUI işi hosted runner'lara göre uzun sürer (canlı 10 dk benchmark + 4K perf), bu normaldir.
 
 Bu nedenle 11 Kasım 2026 denetim anındaki gözlem: GitHub-hosted CI işleri yeniden çalışır görünmektedir; ancak tek bir başarılı run gelecekteki tüm runner erişimini garanti etmez. Yeni workflow koşuları gerçek sonuçlarına göre değerlendirilmelidir. Önceki 10 Kasım kesintisi tarihsel kayıt olarak korunur.
 
