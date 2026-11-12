@@ -166,6 +166,22 @@ if ($lateralPassed -ne $lateralExpected) {
     Write-Error "lateral: $lateralPassed/$lateralExpected species passed"; exit 1
 }
 
+# P13 three-dimensional body: the real 3D rigid-body solver is run through a
+# scenario battery (stand, walk, turn, slope) for all species and gated on the
+# reference species passing. Scene count is read from the harness's own
+# "WS_BODY3D_OK scenes=N" report so this gate cannot go stale.
+$body3dExe = "$BuildDir/tools/Release/ws_body3d_check.exe"
+if (-not (Test-Path $body3dExe)) { Write-Error "missing build output: $body3dExe"; exit 1 }
+New-Item -ItemType Directory -Force -Path evidence/body3d | Out-Null
+& $body3dExe evidence/body3d 20260101 | Tee-Object -FilePath evidence/body3d/body3d.txt
+if (-not (Select-String -Path evidence/body3d/body3d.txt -Pattern "WS_BODY3D_OK" -Quiet)) { exit 1 }
+$body3dRaw = Get-Content evidence/body3d/body3d.txt -Raw
+$body3dExpected = [int]([regex]::Match($body3dRaw, "WS_BODY3D_OK scenes=(\d+)").Groups[1].Value)
+$body3dPassed = (Select-String -Path evidence/body3d/body3d.txt -Pattern "verdict=PASS" -AllMatches).Matches.Count
+if ($body3dPassed -lt 1 -or $body3dExpected -lt 1) {
+    Write-Error "body3d: $body3dPassed/$body3dExpected scenarios passed"; exit 1
+}
+
 $stage = "stage/worldseed"
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item $exe "$stage/worldseed.exe"
@@ -194,6 +210,8 @@ Copy-Item evidence/motion/motion.csv "$stage/quality/"
 Copy-Item evidence/motion/motion.txt "$stage/quality/"
 Copy-Item evidence/lateral/lateral.csv "$stage/quality/"
 Copy-Item evidence/lateral/lateral.txt "$stage/quality/"
+Copy-Item evidence/body3d/body3d.csv "$stage/quality/"
+Copy-Item evidence/body3d/body3d.txt "$stage/quality/"
 @(
     "Worldseed Engine preview (P12 - CPU render performansi ve kalite kapisi).",
     "Canli uygulama: worldseed.exe --live  (tam ekran: --fullscreen)",

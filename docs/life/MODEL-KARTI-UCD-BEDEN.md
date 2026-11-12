@@ -42,9 +42,11 @@
    - **Temas + sürtünme:** normal kısıt tek taraflıdır (impuls ≥ 0); teğet
      kısıt Coulomb konisiyle sınırlanır (`|λ_t| ≤ μ·λ_n`).
    - **Denge refleksi:** gövde ekseninde pitch/roll PD torku (gövde
-     `x`=ileri, `y`=yukarı, `z`=yanal), yaw hız servosu ve dünya baş açısı
-     (heading) tutma terimi (`ws_quad3_balance(..., yaw_rate_target)`). Kazançlar
-     tür kütle × uzunluk ölçeğiyle ölçeklenir.
+     `x`=ileri, `y`=yukarı, `z`=yanal), yaw sönümlemesi ve dünya baş açısı
+     (heading) hedef izleme terimi (`ws_quad3_balance(..., heading_target)`).
+     Hedef sıfırken düz yürüyüşü korur; doğrusal artan bir hedef komutlu dönüşü
+     izler (dönüş izleme hatası < 0,25 rad). Kazançlar tür kütle × uzunluk
+     ölçeğiyle ölçeklenir.
    - **Yürüyüş:** tırıs (diagonal) faz; çapraz ayak çiftleri dönüşümlü salınır
      (`ws_quad3_gait_targets`).
 6. **Ayrıklaştırma ve çözücü:** Ardışık-impuls (sequential impulse),
@@ -59,12 +61,16 @@
    **sagittal golden sahneleri etkilemez**; golden CPU çıktısı bit-özdeş kalır.
 8. **Kalibrasyon / doğrulama durumu:** D1 (kavramsal/geometrik doğrulama).
    Referans geyik için duruş kararlılığı, ileri yürüyüş (~1,7 m/s), düz baş
-   (yanal sürüklenme < 0,3 m / 20 s), bağımsız sol/sağ ayak yükü ve dört ayak
-   teması CI'da kapılanır. D3 (ölçülmüş saha verisiyle kıyas) açıktır.
+   (yanal sürüklenme < 0,3 m / 20 s), **komutlu dönüş (izleme hatası < 0,25 rad,
+   dik kalma > 0,9)** ve **yokuş tırmanışı (%10 eğimde > 0,5 m tırmanış, ileri
+   ilerleme, dik kalma)** ile bağımsız sol/sağ ayak yükü ve dört ayak teması
+   CI'da kapılanır. D3 (ölçülmüş saha verisiyle kıyas) açıktır.
 9. **Bilinen sınırlama:** Diğer üç tür (tilki, tavşan, domuz) henüz aynı
    standartta doğrulanmadı; tür-özel gait fazı/frekansı ve denge kazançları
-   ayrıca ele alınacak (P13 sonraki dilim). Koşu ve yokuş senaryoları bu dilimde
-   yok.
+   ayrıca ele alınacak (P13 sonraki dilim). Bu dilimde eklenenler: referans
+   türde komutlu dönüş ve yokuş senaryoları. Hâlâ eksik: koşu (tırıstan hızlı
+   yürüyüş) ve küçük türlerin yürüyüş hızı (tilki/tavşan profil hızına
+   ulaşmıyor; bacak boyu ve amplitüd ölçeklemesi gerekiyor).
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.

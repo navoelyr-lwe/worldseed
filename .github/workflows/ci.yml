@@ -209,7 +209,8 @@ jobs:
           # P13 builds a full 3D rigid-body solver (separate from the sagittal
           # golden solver, which stays bit-identical). The reference species (red
           # deer) is gated on standing stability, forward walking, straight
-          # heading, independent left/right foot load and four-foot contact.
+          # heading, commanded turning, slope climbing, independent left/right
+          # foot load and four-foot contact.
           mkdir -p evidence/body3d
           ./build/tools/ws_body3d_check evidence/body3d 20260101 | tee evidence/body3d/body3d.txt
           grep -q "WS_BODY3D_OK" evidence/body3d/body3d.txt

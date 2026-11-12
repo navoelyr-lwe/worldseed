@@ -149,6 +149,122 @@ static int run_walk(const ws_species_profile *p, double seconds,
     return 1;
 }
 
+/* A ramp that rises along +x with a constant slope. */
+typedef struct slope_ctx {
+    double grade;
+} slope_ctx;
+
+static double ramp(void *ctx, double x, double y)
+{
+    (void)y;
+    const slope_ctx *s = (const slope_ctx *)ctx;
+    return s->grade * x;
+}
+
+/* Turn in place: walk with a commanded yaw rate and report how much the
+ * heading actually changed and whether the body stayed upright. */
+typedef struct turn_metrics {
+    double heading_change;
+    double heading_cmd;
+    double track_error;
+    double upright;
+    double v_fwd;
+    int finite;
+} turn_metrics;
+
+static int run_turn(const ws_species_profile *p, double yaw_rate, double seconds,
+                    turn_metrics *m)
+{
+    static ws_body3d c;
+    static ws_quad3_storage st;
+    static ws_quad3_parts parts;
+    if (!setup(&c, &st, &parts, p)) {
+        return 0;
+    }
+    double dt = c.dt;
+    for (int s = 0; s < (int)(3.0 / dt); ++s) {
+        ws_quad3_balance(&c, &parts, p, 0.0);
+        ws_body3d_step(&c);
+    }
+    double phase = 0.0;
+    m->finite = 1;
+    int steps = (int)(seconds / dt);
+    for (int s = 0; s < steps; ++s) {
+        phase += GAIT_FREQ * dt;
+        /* Commanded heading ramps at yaw_rate; the servo tracks it. */
+        double heading_cmd = yaw_rate * (double)s * dt;
+        ws_quad3_gait_targets(&c, &parts, p, phase);
+        ws_quad3_balance(&c, &parts, p, heading_cmd);
+        if (ws_body3d_step(&c) != WS_OK) {
+            m->finite = 0;
+            return 0;
+        }
+    }
+    const ws_body3 *torso = &c.bodies[parts.torso];
+    ws_vec3 fwd = ws_quat_rotate(torso->orient, ws_vec3_make(1.0, 0.0, 0.0));
+    ws_vec3 up = ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
+    m->heading_change = atan2(-fwd.z, fwd.x);
+    m->heading_cmd = yaw_rate * seconds;
+    double err = m->heading_change - m->heading_cmd;
+    m->track_error = atan2(sin(err), cos(err));
+    m->upright = up.y;
+    m->v_fwd = ws_vec3_dot(torso->vel, fwd);
+    return 1;
+}
+
+/* Walk up a ramp and report the height gained and the forward progress. */
+typedef struct slope_metrics {
+    double climb;
+    double v_fwd;
+    double upright;
+    double lateral_drift;
+    int finite;
+} slope_metrics;
+
+static int run_slope(const ws_species_profile *p, double grade, double seconds,
+                     slope_metrics *m)
+{
+    static ws_body3d c;
+    static ws_quad3_storage st;
+    static ws_quad3_parts parts;
+    slope_ctx ctx = {grade};
+    double dt = ws_quad3_suggested_dt(p);
+    if (ws_body3d_init(&c, dt, G, ITERS, BIAS, st.bodies, 16, st.joints, 16,
+                       st.feet, 8) != WS_OK) {
+        return 0;
+    }
+    ws_body3d_set_ground(&c, ramp, &ctx);
+    if (ws_quad3_build(&c, &st, p, 0.0, &parts) != WS_OK) {
+        return 0;
+    }
+    ws_quad3_hold_rest(&c, &parts);
+    for (int s = 0; s < (int)(3.0 / dt); ++s) {
+        ws_quad3_balance(&c, &parts, p, 0.0);
+        ws_body3d_step(&c);
+    }
+    ws_vec3 a = ws_body3d_center_of_mass(&c);
+    double phase = 0.0;
+    m->finite = 1;
+    int steps = (int)(seconds / dt);
+    for (int s = 0; s < steps; ++s) {
+        phase += GAIT_FREQ * dt;
+        ws_quad3_gait_targets(&c, &parts, p, phase);
+        ws_quad3_balance(&c, &parts, p, 0.0);
+        if (ws_body3d_step(&c) != WS_OK) {
+            m->finite = 0;
+            return 0;
+        }
+    }
+    ws_vec3 b = ws_body3d_center_of_mass(&c);
+    const ws_body3 *torso = &c.bodies[parts.torso];
+    ws_vec3 up = ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
+    m->climb = b.y - a.y;
+    m->v_fwd = (b.x - a.x) / seconds;
+    m->upright = up.y;
+    m->lateral_drift = fabs(b.z - a.z);
+    return 1;
+}
+
 int main(int argc, char **argv)
 {
     const char *out_dir = argc > 1 ? argv[1] : "evidence/body3d";
@@ -205,6 +321,30 @@ int main(int argc, char **argv)
                sm.min_contacts);
     }
     fclose(csv);
+
+    /* Turning and slope scenarios run on the reference species only; they add
+     * the P13 "turning" and "slope" acceptance items to the walking evidence. */
+    turn_metrics tm = {0};
+    slope_metrics sm2 = {0};
+    int turn_ok = run_turn(&ws_species_get(ref)->body, 0.6, 10.0, &tm);
+    int slope_ok = run_slope(&ws_species_get(ref)->body, 0.10, 20.0, &sm2);
+    int turn_gate = turn_ok && tm.finite && fabs(tm.track_error) < 0.25 &&
+                    tm.upright > 0.9;
+    int slope_gate = slope_ok && sm2.finite && sm2.climb > 0.5 &&
+                     sm2.v_fwd > 0.2 && sm2.upright > 0.9 &&
+                     sm2.lateral_drift < 0.6;
+    if (!turn_gate || !slope_gate) {
+        failed = 1;
+    }
+    scenes += 2;
+    printf("body3d turn yaw_rate=0.6 cmd=%.3f actual=%.3f track_err=%.3f "
+           "upright=%.3f verdict=%s\n",
+           tm.heading_cmd, tm.heading_change, tm.track_error, tm.upright,
+           turn_gate ? "PASS" : "FAIL");
+    printf("body3d slope grade=0.10 climb=%.3f v_fwd=%.3f upright=%.3f "
+           "lateral_drift=%.3f verdict=%s\n",
+           sm2.climb, sm2.v_fwd, sm2.upright, sm2.lateral_drift,
+           slope_gate ? "PASS" : "FAIL");
 
     if (failed) {
         printf("WS_BODY3D_FAIL scenes=%d\n", scenes);

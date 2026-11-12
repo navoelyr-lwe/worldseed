@@ -70,12 +70,12 @@ void ws_quad3_gait_targets(ws_body3d *c, const ws_quad3_parts *parts,
                            const ws_species_profile *p, double phase);
 
 /* Vestibular balance reflex: a stabiliser torque on the torso that holds it
- * level (pitch and roll). The heading (yaw) is driven toward `yaw_rate_target`
- * (rad/s, 0 holds a straight line; positive turns left). An uncontrolled
- * articulated body falls over and curves away, so this is the 3D counterpart of
- * the planar ws_quadruped_balance. Gains scale with the species mass x length
- * budget. */
+ * level (pitch and roll) and drives the world heading (yaw) toward
+ * `heading_target` (rad, 0 holds a straight line; a growing target commands a
+ * turn). An uncontrolled articulated body falls over and curves away, so this
+ * is the 3D counterpart of the planar ws_quadruped_balance. Gains scale with
+ * the species mass x length budget. */
 void ws_quad3_balance(ws_body3d *c, const ws_quad3_parts *parts,
-                      const ws_species_profile *p, double yaw_rate_target);
+                      const ws_species_profile *p, double heading_target);
 
 #endif /* WS_LIFE_QUAD3D_H */
