@@ -334,6 +334,42 @@ silinirdi). Gölge geçişi ışık frustum'u farklı olduğundan tüm nesneleri
   4188 bayt farklı). Bu optimizasyon beraberlik kırıcı deterministik bir anahtar
   bulunana kadar ertelenir.
 
+### 13. Gerçek GPU üzerinde doğrulama — izole Windows runner (bu PR)
+
+İzole Windows x64 runner'ında **gerçek bir GPU** bulundu: **NVIDIA GeForce RTX
+3060 Laptop GPU** (OpenCL 3.0 CUDA, 30 hesaplama birimi, 6 GB, 16 CPU iş parçacığı).
+Bu, docs/11'in "RTX 3060 sınıfı ve eşdeğer cihazlar ayrıca ölçülebilir" maddesinin
+istediği ölçümü ilk kez gerçek donanımda mümkün kılar. `ws_gpu_check` ve `ws_perf`
+artık bu runner'da çalışır (`ci/gui-windows.yml`); aşağıdaki değerler gerçek
+koşudan alınmıştır (run 43162349489).
+
+- **Cihaz:** `gpu=available device="NVIDIA GeForce RTX 3060 Laptop GPU"
+  version="OpenCL 3.0 CUDA" units=30`; platform "NVIDIA CUDA".
+- **CPU/GPU semantik eşleşme:** `semantic_match=ok` — 49152 pikselde
+  `diff_fraction=0.000061`, `max_channel_delta=1` (tolerans içinde; float vs
+  double son bit farkları).
+- **Döşemeli çekirdek bit-özdeşlik ve hız:** `tiled bit_identical=1`,
+  1920×1080/2048 üçgende `raster_gpu_tiled ms=4.53
+  speedup_vs_reference=13.03x verdict=use_tiled` — döşemeli çekirdek referans
+  GPU çekirdeğinden **13x** hızlı ve **birebir** aynı çıktı.
+- **Aygıt kaybı geri kazanımı:** `device_loss_recovered=1 gpu_unavailable=1
+  gpu_call_failed=1 cpu_fallback_ok=1` — GPU kaybında CPU geri dönüşü çalışıyor.
+- **CPU/GPU kararı:** referans GPU çekirdeği bu iş yükünde CPU'dan yavaş
+  (`speedup_vs_cpu=0.39x verdict=use_cpu`); "GPU yalnız gerçekten kazanç
+  sağlıyorsa" kuralı ölçümle uygulanıyor. Döşemeli çekirdek ise açık kazanç.
+- **Native 4K ürün sahnesi (CPU referans yolu):** `terrain_day` 3840×2160
+  `avg_ms=142.31 p95_ms=150.84 p99_ms=160.77` (~7 FPS). Bu CPU yolunun ölçümüdür;
+  döşemeli GPU çekirdeği henüz ürün sahnesine bağlı değildir.
+
+**Önemli sınır (neden hâlâ 4K/30 FPS değil):** CI golden kapısı ürün karesinin
+golden kareyle **bit-özdeş** olmasını zorunlu kılar (`ci.yml`, `cmp` ile 17 sahne)
+ve golden kareler CPU referans yoluyla üretilir. Döşemeli OpenCL çekirdeği
+**düz-renk** rasterdir; ürün sahnesinin gölgelemesi (Lambert + hemisferik ortam +
+opaklık + gölge haritası + gökyüzü) bu çekirdekte yoktur. Bu yüzden GPU'yu ürün
+sahnesine bağlamak, gölgeleme ardışık düzeninin tamamının OpenCL C 1.2'ye
+taşınıp CPU ile **bit-özdeş** olmasına bağlıdır; aksi hâlde golden kapısı kırılır.
+Bu taşıma ayrı ve büyük bir iştir; bu PR yalnız gerçek GPU ölçüm kanıtını ekler.
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):
@@ -387,9 +423,12 @@ silinirdi). Gölge geçişi ışık frustum'u farklı olduğundan tüm nesneleri
     (~21 FPS). 1080p canlı ürün `p95≈120 ms`.
   - P12 kabulü native 3840×2160'da `p95 ≤ 33,3 ms` ister. CPU'da bu hedef,
     bu sınıf donanımda ulaşılamaz; hedef gerçek bir GPU cihazı (OpenCL C 1.2)
-    gerektirir. Döşemeli OpenCL raster çekirdeği pocl CPU aygıtında bile
-    referansa göre yüzlerce kat hızlanıp `bit_identical=1` verir, ancak bu
-    ortamda **gerçek GPU yok**, bu yüzden gerçek 4K GPU ölçümü yapılamıyor.
+    gerektirir. **Gerçek GPU artık mevcut ve ölçüldü:** izole Windows runner'ında
+    NVIDIA GeForce RTX 3060 Laptop GPU (bkz. bölüm 13); döşemeli OpenCL çekirdeği
+    bit-özdeş ve referans GPU çekirdeğinden 13x hızlı. Ancak bu çekirdek **düz-renk**
+    rasterdir; ürün sahnesinin gölgeleme ardışık düzeni henüz GPU'ya taşınmadığı
+    için native 4K ürün sahnesi hâlâ CPU yolunda ölçülür (~7 FPS). 4K/30 FPS,
+    gölgeleme ardışık düzeninin OpenCL C 1.2'ye bit-özdeş taşınmasına bağlıdır.
   - CPU yolunda kalan büyük bit-özdeş olmayan fırsatlar ölçülüp reddedildi:
     aşırı-çizim yeniden sıralama (float32 derinlik beraberliği, 4188 bayt fark)
     ve arka-yüz eleme (renderer iki yüzlü, 15/17 sahne değişir). CPU referans

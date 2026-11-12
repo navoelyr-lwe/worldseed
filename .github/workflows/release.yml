@@ -156,7 +156,7 @@ jobs:
             tag="${{ github.event.inputs.version }}"
           fi
           printf '%s\n' \
-            "Worldseed Engine onizleme surumu (P12 - CPU render performansi, gorsel ve hareket kalite kapilari)." \
+            "Worldseed Engine onizleme surumu (P12 - CPU render performansi, gercek GPU dogrulamasi, gorsel ve hareket kalite kapilari)." \
             "" \
             "Bu surumde urun CANLI bir gozlem uygulamasi olmaya devam eder: dunya gercek" \
             "zamanli ilerler, siz kamerayi gezdirir, canli secip inceler, haritayi ve" \
@@ -184,6 +184,17 @@ jobs:
             "ilerleme, hiz, puruzsuzluk (kutle merkezi ivmesi), denge (govde egimi)," \
             "ayak temasi ve enerji esikleri zorunlu tutulur; ayni tohum ayni olcumleri" \
             "verir. Kanit quality/motion.csv icindedir." \
+            "" \
+            "GERCEK GPU DOGRULAMASI: izole Windows x64 test makinesinde gercek bir GPU" \
+            "(NVIDIA RTX 3060 Laptop, OpenCL 3.0 CUDA, 30 birim, 6 GB) bulundu ve olculdu." \
+            "CPU/GPU semantik karsilastirma tolerans icinde (semantic_match=ok); dosemeli" \
+            "(tiled) OpenCL C 1.2 raster cekirdegi referans GPU cekirdeginden 13x hizli ve" \
+            "cikti BIT-OZDES (tiled bit_identical=1); aygit kaybi CPU geri donusune temiz" \
+            "kapaniyor (device_loss_recovered=1). Referans GPU cekirdegi bu is yukunde CPU'dan" \
+            "yavas oldugu icin karar use_cpu; yani GPU yalnizca gercekten kazanc sagladiginda" \
+            "onerilir. Native 4K urun sahnesi su an CPU referans yolunda olculur (~7 FPS);" \
+            "P12'nin native 4K/30 FPS hedefi icin urun sahnesinin golgeleme boru hattinin" \
+            "GPU'ya bit-ozdes tasinmasi gerekir ve bu surumde tamamlanmadi." \
             "" \
             "Onceki surumlerin ozellikleri korunur: disa aktarma (zaman damgali kare dizisi" \
             "+ WAV), kamera yer/su carpismasi ve agac kacinma, ayarlar menusu (fare" \
