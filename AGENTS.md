@@ -154,3 +154,40 @@ kural kanıtla uygulanır:
   değildir. Dikey yön entegre edilmez; yük yarı-statik ve korunumludur. P13'ün
   kalan kapıları (bağımsız 3B uzuv eklem state'i, dinamik temas kuvveti, 3B
   denge/enerji D3 kıyası, tür-özel 3B gait) açıktır; tam 3B çözücü ayrı iştir.
+
+## P13 notları — tam 3B rijit-gövde çekirdeği (ikinci dilim)
+
+- Sagittal golden sahnelerden **ayrı** bir üç boyutlu çözücü eklendi:
+  `src/life/ws_body3d.{h,c}` (kuaterniyon yönelim, gövde-çerçevesi atalet
+  tensörü, ball-socket nokta eklemleri, gerçek menteşe kilidi, tek taraflı açısal
+  limit, motor torkları, 3B temas + Coulomb sürtünme, deterministik
+  ardışık-impuls). Üstünde referans dört ayaklı: `src/life/ws_quad3d.{h,c}`
+  (gövde + 4 bağımsız bacak, tırıs yürüyüş, vestibüler denge refleksi). Golden
+  CPU çıktısı bu yüzden **bit-özdeş kalır**.
+- Kanıt/kapılar: `tests/test_body3d.c` (birim: kuaterniyon, momentum korunumu,
+  dört ayak üstünde duran kutu, determinizm, duruş, yürüyüş, yanal bağımsızlık)
+  + `tools/ws_body3d_check` (referans kızıl geyik kapılanır; diğer türler INFO).
+  `ci.yml`'e "Three-dimensional body evidence (P13)" adımı eklendi. Model kartı:
+  `docs/life/MODEL-KARTI-UCD-BEDEN.md`.
+- **Kararlılık dersleri:** (a) Çözücü 30 iterasyon gerektirir (12'de küçük
+  türler devrilir); 30 ve üstü kararlı. (b) Küçük türler daha küçük adım
+  gerektirir — `ws_quad3_suggested_dt` omuz yüksekliğinin 3/4 kuvvetiyle ölçekler.
+  (c) Açık-çevrim tırıs sabit adıma kaotik duyarlıdır; **dünya baş açısı (heading)
+  tutma terimi** olmadan asimetrik yürüyüş yavaşça kavis yapar (yanal sürüklenme
+  14 m'ye çıkabilir). `ws_quad3_balance`'a heading terimi eklenince sürüklenme
+  2,0–2,2 ms adım aralığında < 0,3 m'ye iner. Hız geri beslemeli (kapalı-çevrim)
+  stride denetleyicisi denendi ve **işe yaramadı** (sistem yine kaotik); bu yüzden
+  basit açık-çevrim + heading tutma tercih edildi.
+- **Sınır:** yalnız referans kızıl geyik kapılanır. Tilki/tavşan/domuz henüz aynı
+  standartta değil (küçük türler yavaş ilerliyor); koşu/yokuş/farklı zemin
+  senaryoları, dinamik temas kuvveti ve D3 kıyası açıktır.
+- **Canlı-döngü GPU benchmark'ı zaten mevcut ve CI'da zorunlu:** `gui-windows.yml`
+  `worldseed --live-bench 600 --live-gpu --size 3840x2160` koşar; gerçek dünya
+  adımı + ekoloji + aktörler + kamera + render + HUD, `gpu_frames` == kare sayısı,
+  `cpu_fallback_frames=0 gpu_errors=0`, ham `frames.csv`, `p95_ok=1`. Son
+  ölçüm (RTX 3060 Laptop, `main`=`cde1c12`): p95 21,15 ms / ~52 FPS. Bunu yeni bir
+  iş sanma; mevcut kapıyı koru.
+- **Branch protection açığı sürüyor:** token ile `branches/main/protection` ve
+  `rulesets` uç noktaları **403 "Resource not accessible by integration"** verir
+  (repo `permissions.admin=true` bildirse de). Dal koruması kurulmuş gibi
+  işaretlenmez; bu erişim sınırı kullanıcıya sade dille raporlanır.
