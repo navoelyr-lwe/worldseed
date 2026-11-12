@@ -192,7 +192,20 @@ kural kanıtla uygulanır:
   tırmanış, ileri ilerleme, dik kalma) kapıları; `tests/test_body3d.c`'ye iki
   birim testi (10/10). `tools/package-windows.ps1`'e 3B gövde kanıt kapısı
   eklendi (sahne sayısı harness'ın kendi `WS_BODY3D_OK scenes=N` çıktısından
-  okunur, bayatlamaz). Zemin bir yükseklik fonksiyonudur; eğim bu yolla modellenir.
+  okunur, bayatlamaz). Zemin bir yükseklik fonksiyonudur; eğim ve engebe bu
+  yolla modellenir.
+- **Dördüncü dilim — koşu ve farklı zemin:** Yürüyüş/koşu bir gait yapısına
+  ayrıldı (`ws_quad3_gait` + `ws_quad3_gait_walk` / `ws_quad3_gait_run` /
+  `ws_quad3_gait_apply`). Ders: koşu yalnız daha yüksek kadans değildir; adım
+  genliği de artmalı. Ölçüm: frekans ×1,4 ve hip genliği ×2 referans geyikte
+  ~1,77 m/s → ~2,13 m/s verir ve stabil kalır. **Duty (duruş oranını) kısaltmak
+  denendi ve bu adımda açık-çevrim sürücüyü bozdu** (düşme/yanal sürüklenme);
+  bu yüzden duty korunur. Engebeli zemin (10 cm genlikli sinüs toplamı) kapılandı.
+- **Küçük türler hâlâ açık:** tilki ~0,15 m/s, tavşan ~0,2 m/s (profil 1,8 ve
+  2,0 m/s) ve koşuda `min_contacts=0` (ayaklar yerden kesiliyor). Bu açık-çevrim
+  tırısın küçük ölçekte kararsızlaşmasıdır; temas/denge geri beslemeli
+  kapalı-çevrim denetleyici gerektirir. Bacak genliği, frekans ve adım taramaları
+  yapıldı; hiçbiri ileri ilerlemeyi sağlamadı. Ayrı bir P13 dilimi.
 - **Canlı-döngü GPU benchmark'ı zaten mevcut ve CI'da zorunlu:** `gui-windows.yml`
   `worldseed --live-bench 600 --live-gpu --size 3840x2160` koşar; gerçek dünya
   adımı + ekoloji + aktörler + kamera + render + HUD, `gpu_frames` == kare sayısı,

@@ -339,6 +339,46 @@ static int test_quad3_climbs_slope(void)
     return 1;
 }
 
+static int test_quad3_runs(void)
+{
+    static ws_body3d c;
+    static ws_quad3_storage st;
+    static ws_quad3_parts parts;
+    ws_species_profile p = ws_species_red_deer();
+    WS_CHECK(ws_body3d_init(&c, DT, G, ITERS, BIAS, st.bodies, 16, st.joints, 16,
+                            st.feet, 8) == WS_OK);
+    ws_body3d_set_ground(&c, flat, NULL);
+    WS_CHECK(ws_quad3_build(&c, &st, &p, 0.0, &parts) == WS_OK);
+    ws_quad3_hold_rest(&c, &parts);
+    for (int s = 0; s < 480 * 3; ++s) {
+        ws_quad3_balance(&c, &parts, &p, 0.0);
+        ws_body3d_step(&c);
+    }
+    ws_vec3 a = ws_body3d_center_of_mass(&c);
+    ws_quad3_gait run = ws_quad3_gait_run(&p);
+    double phase = 0.0;
+    double upright_min = 1.0;
+    for (int s = 0; s < 480 * 20; ++s) {
+        phase += run.freq * DT;
+        ws_quad3_gait_apply(&c, &parts, &run, phase);
+        ws_quad3_balance(&c, &parts, &p, 0.0);
+        WS_CHECK(ws_body3d_step(&c) == WS_OK);
+        const ws_body3 *torso = &c.bodies[parts.torso];
+        ws_vec3 up = ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
+        if (up.y < upright_min) {
+            upright_min = up.y;
+        }
+    }
+    ws_vec3 b = ws_body3d_center_of_mass(&c);
+    double v = (b.x - a.x) / 20.0;
+    /* The run is clearly faster than the ~1.7 m/s walk, stays upright and
+     * roughly straight. */
+    WS_CHECK(v > 1.9 && v < 3.5);
+    WS_CHECK(upright_min > 0.9);
+    WS_CHECK(fabs(b.z - a.z) < 0.6);
+    return 1;
+}
+
 /* ---------- invalid input ---------- */
 
 static int test_invalid_input(void)
@@ -379,6 +419,7 @@ int main(void)
         {"quad3 walks forward", test_quad3_walks_forward},
         {"quad3 turns in place", test_quad3_turns},
         {"quad3 climbs slope", test_quad3_climbs_slope},
+        {"quad3 runs", test_quad3_runs},
         {"lateral independence", test_lateral_independence},
         {"invalid input", test_invalid_input},
     };

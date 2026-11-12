@@ -63,9 +63,30 @@ ws_result ws_quad3_build(ws_body3d *c, ws_quad3_storage *st,
  * standing pose (targets equal the assembly angle). */
 void ws_quad3_hold_rest(ws_body3d *c, const ws_quad3_parts *parts);
 
+/* A gait description: everything the periodic leg driver needs. Separating it
+ * from the species profile lets the same body walk or run (a faster cadence and
+ * a longer stride) without changing the profile. */
+typedef struct ws_quad3_gait {
+    double freq;      /* stride cycles per second */
+    double hip_amp;   /* hip swing amplitude (rad) */
+    double knee_lift; /* peak knee lift (rad) */
+    double duty;      /* stance fraction of the cycle, (0,1) */
+} ws_quad3_gait;
+
+/* The species' walk and run gaits. Both derive from the profile's gait
+ * frequency and duty factor, so they scale with the species; the run raises the
+ * cadence and stride and shortens the stance. */
+ws_quad3_gait ws_quad3_gait_walk(const ws_species_profile *p);
+ws_quad3_gait ws_quad3_gait_run(const ws_species_profile *p);
+
+/* Drive every leg joint for `phase` in [0,1) using an explicit gait. */
+void ws_quad3_gait_apply(ws_body3d *c, const ws_quad3_parts *parts,
+                         const ws_quad3_gait *g, double phase);
+
 /* Simple periodic trot: diagonal pairs (front-left with rear-right, front-right
  * with rear-left) swing together. Writes each leg hip/knee motor target for
- * `phase` in [0,1). Knee lift is a species-scaled fraction of leg length. */
+ * `phase` in [0,1). Knee lift is a species-scaled fraction of leg length. This
+ * is the species' walk gait (`ws_quad3_gait_walk`). */
 void ws_quad3_gait_targets(ws_body3d *c, const ws_quad3_parts *parts,
                            const ws_species_profile *p, double phase);
 

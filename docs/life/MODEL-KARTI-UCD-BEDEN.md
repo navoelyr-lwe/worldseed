@@ -47,8 +47,12 @@
      Hedef sıfırken düz yürüyüşü korur; doğrusal artan bir hedef komutlu dönüşü
      izler (dönüş izleme hatası < 0,25 rad). Kazançlar tür kütle × uzunluk
      ölçeğiyle ölçeklenir.
-   - **Yürüyüş:** tırıs (diagonal) faz; çapraz ayak çiftleri dönüşümlü salınır
-     (`ws_quad3_gait_targets`).
+   - **Yürüyüş ve koşu:** tırıs (diagonal) faz; çapraz ayak çiftleri dönüşümlü
+     salınır. Gait bir yapıdır (`ws_quad3_gait`): yürüyüş profil frekansı ve
+     görev çarpanından, koşu ise daha yüksek kadans ve yaklaşık iki kat adım
+     genliğinden türetilir (`ws_quad3_gait_walk`, `ws_quad3_gait_run`,
+     `ws_quad3_gait_apply`). Koşu referans geyikte yürüyüşü ~1,8 m/s'den ~2,1
+     m/s'ye çıkarır.
 6. **Ayrıklaştırma ve çözücü:** Ardışık-impuls (sequential impulse),
    `solver_iterations = 30`, `position_bias = 0,2`, sabit adım. Deterministik:
    aynı girdi aynı çıktıyı verir (bit düzeyinde test edilir). **Adım duyarlılığı:**
@@ -62,15 +66,21 @@
 8. **Kalibrasyon / doğrulama durumu:** D1 (kavramsal/geometrik doğrulama).
    Referans geyik için duruş kararlılığı, ileri yürüyüş (~1,7 m/s), düz baş
    (yanal sürüklenme < 0,3 m / 20 s), **komutlu dönüş (izleme hatası < 0,25 rad,
-   dik kalma > 0,9)** ve **yokuş tırmanışı (%10 eğimde > 0,5 m tırmanış, ileri
-   ilerleme, dik kalma)** ile bağımsız sol/sağ ayak yükü ve dört ayak teması
-   CI'da kapılanır. D3 (ölçülmüş saha verisiyle kıyas) açıktır.
+   dik kalma > 0,9)**, **yokuş tırmanışı (%10 eğimde > 0,5 m tırmanış, ileri
+   ilerleme, dik kalma)**, **koşu (~2,1 m/s, yürüyüşten belirgin hızlı, dik
+   kalma > 0,9)** ve **engebeli zemin (10 cm genlikli dalgalı yüzeyde ileri
+   ilerleme)** ile bağımsız sol/sağ ayak yükü ve dört ayak teması CI'da
+   kapılanır. D3 (ölçülmüş saha verisiyle kıyas) açıktır.
 9. **Bilinen sınırlama:** Diğer üç tür (tilki, tavşan, domuz) henüz aynı
-   standartta doğrulanmadı; tür-özel gait fazı/frekansı ve denge kazançları
-   ayrıca ele alınacak (P13 sonraki dilim). Bu dilimde eklenenler: referans
-   türde komutlu dönüş ve yokuş senaryoları. Hâlâ eksik: koşu (tırıstan hızlı
-   yürüyüş) ve küçük türlerin yürüyüş hızı (tilki/tavşan profil hızına
-   ulaşmıyor; bacak boyu ve amplitüd ölçeklemesi gerekiyor).
+   standartta doğrulanmadı. Bu dilimde eklenenler: referans türde koşu ve
+   engebeli zemin senaryoları, ve yürüyüş/koşuyu ayıran gait yapısı. Hâlâ eksik:
+   küçük türlerin yürüyüşü. Ölçüm: tilki ~0,15 m/s, tavşan ~0,2 m/s (profil
+   hızları 1,8 ve 2,0 m/s) ve koşuda bile ayaklar yerden kesiliyor
+   (`min_contacts=0`). Bu açık-çevrim tırısın küçük ölçekte kararsızlaşmasıdır;
+   kapalı-çevrim (temas/denge geri beslemeli) bir denetleyici gerektirir ve ayrı
+   bir P13 dilimidir. Profil yürüyüş hızları da Froude ölçeklemesiyle tutarsız
+   görünüyor (tilki/tavşan için fiziksel olarak yüksek); bu da o dilimde gözden
+   geçirilecek.
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.
