@@ -104,6 +104,12 @@ struct ws_session {
     int look_sens_pct;     /* mouse-look sensitivity percent 25..400 */
     int cam_collision;     /* free-camera ground collision on/off (docs/17) */
     int gpu_render;        /* opt-in OpenCL full-scene render path (P12) */
+    /* Per-render-path counters (P12). The opt-in GPU path is only trusted when
+     * the device carried every frame; these prove that over a long run and let
+     * the benchmark report exactly how often the CPU fallback took over. */
+    uint64_t gpu_frames;          /* frames the OpenCL device actually drew */
+    uint64_t cpu_fallback_frames; /* frames the GPU path fell back to CPU */
+    uint64_t gpu_errors;          /* device/kernel failures on the GPU path */
     int speed_index;
     double time_of_day_s;
 
@@ -1321,6 +1327,12 @@ int ws_session_settings_visible(const ws_session *s) { return s != NULL ? s->set
 int ws_session_shadows_visible(const ws_session *s) { return s != NULL ? s->shadows_visible : 0; }
 int ws_session_gpu_render_enabled(const ws_session *s) { return s != NULL ? s->gpu_render : 0; }
 
+/* Per-render-path frame counters (P12). Read-only; they are observation
+ * bookkeeping and never feed back into the world. */
+uint64_t ws_session_gpu_frames(const ws_session *s) { return s != NULL ? s->gpu_frames : 0u; }
+uint64_t ws_session_cpu_fallback_frames(const ws_session *s) { return s != NULL ? s->cpu_fallback_frames : 0u; }
+uint64_t ws_session_gpu_errors(const ws_session *s) { return s != NULL ? s->gpu_errors : 0u; }
+
 /* --- replay queries ----------------------------------------------------- */
 
 uint32_t ws_session_replay_samples(const ws_session *s)
@@ -1964,11 +1976,26 @@ ws_result ws_session_render(ws_session *s, ws_framebuffer *fb, float *depth)
     /* Opt-in GPU path (P12). The full-scene OpenCL kernel reproduces the CPU
      * shading within a documented tie tolerance; the CPU renderer stays the
      * default so golden/determinism gates are unaffected. Any device failure
-     * falls back to the CPU reference inside ws_render_scene_gpu. */
+     * falls back to the CPU reference inside ws_render_scene_gpu. The returned
+     * stats tell us which path actually drew the frame so a long benchmark can
+     * prove the device carried every frame rather than just the first. */
+    ws_render_stats stats;
+    memset(&stats, 0, sizeof(stats));
+    ws_result rr;
     if (s->gpu_render) {
-        return ws_render_scene_gpu(&s->env.scene, fb, depth, 32u, NULL);
+        rr = ws_render_scene_gpu(&s->env.scene, fb, depth, 32u, &stats);
+        if (rr == WS_OK) {
+            if (stats.path == WS_RENDER_PATH_GPU) {
+                s->gpu_frames += 1u;
+            } else {
+                s->cpu_fallback_frames += 1u;
+            }
+        } else {
+            s->gpu_errors += 1u;
+        }
+        return rr;
     }
-    return ws_render_scene(&s->env.scene, fb, depth, 32u, NULL);
+    return ws_render_scene(&s->env.scene, fb, depth, 32u, &stats);
 }
 
 ws_result ws_session_render_audio(ws_session *s, int16_t *out, uint32_t frames)

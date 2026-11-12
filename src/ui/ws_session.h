@@ -188,6 +188,17 @@ int ws_session_shadows_visible(const ws_session *s);
  * the bit-identical reference (golden gates and determinism depend on it). */
 int ws_session_gpu_render_enabled(const ws_session *s);
 
+/* Per-render-path frame counters since session create (P12). `gpu_frames` is
+ * how many frames the OpenCL device actually drew; `cpu_fallback_frames` how
+ * many the GPU path fell back to the CPU reference (device absent, kernel
+ * failure); `gpu_errors` how many GPU-path render calls returned an error. A
+ * benchmark uses these to prove the device carried the whole run rather than
+ * just the first frame. Read-only observation bookkeeping: they never change
+ * the authoritative world. */
+uint64_t ws_session_gpu_frames(const ws_session *s);
+uint64_t ws_session_cpu_fallback_frames(const ws_session *s);
+uint64_t ws_session_gpu_errors(const ws_session *s);
+
 /* --- replay (docs/17 item 8) -------------------------------------------- */
 
 /* The session keeps a bounded ring of periodic whole-world checkpoints as the

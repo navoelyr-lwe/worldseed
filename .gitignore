@@ -38,3 +38,10 @@ Thumbs.db
 # Test scratch dirs
 /ws_live_test_out/
 /ws_live_replay_test_out/
+/ws_live_select_test_out/
+/ws_live_export_test_out/
+/ws_live_export_test_out2/
+/ws_live_bench_test_out/
+
+# Stray tour artifact (accidentally committed)
+/--size/

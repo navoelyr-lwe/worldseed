@@ -245,6 +245,18 @@ jobs:
           grep -q "p50_ms=" evidence/live/headless.txt
           grep -q "p95_ms=" evidence/live/headless.txt
           grep -q "p99_ms=" evidence/live/headless.txt
+          # Live-loop benchmark (P12): the real product loop (world step + ecology
+          # + actors + camera + render + HUD) for a fixed wall-clock duration,
+          # reporting p50/p95/p99 and the per-render-path frame counters. The GPU
+          # device run lives on the Windows GUI runner; here it is the CPU path,
+          # so the accounting (path=cpu, no GPU frames) is proven too.
+          mkdir -p evidence/live/bench
+          ./build/src/app/worldseed --live-bench 3 --live-no-settings --live-no-select \
+            --size 320x180 --live-bench-out evidence/live/bench | tee evidence/live/bench.txt
+          grep -q "WS_LIVE_BENCH_OK" evidence/live/bench.txt
+          grep -q "path=cpu" evidence/live/bench.txt
+          grep -q "p95_ms=" evidence/live/bench.txt
+          test -s evidence/live/bench/frames.csv
           ./build/src/app/worldseed --live-tour evidence/live/tour-a --size 320x180 | tee evidence/live/tour-a.txt
           grep -q "LIVE_TOUR_OK" evidence/live/tour-a.txt
           grep -q "saved=1 loaded=1 roundtrip=1" evidence/live/tour-a.txt

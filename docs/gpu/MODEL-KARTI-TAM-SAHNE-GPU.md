@@ -54,19 +54,33 @@
    yoksa CPU fallback'in bit-özdeş olduğu doğrulanır. `tools/ws_gpu_scene_check.c`:
    17 katalog sahnesinin tamamı çizilir; her farklı piksel derinlik beraberliği
    (yapısal olmayan) veya yapısal hata olarak sınıflandırılır. `tools/ws_perf.c`:
-   tam sahne GPU kare süresi p50/p95/p99 ve CPU'ya göre semantik fark oranı. CI:
-   `ci.yml` `opencl-cpu` işi pocl CPU ICD ile gerçek kernel derleme/çalıştırma
-   kanıtı üretir; `gui-windows.yml` izole Windows runner'da gerçek GPU'da koşar.
+   tam sahne GPU kare süresi p50/p95/p99 ve CPU'ya göre semantik fark oranı.
+   **Canlı ürün döngüsü:** `worldseed --live-bench <s> [--live-gpu]` gerçek dünya
+   adımı + ekoloji + aktörler + kamera + render + HUD döngüsünü duvar-saati süresi
+   boyunca çalıştırır; `ws_session_gpu_frames`/`ws_session_cpu_fallback_frames`/
+   `ws_session_gpu_errors` sayaçlarıyla yol kanıtı verir ve GPU istenip cihaz
+   kullanılmadıysa sıfır olmayan kodla (3) başarısız olur. `tests/test_session.c`
+   `session_gpu_render_counters` sayaçları, `tests/test_live.c` `live_bench_run` ve
+   `live_bench_gpu_requires_device` bu sözleşmeyi kilitler. CI: `ci.yml`
+   `opencl-cpu` işi pocl CPU ICD ile gerçek kernel derleme/çalıştırma kanıtı üretir;
+   `gui-windows.yml` izole Windows runner'da gerçek GPU'da koşar ve native 4K canlı
+   döngüyü `--live-bench 600 --live-gpu` ile en az 10 dakika ölçer.
 10. **Kabul eşikleri ve sınırlar:** `ws_gpu_scene_check` yapısal fark oranı
     `<= 0.0005` ve derinlik-beraberliği renk farkı `<= 90/255` ister. Ölçülen
     (pocl CPU ICD): `gpu_used=17`, tüm sahnelerde `structural_fraction=0.00000`;
     `world_stream`'de `tie_fraction=0.06585`, `max_tie_channel_delta=81` (tüm
     farklar açıklanmış beraberlik). `orbit` sahnesinde uygulama GPU karesi CPU
-    karesiyle bit-özdeş (`differing=0`). Bilinen sınır: `float` vs `double`
-    nedeniyle eş-düzlemli sahnelerde tam bit-özdeşlik garanti edilmez; pocl CPU
-    ICD gerçek GPU'dan yavaştır, hızlanma iddiası yalnız gerçek cihazda geçerlidir.
-    Kanıt düzeyi **D2** (determinizm, tolerans ve hata yolu testleri geçti; gerçek
-    GPU performans kıyası referans donanımda yapılır, bkz. `gui-windows.yml`).
+    karesiyle bit-özdeş (`differing=0`). Canlı ürün döngüsü GPU kabulü: istenen
+    `--live-gpu` koşusunda `gpu_frames == frame_count`, `cpu_fallback_frames == 0`,
+    `gpu_errors == 0` (aksi hâlde araç başarısız olur); native 4K/30 FPS hedefi
+    `p95 <= 33,3 ms`'dir ve `gui-windows.yml` bu değeri her koşuda raporlar. Bilinen
+    sınır: `float` vs `double` nedeniyle eş-düzlemli sahnelerde tam bit-özdeşlik
+    garanti edilmez; pocl CPU ICD gerçek GPU'dan yavaştır, hızlanma iddiası yalnız
+    gerçek cihazda geçerlidir. Kanıt düzeyi **D2** (determinizm, tolerans ve hata
+    yolu testleri geçti; gerçek GPU performans kıyası referans donanımda yapılır,
+    bkz. `gui-windows.yml`). Native 4K canlı döngünün 30 FPS kabulü bu kart
+    yazıldığında henüz geçilmemiştir; geçildiğinde bu maddede güncel değerle
+    kaydedilir.
 11. **Değişiklik kaydı:** Edge testi, derinlik kuralı, gölgeleme ardışık düzeni,
     `float`/`double` tercihi veya tolerans değişirse bu kart, `kernels/ws_scene.cl`,
     `src/render/ws_gpu_scene.c`, `src/gpu/ws_opencl.*`, ilgili testler,

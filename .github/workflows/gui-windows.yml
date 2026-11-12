@@ -270,6 +270,49 @@ jobs:
           if (-not (Select-String -Path evidence/gui/perf/perf-4k.txt -Pattern "perf scene" -Quiet)) { exit 1 }
           if (-not (Select-String -Path evidence/gui/perf/perf-4k.txt -Pattern "3840x2160" -Quiet)) { Write-Error "no native 4K measurement produced"; exit 1 }
 
+      - name: Live product loop GPU benchmark on isolated runner
+        shell: pwsh
+        run: |
+          # P12 acceptance: the number that matters is the REAL live product
+          # loop, not the reference-scene micro-benchmark above. This drives the
+          # world step, the ecology, the living actors, the camera, the render
+          # and the HUD every frame at native 3840x2160 with the opt-in OpenCL
+          # render path, for at least 10 minutes of real wall-clock time
+          # (--live-bench 600), and prints p50/p95/p99 with the device summary.
+          #
+          # It is not enough that a GPU is present at the start: the session's
+          # own per-path counters must show the device drew every frame. The tool
+          # exits non-zero (3) if the GPU path was requested but the run fell back
+          # to CPU, so a CPU measurement is never reported as a GPU result.
+          New-Item -ItemType Directory -Force -Path evidence/gui/live | Out-Null
+          & build-gui/src/app/Release/worldseed.exe --live-bench 600 --live-gpu `
+              --live-no-settings --live-no-select --size 3840x2160 `
+              --live-bench-out evidence/gui/live/gpu-4k `
+            | Tee-Object -FilePath evidence/gui/live/gpu-4k-live.txt
+          if ($LASTEXITCODE -ne 0) { Write-Error "live GPU benchmark failed (exit $LASTEXITCODE)"; exit 1 }
+          if (-not (Select-String -Path evidence/gui/live/gpu-4k-live.txt -Pattern "WS_LIVE_BENCH_OK" -Quiet)) { exit 1 }
+          # The device must have carried every frame; a CPU fallback is a failure.
+          if (-not (Select-String -Path evidence/gui/live/gpu-4k-live.txt -Pattern "path=gpu " -Quiet)) {
+            Write-Error "live 4K GPU benchmark did not run on the device"; exit 1
+          }
+          if (-not (Select-String -Path evidence/gui/live/gpu-4k-live.txt -Pattern "gpu_frames=\d+" -Quiet)) { exit 1 }
+          if (-not (Select-String -Path evidence/gui/live/gpu-4k-live.txt -Pattern "cpu_fallback_frames=0 gpu_errors=0" -Quiet)) {
+            Write-Error "live 4K GPU run fell back to CPU or errored"; exit 1
+          }
+          if (-not (Test-Path evidence/gui/live/gpu-4k/frames.csv)) { Write-Error "no raw frame-time evidence"; exit 1 }
+          # Report the native-4K/30-FPS acceptance number (p95 <= 33.3 ms, docs/11)
+          # plainly, and surface it as a GitHub annotation. P12 is not declared
+          # complete until this passes; the measurement itself (the device carried
+          # every frame) is the hard gate above, so a failing acceptance number is
+          # published, never hidden and never mistaken for a GPU result.
+          $verdict = (Select-String -Path evidence/gui/live/gpu-4k-live.txt -Pattern "live_bench verdict").Line
+          $verdict | Write-Output
+          if (-not (Select-String -Path evidence/gui/live/gpu-4k-live.txt -Pattern "p95_ok=1" -Quiet)) {
+            Write-Output "::warning::P12 acceptance not met: live 4K GPU p95 exceeds 33.3 ms (30 FPS target)"
+          } else {
+            Write-Output "::notice::P12 acceptance met: live 4K GPU p95 within 33.3 ms (30 FPS target)"
+          }
+
       - name: Release package smoke on isolated runner
         shell: pwsh
         run: |

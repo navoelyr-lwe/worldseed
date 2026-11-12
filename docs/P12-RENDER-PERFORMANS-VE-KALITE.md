@@ -359,7 +359,12 @@ koşudan alınmıştır (run 43162349489).
   sağlıyorsa" kuralı ölçümle uygulanıyor. Döşemeli çekirdek ise açık kazanç.
 - **Native 4K ürün sahnesi (CPU referans yolu):** `terrain_day` 3840×2160
   `avg_ms=142.31 p95_ms=150.84 p99_ms=160.77` (~7 FPS). Bu CPU yolunun ölçümüdür;
-  döşemeli GPU çekirdeği henüz ürün sahnesine bağlı değildir.
+  döşemeli GPU çekirdeği yalnız düz-renk raster ilkeli olduğundan ürün sahnesinin
+  gölgeli çizimi bu çekirdekten geçmez. Ürün sahnesinin tam gölgeleme ardışık
+  düzeni ise ayrı bir OpenCL C 1.2 yolu olarak `kernels/ws_scene.cl` ile uygulandı
+  (bölüm 14) ve canlı ürün döngüsüne opt-in bağlandı (bölüm 15). Bu yolun gerçek
+  GPU'da native 4K canlı ölçümü `--live-bench` ile artık zorunlu CI adımıdır
+  (bölüm 16); ölçülen değer `docs/MILESTONE-BOARD.md` içinde raporlanır.
 
 **Önemli sınır (neden hâlâ 4K/30 FPS değil):** CI golden kapısı ürün karesinin
 golden kareyle **bit-özdeş** olmasını zorunlu kılar (`ci.yml`, `cmp` ile 17 sahne)
@@ -422,9 +427,13 @@ uygulama↔golden `cmp` karşılaştırması etkilenmez. Ayar kalıcıdır (`gpu
 anahtarı). CPU↔GPU semantik karşılaştırması `tools/ws_gpu_scene_check` ile
 (gpu_used=17, `structural_fraction=0`) ve bu canlı-yol testiyle korunur.
 
-**Not:** Gerçek GPU donanımında canlı döngünün 4K ölçümü, izole Windows GUI
-runner'ı yeniden bağlandığında otomatik üretilir (bkz. bölüm 13 ve
-`docs/MILESTONE-BOARD.md` blokörleri).
+**Not:** Gerçek GPU donanımında canlı döngünün native 4K ölçümü artık otomatik
+üretilir: `--live-bench <s>` modu gerçek ürün döngüsünü (dünya adımı, ekoloji,
+canlı aktörler, kamera, render ve HUD) `--live-gpu` ile opt-in GPU yolunda,
+istenen duvar-saati süresi boyunca çalıştırır ve p50/p95/p99 ile yol sayaçlarını
+yayar. `gui-windows.yml` bunu izole Windows runner'ında native `3840×2160` ve en az
+600 s (10 dakika) ile zorunlu adım olarak koşar (bkz. bölüm 16 ve
+`docs/MILESTONE-BOARD.md`).
 
 ## Ölçüm
 
@@ -507,13 +516,52 @@ runner'ı yeniden bağlandığında otomatik üretilir (bkz. bölüm 13 ve
   olduğu için mavi-gürültü/dönüşlü örnekleme ile daha az örnekle eşdeğer kalite
   sonraki dilimdir. (Gölge haritasını kare başına güncelleme ve bu kurulumu
   paralelleştirme bu dilimde yapıldı.)
-- Döşemeli GPU yolu şu an bir **doğrulanmış ve kanıtlanmış raster ilkeli**dir;
-  canlı gölgeli sahne hâlâ CPU yolundan çizilir. **Güncelleme (bu PR):** tam sahne
-  gölgeleme ardışık düzeni artık OpenCL C 1.2'ye taşındı (`kernels/ws_scene.cl`,
-  `ws_render_scene_gpu`); 17 sahnenin tamamında yapısal fark sıfırdır ve uygulama
-  `--gpu` bayrağıyla gerçek GPU karesi üretir. Canlı ürün döngüsünün (HUD, kamera,
-  ekoloji) GPU yoluna bağlanması sonraki dilimdir; şu an canlı ürün CPU referans
-  yolundan çizilir.
+- Döşemeli GPU yolu bir **doğrulanmış ve kanıtlanmış raster ilkeli**dir (düz-renk
+  raster; ürün gölgelemesi içermez). **Güncelleme (PR #64, PR #66 ve bu PR):** tam
+  sahne gölgeleme ardışık düzeni ayrı bir yol olarak OpenCL C 1.2'ye taşındı
+  (`kernels/ws_scene.cl`, `ws_render_scene_gpu`); 17 sahnenin tamamında yapısal
+  fark sıfırdır ve uygulama `--gpu` bayrağıyla gerçek GPU karesi üretir. Canlı ürün
+  döngüsü (kamera, ekoloji, aktörler, HUD) artık opt-in `gpu_render` ayarı ve
+  `--live-gpu` bayrağıyla bu yola bağlıdır (bölüm 15); varsayılan CPU referans
+  yoludur. Canlı yolun gerçek GPU'da native 4K ölçümü `--live-bench` ile zorunlu
+  CI adımıdır (bölüm 16).
 - CPU yolu zorunlu referanstır ve golden kareleri üretir; GPU (OpenCL C 1.2) yolu
   aynı sahneyi üretir, cihaz yoksa CPU'ya düşer ve kendi semantik karşılaştırma
   kapısıyla doğrulanır (yapısal fark = 0).
+
+### 16. Canlı ürün döngüsü GPU benchmark'ı (bu PR)
+
+**Sorun:** `tools/ws_perf` native 4K ölçümü **referans sahne** mikro-benchmark'ıdır;
+gerçek ürün döngüsü (dünya adımı, ekoloji, yaşayan aktörler, kamera, render ve HUD)
+değildir. P12 kabul eşiği (`p95 ≤ 33,3 ms`, 30 FPS) bu iki ölçüm karıştırıldığında
+yanlış okunur. Ayrıca bir iş akışı adımının "başarılı" olması GPU'nun gerçekten
+kullanıldığını kanıtlamaz.
+
+**Çözüm:** Uygulamaya `--live-bench <saniye>` modu eklendi (`src/app/ws_live.c`,
+`run_bench`). Mod, penceresiz gerçek ürün döngüsünü çalıştırır:
+
+1. `ws_session_step` (gerçek dünya zaman ilerlemesi, ekoloji, aktörler),
+2. `ws_session_render` (kamera + dünya + ekoloji + aktörler),
+3. `ws_hud_draw` (HUD),
+
+her karede; ölçüm **gerçek duvar saati** süresi boyunca sürer (simülasyon zamanı
+değil). `--live-gpu` verilirse render opt-in GPU yolundan geçer; `--size` ile
+çözünürlük verilir. Çıktı: donanım özeti (cihaz, OpenCL sürümü, birim, VRAM),
+çözünürlük, seed, kalite ayarları, kare sayısı, p50/p95/p99, `step/render/hud` ms
+ortalamaları, dünya özeti ve **yol sayaçları**.
+
+**GPU kanıtı (sessiz CPU fallback yok):** Oturum, render yolunu kare başına sayar
+(`ws_session_gpu_frames`, `ws_session_cpu_fallback_frames`, `ws_session_gpu_errors`;
+`src/ui/ws_session.c`). `--live-gpu` istendiğinde ama cihaz her kareyi çizmediyse
+araç **sıfır olmayan çıkış kodu (3)** verir ve durumu açıkça yazar; bir CPU ölçümü
+asla GPU sonucu olarak sunulmaz. Bu, "test yalnız GPU gerçekten kullanıldığında
+geçer" kuralını kanıtla uygular.
+
+**Zorunlu CI adımı:** `gui-windows.yml` bu modu izole Windows runner'ında native
+`3840×2160`, `--live-gpu` ve en az `600` s (10 dakika) ile koşar; `path=gpu`,
+`cpu_fallback_frames=0`, `gpu_errors=0` ve `gpu_frames>0` **zorunlu** geçitlerdir.
+P12 kabul p95 değeri (`p95_ok`) her koşuda raporlanır; p95 hedefi tutmuyorsa iş
+akışı bunu açık bir uyarı olarak yayar ve değer gizlenmez. Ham kare zamanları
+`evidence/gui/live/gpu-4k/frames.csv` olarak `gui-smoke` artefaktında saklanır.
+Linux CI (`ci.yml`) ve paket betiği (`tools/package-windows.ps1`) aynı modu CPU
+yolunda koşup sayaçların `path=cpu` bildirdiğini doğrular.
