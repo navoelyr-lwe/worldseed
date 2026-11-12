@@ -49,6 +49,7 @@ static int test_roundtrip(void)
     in.cam_speed = 250;
     in.look_sens = 175;
     in.cam_collision = 0;
+    in.gpu_render = 1;
 
     char buf[512];
     size_t n = ws_settings_format(buf, sizeof(buf), &in);
@@ -72,6 +73,7 @@ static int test_roundtrip(void)
     WS_CHECK(out.cam_speed == in.cam_speed);
     WS_CHECK(out.look_sens == in.look_sens);
     WS_CHECK(out.cam_collision == in.cam_collision);
+    WS_CHECK(out.gpu_render == in.gpu_render);
     return 1;
 }
 

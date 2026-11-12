@@ -68,6 +68,19 @@ Gövde yarıçapı renderer'ın koni ölçeğinden türetilir (taban yarıçapı
 çerçevesinde radyaldir ve yalnız gözü taşır; dünyayı değiştirmez. Engel yoksa
 (odak yamağında ağaç yok) davranış yalnız yükseklik tabanına döner.
 
+## Render yolu (CPU / GPU)
+
+Canlı ürünün referans ve zorunlu render yolu kendi ISO C17 CPU tiled
+renderer'ımızdır; golden kareler ve bit-özdeşlik kapıları bu yoldan üretilir. Buna
+ek olarak **isteğe bağlı** OpenCL C 1.2 tam-sahne GPU yolu vardır. Ayarlar
+menüsündeki **GPU render (OpenCL)** satırı bu yolu açar/kapatır (varsayılan
+**kapalı**; kalıcı ayar anahtarı `gpu_render`). Açıkken sahne GPU çekirdeğiyle
+çizilir; GPU cihazı yoksa veya çekirdek derlenemezse çizim sessizce CPU referansına
+düşer, görüntü boş kalmaz. GPU yalnız gerçek performans kazancı sağladığında
+kullanılmalıdır; bu makinede GPU yolu küçük karelerde CPU'dan yavaş olabildiğinden
+varsayılan CPU'dur. Render yolu seçimi gözlemci salt-okunurdur: dünya özetini
+değiştirmez.
+
 ## Durum panelleri
 
 Bilgiler simülasyonun gerçek state/event verisinden gelir. UI'da tahmin edilen veya eksik bilgi kesin gerçek gibi gösterilmez. Canlının iç durumu doğrudan ölçülemeyen bir şeyse model çıktısı olduğu belirtilir.

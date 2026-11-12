@@ -184,6 +184,9 @@ int ws_session_stats_visible(const ws_session *s);
 int ws_session_settings_visible(const ws_session *s);
 /* Directional shadows in the live view (off by default; T toggles). */
 int ws_session_shadows_visible(const ws_session *s);
+/* Opt-in OpenCL full-scene render path. Off by default: the CPU renderer stays
+ * the bit-identical reference (golden gates and determinism depend on it). */
+int ws_session_gpu_render_enabled(const ws_session *s);
 
 /* --- replay (docs/17 item 8) -------------------------------------------- */
 
@@ -229,9 +232,10 @@ typedef enum ws_settings_item {
     WS_SET_ITEM_CAM_SPEED = 11,
     WS_SET_ITEM_LOOK_SENS = 12,
     WS_SET_ITEM_CAM_COLLISION = 13,
-    WS_SET_ITEM_SAVE = 14,
-    WS_SET_ITEM_RELOAD = 15,
-    WS_SET_ITEM_COUNT = 16
+    WS_SET_ITEM_GPU_RENDER = 14,
+    WS_SET_ITEM_SAVE = 15,
+    WS_SET_ITEM_RELOAD = 16,
+    WS_SET_ITEM_COUNT = 17
 } ws_settings_item;
 
 /* Row the cursor currently sits on (0 .. WS_SET_ITEM_COUNT-1). */

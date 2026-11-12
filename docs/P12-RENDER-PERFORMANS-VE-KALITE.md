@@ -406,6 +406,26 @@ bit-özdeş olmasını ister ve golden kareler CPU yolundan üretilir; bu nedenl
 yolu golden üretiminde kullanılmaz. GPU yolu, kendi semantik karşılaştırma kapısıyla
 (`ws_gpu_scene_check`, yapısal fark = 0) ve uygulama `--gpu` kanıtıyla doğrulanır.
 
+### 15. Canlı ürün döngüsünün GPU yoluna bağlanması (bu PR)
+
+Önceki dilimde tam-sahne GPU yolu yalnız `--gpu` yakalama/kanıt aracında
+kullanılıyordu; canlı ürün döngüsü (`ws_session_render`) hâlâ CPU referans
+renderer'ını çağırıyordu. Bu dilim o boşluğu kapatır: oturuma **opt-in** bir
+`gpu_render` gözlemci ayarı eklendi (ayarlar menüsünde **GPU render (OpenCL)**
+satırı; varsayılan **kapalı**). Açıkken `ws_session_render` sahneyi
+`ws_render_scene_gpu(...)` üzerinden çizer; cihaz yoksa veya çekirdek derlenemezse
+yol CPU referansına düşer, yani canlı görüntü hiçbir koşulda boş kalmaz.
+
+Varsayılan kapalıdır ve ayar gözlemci salt-okunurdur: dünya özetini değiştirmez
+(`tests/test_session.c::session_gpu_render_opt_in`), böylece CI golden kapısının
+uygulama↔golden `cmp` karşılaştırması etkilenmez. Ayar kalıcıdır (`gpu_render`
+anahtarı). CPU↔GPU semantik karşılaştırması `tools/ws_gpu_scene_check` ile
+(gpu_used=17, `structural_fraction=0`) ve bu canlı-yol testiyle korunur.
+
+**Not:** Gerçek GPU donanımında canlı döngünün 4K ölçümü, izole Windows GUI
+runner'ı yeniden bağlandığında otomatik üretilir (bkz. bölüm 13 ve
+`docs/MILESTONE-BOARD.md` blokörleri).
+
 ## Ölçüm
 
 - 1920×1080 `terrain_day` (bu PR öncesi/sonrası, aynı makine, 4 çekirdek):

@@ -26,6 +26,7 @@ ws_settings ws_settings_default(void)
     s.cam_speed = 100;
     s.look_sens = 100;
     s.cam_collision = 1;
+    s.gpu_render = 0;
     return s;
 }
 
@@ -56,6 +57,7 @@ void ws_settings_clamp(ws_settings *s)
     if (s->look_sens < 25) { s->look_sens = 25; }
     if (s->look_sens > 400) { s->look_sens = 400; }
     s->cam_collision = s->cam_collision ? 1 : 0;
+    s->gpu_render = s->gpu_render ? 1 : 0;
 }
 
 static int parse_int(const char *v, long *out)
@@ -157,6 +159,8 @@ ws_result ws_settings_parse(const char *text, ws_settings *out)
                     s.look_sens = (int)n;
                 } else if (strcmp(key, "cam_collision") == 0 && parse_int(val, &n)) {
                     s.cam_collision = (int)n;
+                } else if (strcmp(key, "gpu_render") == 0 && parse_int(val, &n)) {
+                    s.gpu_render = (int)n;
                 }
                 /* Unknown keys are ignored. */
             }
@@ -196,12 +200,13 @@ size_t ws_settings_format(char *buf, size_t cap, const ws_settings *s)
                      "volume=%d\n"
                      "cam_speed=%d\n"
                      "look_sens=%d\n"
-                     "cam_collision=%d\n",
+                     "cam_collision=%d\n"
+                     "gpu_render=%d\n",
                      s->version, s->version, (unsigned long long)s->seed,
                      s->width, s->height, s->view, s->time_of_day_s,
                      s->render_scale, s->fullscreen, s->shadows, s->stats,
                      s->help, s->hud_scale, s->volume, s->cam_speed, s->look_sens,
-                     s->cam_collision);
+                     s->cam_collision, s->gpu_render);
     if (n < 0) {
         return 0u;
     }

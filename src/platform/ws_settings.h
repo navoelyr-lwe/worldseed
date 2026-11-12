@@ -36,6 +36,7 @@ typedef struct ws_settings {
     int cam_speed;          /* free-camera move speed percent, 25..400 */
     int look_sens;          /* mouse-look sensitivity percent, 25..400 */
     int cam_collision;      /* 0/1 free-camera ground collision (docs/17) */
+    int gpu_render;         /* 0/1 opt-in OpenCL full-scene render path */
 } ws_settings;
 
 /* Sensible defaults matching the live application's own defaults. */

@@ -174,6 +174,32 @@ static int test_settings_file_precedence(void)
     return 1;
 }
 
+static int test_live_gpu_run(void)
+{
+    /* The opt-in GPU render path is reachable from the live product loop and is
+     * observer-only: rendering through it does not change the world. On a host
+     * without an OpenCL device it falls back to the CPU reference, so the run
+     * succeeds everywhere. */
+    const char *const cpu[] = {"worldseed", "--live-headless", "2",
+                               "--live-no-settings", "--size", "320x180"};
+    ws_live_options oc;
+    WS_CHECK(ws_live_parse_options(6, cpu, &oc) == WS_OK);
+    WS_CHECK(oc.settings.gpu_render == 0);
+    WS_CHECK(ws_live_run(&oc) == 0);
+
+    const char *const gpu[] = {"worldseed", "--live-headless", "2",
+                               "--live-no-settings", "--size", "320x180",
+                               "--live-gpu"};
+    ws_live_options og;
+    WS_CHECK(ws_live_parse_options(7, gpu, &og) == WS_OK);
+    WS_CHECK(og.settings.gpu_render == 1);
+    WS_CHECK(ws_live_run(&og) == 0);
+
+    /* Same seed and frame count: the two render paths agree on the world. */
+    WS_CHECK(oc.seed == og.seed);
+    return 1;
+}
+
 static int test_replay_run(void)
 {
     const char *const argv[] = {"worldseed", "--live-replay", "ws_live_replay_test_out",
@@ -306,6 +332,7 @@ int main(void)
         {"live_frame_percentiles", test_frame_percentiles},
         {"live_tour_run", test_tour_run},
         {"live_settings_precedence", test_settings_file_precedence},
+        {"live_gpu_run", test_live_gpu_run},
         {"live_replay_run", test_replay_run},
         {"live_worldselect_run", test_worldselect_run},
         {"live_export_run", test_export_run},
