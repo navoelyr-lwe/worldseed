@@ -23,7 +23,6 @@
 
 #include "../core/ws_math.h"
 #include "../gpu/ws_opencl.h"
-#include "../gpu/ws_tilebin.h"
 
 /* Scene-constant layout must match kernels/ws_scene.cl. */
 enum {
@@ -278,8 +277,6 @@ static ws_result gc_render(ws_opencl *cl, const ws_scene *scene, ws_framebuffer 
     float *obj_mat = NULL;
     uint32_t *tri_obj = NULL;
     float *consts = NULL;
-    ws_tilebin bin;
-    memset(&bin, 0, sizeof(bin));
     /* Near-plane clipping can turn one input triangle into a fan of up to two
      * output triangles (a triangle clipped against one plane yields a quad), so
      * size the output arrays for the worst case. */
@@ -371,10 +368,6 @@ static ws_result gc_render(ws_opencl *cl, const ws_scene *scene, ws_framebuffer 
     }
 
     gc_build_consts(scene, shadow_ptr, w, h, consts);
-    if (ws_tilebin_build_strided(&bin, verts, GC_STRIDE, 0u, 1u, nt,
-                                 fb->width, fb->height, tile) != WS_OK) {
-        goto done;
-    }
 
     ws_gpu_scene_input in;
     memset(&in, 0, sizeof(in));
@@ -397,7 +390,6 @@ static ws_result gc_render(ws_opencl *cl, const ws_scene *scene, ws_framebuffer 
     }
 
 done:
-    ws_tilebin_free(&bin);
     free(verts);
     free(tri_obj);
     free(obj_mat);
