@@ -106,3 +106,25 @@ kural kanıtla uygulanır:
   gölgelemeden **önce** (erken-z) yapılır; bu yüzden kazanç yalnız çizim sırasını
   değiştirmekle elde edilir ve bu da yukarıdaki niceleme sorunu nedeniyle henüz
   bit-özdeş değildir.
+- **Gerçek GPU ölçümü mevcut (izole Windows runner):** Self-hosted Windows x64
+  koşucusunda gerçek bir GPU var: NVIDIA GeForce RTX 3060 Laptop (OpenCL 3.0
+  CUDA, 30 birim, 6 GB). `.github/workflows/gui-windows.yml` artık `ws_gpu_check`
+  ve `ws_perf`'i bu koşucuda çalıştırır (GPU yeteneği + native 4K ölçüm). Ölçülen:
+  CPU/GPU semantik eşleşme tolerans içinde; döşemeli (tiled) OpenCL C 1.2 çekirdek
+  referans GPU çekirdeğinden ~13x hızlı ve **bit-özdeş**; aygıt kaybı CPU geri
+  dönüşüne temiz kapanır. Referans GPU çekirdeği bu iş yükünde CPU'dan yavaştır
+  (`verdict=use_cpu`), yani "GPU yalnız gerçekten kazanç sağlıyorsa" ölçümle
+  uygulanır. **Sınır:** native 4K ürün sahnesi hâlâ CPU yolunda ölçülür (~7 FPS);
+  döşemeli çekirdek yalnız **düz-renk** rasterdir ve CI golden kapısı ürün
+  karesinin CPU golden'ıyla **bit-özdeş** olmasını (`cmp`, 17 sahne) şart koşar.
+  Bu yüzden GPU'yu ürün sahnesine bağlamak, gölgeleme ardışık düzeninin tamamının
+  (Lambert + hemisferik ortam + opaklık + gölge haritası + gökyüzü) OpenCL C 1.2'ye
+  **bit-özdeş** taşınmasına bağlıdır; bu büyük ve ayrı bir iştir.
+- **Release paketleme betiği PR'larda çalışmaz; kapıları bayatlayabilir:** PR #50
+  hareket harness'ini 4 türe çıkarıp `ci.yml`'yi güncelledi ama
+  `tools/package-windows.ps1` içindeki "tam 1 verdict=PASS" kapısını güncellemedi;
+  bu yalnız release anında ortaya çıktı ve paketi bloke etti. Düzeltme: beklenen
+  sahne sayıları artık her harness'ın kendi `WS_*_OK scenes=N` çıktısından okunur.
+  Ayrıca Windows GUI iş akışına gerçek paketleme betiğini koşturan "Release package
+  smoke" adımı eklendi; kırık release yolu artık PR'da yakalanır. Yeni bir
+  sahne/tür kapısı eklerken hem `ci.yml` hem `tools/package-windows.ps1` güncellenir.
