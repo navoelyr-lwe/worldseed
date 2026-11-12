@@ -379,6 +379,65 @@ static int test_quad3_runs(void)
     return 1;
 }
 
+/* Every species stands still on its own step and, walking at its own cadence,
+ * makes forward progress without falling. This locks the per-species step rule
+ * (ws_quad3_suggested_dt) and the species gait (ws_quad3_gait_walk): a step
+ * that is too small over-damps the open-loop trot and the body stalls. */
+static int test_species_walk_own_dt(void)
+{
+    for (int k = 0; k < WS_SPECIES_COUNT; ++k) {
+        const ws_species_info *si = ws_species_get((ws_species_kind)k);
+        if (si == NULL) {
+            return 0;
+        }
+        static ws_body3d c;
+        static ws_quad3_storage st;
+        static ws_quad3_parts parts;
+        const ws_species_profile *p = &si->body;
+        double dt = ws_quad3_suggested_dt(p);
+        int steps_per_s = (int)(1.0 / dt + 0.5);
+        WS_CHECK(ws_body3d_init(&c, dt, G, ITERS, BIAS, st.bodies, 16, st.joints,
+                                16, st.feet, 8) == WS_OK);
+        ws_body3d_set_ground(&c, flat, NULL);
+        WS_CHECK(ws_quad3_build(&c, &st, p, 0.0, &parts) == WS_OK);
+        ws_quad3_hold_rest(&c, &parts);
+        ws_vec3 c0 = ws_body3d_center_of_mass(&c);
+        for (int s = 0; s < steps_per_s * 8; ++s) {
+            ws_quad3_balance(&c, &parts, p, 0.0);
+            WS_CHECK(ws_body3d_step(&c) == WS_OK);
+        }
+        ws_vec3 c1 = ws_body3d_center_of_mass(&c);
+        double drift = sqrt((c1.x - c0.x) * (c1.x - c0.x) +
+                            (c1.z - c0.z) * (c1.z - c0.z));
+        /* Stands still: the body does not walk off on its own. */
+        WS_CHECK(drift < 0.2);
+        WS_CHECK(c1.y - c0.y > -0.2);
+
+        ws_quad3_gait gait = ws_quad3_gait_walk(p);
+        double phase = 0.0;
+        double upright_min = 1.0;
+        for (int s = 0; s < steps_per_s * 20; ++s) {
+            phase += gait.freq * dt;
+            ws_quad3_gait_apply(&c, &parts, &gait, phase);
+            ws_quad3_balance(&c, &parts, p, 0.0);
+            WS_CHECK(ws_body3d_step(&c) == WS_OK);
+            const ws_body3 *torso = &c.bodies[parts.torso];
+            ws_vec3 up =
+                ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
+            if (up.y < upright_min) {
+                upright_min = up.y;
+            }
+        }
+        ws_vec3 c2 = ws_body3d_center_of_mass(&c);
+        double v = (c2.x - c1.x) / 20.0;
+        /* Forward progress, upright, roughly straight. */
+        WS_CHECK(v > 0.05);
+        WS_CHECK(upright_min > 0.9);
+        WS_CHECK(fabs(c2.z - c1.z) < 0.6);
+    }
+    return 1;
+}
+
 /* ---------- invalid input ---------- */
 
 static int test_invalid_input(void)
@@ -420,6 +479,7 @@ int main(void)
         {"quad3 turns in place", test_quad3_turns},
         {"quad3 climbs slope", test_quad3_climbs_slope},
         {"quad3 runs", test_quad3_runs},
+        {"species walk own dt", test_species_walk_own_dt},
         {"lateral independence", test_lateral_independence},
         {"invalid input", test_invalid_input},
     };

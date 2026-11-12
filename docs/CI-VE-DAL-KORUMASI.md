@@ -99,7 +99,7 @@ Bu durum 10 Kasım 2026 tarihli bir olay kaydıdır; kalıcı/güncel runner dur
 
 Bu nedenle 11 Kasım 2026 denetim anındaki gözlem: GitHub-hosted CI işleri yeniden çalışır görünmektedir; ancak tek bir başarılı run gelecekteki tüm runner erişimini garanti etmez. Yeni workflow koşuları gerçek sonuçlarına göre değerlendirilmelidir. Önceki 10 Kasım kesintisi tarihsel kayıt olarak korunur.
 
-P12 gölge kanıtı ve release paketleme için izole Windows self-hosted yedek yolu da korunur. Branch protection/ruleset erişimi ayrı konudur: bağlı entegrasyonla branch-protection okuması bu denetimde 403 döndürdü; sunucu tarafı koruma ayarları etkin mi bu denetimde doğrulanamadı. Yetki sağlanmadan ayarların kurulmuş veya doğrulanmış olduğu varsayılmamalıdır.
+P12 gölge kanıtı ve release paketleme için izole Windows self-hosted yedek yolu da korunur. Branch protection/ruleset erişimi ayrı konudur. **Güncel denetim (12 Kasım 2026, bu PR):** repo `permissions.admin=true` ve `rulesets` **listesi** okunabilir (boş), ancak `branches/main/protection` (GET/PUT) ve `rulesets` **oluşturma** uç noktaları **403 "Resource not accessible by integration"** döndürür. Bu, bağlı entegrasyon token'ında `administration` yetkisi olmadığını gösterir; `main` için zorunlu kontroller bu oturumda kurulamadı. Bu açık **kapatılmamış** olarak raporlanır: ayarların kurulmuş veya doğrulanmış olduğu varsayılmaz. Kurulum için gereken tek dış adım, GitHub'da bu entegrasyona yönetim (administration) yetkisi vermek veya dal korumasını web arayüzünden uygulamaktır.
 
 ## Güncel izole Windows GUI durumu (2026-11-12)
 

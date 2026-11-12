@@ -20,7 +20,9 @@
 3. **Ölçek:** SI. Konum m, hız m/s, açı rad, açısal hız rad/s, kütle kg, kuvvet
    N, tork N·m. Referans geyik: omuz 1,05 m, gövde uzunluğu 1,6 m, toplam kütle
    110 kg, bacak üst/alt 0,60 m, duruş 0,80 m. Önerilen adım
-   `ws_quad3_suggested_dt` = 2 ms · (omuz / 1,05 m)^0,75 (taban 0,2 ms).
+   `ws_quad3_suggested_dt` = 3 ms · (`leg_upper` / 0,60 m), referans geyikte
+   kalibre edilmiş 2 ms'de sınırlı (taban 0,2 ms). Çözücünün ölçülen kararlılık
+   sınırı bacak boyuyla doğrusal ölçeklenir (≈0,0056 × `leg_upper`).
 4. **Durum değişkenleri (SI):** Gövde başına konum (`pos`), kuaterniyon
    oryantasyon (`orient`), doğrusal hız (`vel`), açısal hız (`omega`); gövde
    kütlesi, gövde-çerçevesi atalet tensörü (`inertia_body`) ve tersi. Eklem:
@@ -71,16 +73,19 @@
    kalma > 0,9)** ve **engebeli zemin (10 cm genlikli dalgalı yüzeyde ileri
    ilerleme)** ile bağımsız sol/sağ ayak yükü ve dört ayak teması CI'da
    kapılanır. D3 (ölçülmüş saha verisiyle kıyas) açıktır.
-9. **Bilinen sınırlama:** Diğer üç tür (tilki, tavşan, domuz) henüz aynı
-   standartta doğrulanmadı. Bu dilimde eklenenler: referans türde koşu ve
-   engebeli zemin senaryoları, ve yürüyüş/koşuyu ayıran gait yapısı. Hâlâ eksik:
-   küçük türlerin yürüyüşü. Ölçüm: tilki ~0,15 m/s, tavşan ~0,2 m/s (profil
-   hızları 1,8 ve 2,0 m/s) ve koşuda bile ayaklar yerden kesiliyor
-   (`min_contacts=0`). Bu açık-çevrim tırısın küçük ölçekte kararsızlaşmasıdır;
-   kapalı-çevrim (temas/denge geri beslemeli) bir denetleyici gerektirir ve ayrı
-   bir P13 dilimidir. Profil yürüyüş hızları da Froude ölçeklemesiyle tutarsız
-   görünüyor (tilki/tavşan için fiziksel olarak yüksek); bu da o dilimde gözden
-   geçirilecek.
+9. **Bilinen sınırlama:** Referans tür kızıl geyik tam kapılanır; diğer üç tür
+   (tilki, tavşan, domuz) bilgi amaçlı raporlanır. Beşinci dilim küçük türlerin
+   adım kuralını düzeltti (`ws_quad3_suggested_dt` artık `leg_upper` ile
+   ölçekler) ve kanıt aracının tüm türlere sabit 1,4 Hz uygulamasını kaldırıp
+   türün kendi `ws_quad3_gait_walk` frekansını kullanmasını sağladı; dört tür de
+   artık kendi adımıyla ayakta kalır ve ileri yürür. Ölçüm (aynı kazançlar):
+   tilki 0,15 → **0,63 m/s**, tavşan ~0,20 → **0,17 m/s**, domuz 1,36 → **1,07
+   m/s** (`min_contacts=4`). Hâlâ eksik: açık-çevrim tırıs tür profil hızlarının
+   altında kalır (tilki 1,8 / tavşan 2,0 / domuz 1,3 m/s); koşu/dönüş/yokuş
+   senaryoları dört türe yayılmadı. Bunlar kapalı-çevrim (temas/hız geri
+   beslemeli) denetleyici gerektirir ve ayrı bir P13 dilimidir. Ayrıca profil
+   yürüyüş hızları Froude ölçeklemesiyle tutarsız görünüyor (tilki/tavşan için
+   fiziksel olarak yüksek); bu da o dilimde gözden geçirilecek.
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.

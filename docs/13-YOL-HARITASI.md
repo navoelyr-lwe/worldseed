@@ -142,10 +142,26 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
   yüzeyde ileri ilerleme) CI kapısı olarak eklendi
   (`tools/ws_body3d_check.c`, `tests/test_body3d.c`).
 
-**Açık:** dinamik temas kuvveti ve 3B denge/enerji D3 kıyası, ve diğer üç türün
-(tilki, tavşan, domuz) aynı standartta 3B doğrulaması. Küçük türler açık-çevrim
-tırısta kararsızlaşıyor (tilki ~0,15 m/s, tavşan ~0,2 m/s; koşuda ayaklar yerden
-kesiliyor); kapalı-çevrim denetleyici gerekiyor.
+- *Dilim 5 — küçük türler kendi adımıyla kararlı:* Adım kuralı
+  (`ws_quad3_suggested_dt`) omuz yüksekliğinin 0,75 üssüydü; bu fiziksel değildi
+  ve küçük türlere gereğinden küçük adım verip açık-çevrim tırısı aşırı
+  sönümleyerek duraklatıyordu. Çözücünün kararlılık sınırı **bacak boyuyla
+  doğrusal** ölçeklenir (bu çözücüde ölçüldü: ~0,0056 × `leg_upper`); adım artık
+  `leg_upper` ile orantılı ve referans geyikte kalibre edilmiş 2 ms'de sınırlı.
+  Kanıt aracı (`ws_body3d_check`) yürüyüş frekansını tüm türler için sabit 1,4 Hz
+  kullanıyordu; artık her tür kendi yürüyüş frekansını (`ws_quad3_gait_walk`)
+  kullanır. Ölçülen (aynı kazançlar): tilki 0,15 → **0,63 m/s**, tavşan
+  ~0,20 → **0,17 m/s**, yaban domuzu 1,36 → **1,07 m/s**; dört tür de ayakta
+  kalır (`min_contacts=4`). Referans geyik değişmedi (1,77 m/s). Yeni birim testi
+  `species walk own dt` bu sözleşmeyi kilitler (her tür kendi adımıyla durur ve
+  ileri yürür). 17 golden sahne bit-özdeş kalır.
+
+**Açık:** dinamik temas kuvveti ve 3B denge/enerji D3 kıyası. Küçük türler artık
+kendi adımıyla kararlı ve ileri yürür, ancak açık-çevrim tırısı tür profil
+hedeflerinin (tilki 1,8, tavşan 2,0, domuz 1,3 m/s) altında kalır; bunları tam
+profile çıkarmak ve koşu/dönüş/yokuş senaryolarını dört türe genişletmek
+kapalı-çevrim (temas/hız geri beslemeli) denetleyiciye bağlıdır. Ayrıca 3B
+doğrulama dört türün tamamında D3 kıyasıyla tamamlanmalıdır.
 
 ## P14 — Çok duyulu algı ve doğal davranış
 

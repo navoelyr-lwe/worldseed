@@ -171,16 +171,19 @@ kural kanıtla uygulanır:
   `docs/life/MODEL-KARTI-UCD-BEDEN.md`.
 - **Kararlılık dersleri:** (a) Çözücü 30 iterasyon gerektirir (12'de küçük
   türler devrilir); 30 ve üstü kararlı. (b) Küçük türler daha küçük adım
-  gerektirir — `ws_quad3_suggested_dt` omuz yüksekliğinin 3/4 kuvvetiyle ölçekler.
+  gerektirir; ölçülen kararlılık sınırı **bacak boyuyla doğrusal** (≈0,0056 ×
+  `leg_upper`), bu yüzden `ws_quad3_suggested_dt` `leg_upper` ile ölçekler
+  (önceki omuz^3/4 kuralı küçük türleri duraklatıyordu — bkz. beşinci dilim).
   (c) Açık-çevrim tırıs sabit adıma kaotik duyarlıdır; **dünya baş açısı (heading)
   tutma terimi** olmadan asimetrik yürüyüş yavaşça kavis yapar (yanal sürüklenme
   14 m'ye çıkabilir). `ws_quad3_balance`'a heading terimi eklenince sürüklenme
   2,0–2,2 ms adım aralığında < 0,3 m'ye iner. Hız geri beslemeli (kapalı-çevrim)
   stride denetleyicisi denendi ve **işe yaramadı** (sistem yine kaotik); bu yüzden
   basit açık-çevrim + heading tutma tercih edildi.
-- **Sınır:** yalnız referans kızıl geyik kapılanır. Tilki/tavşan/domuz henüz aynı
-  standartta değil (küçük türler yavaş ilerliyor); koşu/farklı zemin
-  senaryoları, dinamik temas kuvveti ve D3 kıyası açıktır.
+- **Sınır:** yalnız referans kızıl geyik kapılanır. Tilki/tavşan/domuz kendi
+  adımıyla kararlı ve ileri yürür (beşinci dilim) ama açık-çevrim tırıs hâlâ
+  profil hızlarının altında; koşu/dönüş/yokuş senaryoları dört türe yayılmadı,
+  dinamik temas kuvveti ve D3 kıyası açıktır.
 - **Üçüncü dilim — referans türde dönüş ve yokuş:** `ws_quad3_balance`'ın yaw
   hız servosu **dünya baş açısı (heading) hedef izleme** terimine çevrildi.
   Ders: "yaw hızı hedefi" ile "baş açısı hedefi" aynı şey değildir; baş açısı
@@ -201,18 +204,33 @@ kural kanıtla uygulanır:
   ~1,77 m/s → ~2,13 m/s verir ve stabil kalır. **Duty (duruş oranını) kısaltmak
   denendi ve bu adımda açık-çevrim sürücüyü bozdu** (düşme/yanal sürüklenme);
   bu yüzden duty korunur. Engebeli zemin (10 cm genlikli sinüs toplamı) kapılandı.
-- **Küçük türler hâlâ açık:** tilki ~0,15 m/s, tavşan ~0,2 m/s (profil 1,8 ve
-  2,0 m/s) ve koşuda `min_contacts=0` (ayaklar yerden kesiliyor). Bu açık-çevrim
-  tırısın küçük ölçekte kararsızlaşmasıdır; temas/denge geri beslemeli
-  kapalı-çevrim denetleyici gerektirir. Bacak genliği, frekans ve adım taramaları
-  yapıldı; hiçbiri ileri ilerlemeyi sağlamadı. Ayrı bir P13 dilimi.
+- **Küçük türler — beşinci dilim (adım kuralı düzeltildi):** Adım kuralı
+  `ws_quad3_suggested_dt` omuz yüksekliğinin **3/4 kuvvetiyle** ölçekliyordu; bu
+  fiziksel değildi ve küçük türlere gereğinden küçük adım verip açık-çevrim
+  tırısı aşırı sönümleyerek duraklatıyordu. Ölçülen kararlılık sınırı çözücüde
+  **bacak boyuyla doğrusal** (≈0,0056 × `leg_upper`); adım artık `leg_upper` ile
+  orantılı ve referans geyikte kalibre edilmiş 2 ms'de sınırlı. Kanıt aracı
+  `ws_body3d_check` yürüyüş frekansını tüm türler için sabit 1,4 Hz kullanıyordu;
+  artık her tür kendi `ws_quad3_gait_walk` frekansını kullanır (bu, tavşanın
+  aşırı yüksek kadansta kaotikleşmesini de önler). Ölçüm (aynı kazançlar):
+  tilki 0,15 → **0,63 m/s**, tavşan ~0,20 → **0,17 m/s**, domuz 1,36 → **1,07
+  m/s**; dört tür de ayakta (`min_contacts=4`), geyik değişmedi (1,77 m/s).
+  `tests/test_body3d.c::species walk own dt` her türün kendi adımıyla durup ileri
+  yürüdüğünü kilitler. **Sınır:** açık-çevrim tırıs hâlâ tür profil hedeflerinin
+  altında (tilki 1,8 / tavşan 2,0 / domuz 1,3 m/s); koşu/dönüş/yokuş senaryoları
+  dört türe yayılmadı. Bunlar kapalı-çevrim (temas/hız geri beslemeli)
+  denetleyici gerektirir — ayrı bir P13 dilimi. Ders: gait hızı adım genliği ×
+  kadans ile sınırlıdır; açık-çevrim sürücüde kadansı tek başına yükseltmek
+  ilerlemeyi artırmaz, kaotikleştirir.
 - **Canlı-döngü GPU benchmark'ı zaten mevcut ve CI'da zorunlu:** `gui-windows.yml`
   `worldseed --live-bench 600 --live-gpu --size 3840x2160` koşar; gerçek dünya
   adımı + ekoloji + aktörler + kamera + render + HUD, `gpu_frames` == kare sayısı,
   `cpu_fallback_frames=0 gpu_errors=0`, ham `frames.csv`, `p95_ok=1`. Son
   ölçüm (RTX 3060 Laptop, `main`=`b066d49`): p95 20,90 ms / ~52,6 FPS (run 43239422714). Bunu yeni bir
   iş sanma; mevcut kapıyı koru.
-- **Branch protection açığı sürüyor:** token ile `branches/main/protection` ve
-  `rulesets` uç noktaları **403 "Resource not accessible by integration"** verir
-  (repo `permissions.admin=true` bildirse de). Dal koruması kurulmuş gibi
-  işaretlenmez; bu erişim sınırı kullanıcıya sade dille raporlanır.
+- **Branch protection açığı sürüyor:** token ile `branches/main/protection`
+  (PUT/GET) ve `rulesets` **oluşturma** uç noktaları **403 "Resource not
+  accessible by integration"** verir (repo `permissions.admin=true` bildirse ve
+  `rulesets` listesi okunabilse de; liste boş). Bu, token'da `administration`
+  yetkisi olmadığını gösterir. Dal koruması kurulmuş gibi işaretlenmez; bu erişim
+  sınırı kullanıcıya sade dille raporlanır.
