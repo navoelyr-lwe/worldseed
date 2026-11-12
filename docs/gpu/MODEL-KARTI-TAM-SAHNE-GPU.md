@@ -14,7 +14,15 @@
    yakın). Vertex kaydı 13 `float`: `sx,sy,z,invw, wx,wy,wz, nx,ny,nz, r,g,b`.
    Tile-bin girdisi üçgen başına 39 `float` (13·3). Global çalışma boyutu
    `tiles_x·tiles_y·tile_size·tile_size`; work-item başına bir piksel. SI birimi
-   yoktur; bu bir görüntü işlemidir.
+   yoktur; bu bir görüntü işlemidir. **VRAM ayak izi küçüktür:** native 3840×2160'da
+   baskın tamponlar RGBA8 çıktı (3840·2160·4 ≈ 33 MB) ve `float` derinlik
+   (≈ 33 MB); ürün sahnesinin geometrisi (≈ 12k–16k üçgen × 39 float ≈ 1,9–2,5 MB),
+   gölge haritası (1024² `float` ≈ 4 MB, opt-in) ve sabit/nesne tamponları bunun
+   yanında küçüktür — toplam **≈ 75 MB** mertebesinde. Yani bu yol darboğazı VRAM
+   değil, kare başına CPU↔GPU tampon aktarımı ve iş dağıtımıdır. (Bu ölçüm,
+   ürün planındaki 12 GB sınıfı referans donanım hedefinin bu iş yükü için bir
+   *başlangıç varsayımı* olduğunu; daha küçük bir cihazın da yeterli olabileceğini
+   gösterir. 12 GB hedefi diğer ürün bileşenleri için geçerli olabilir.)
 4. **Durum değişkenleri:** Girdi tamponları: `verts` (vertex başına 13 float,
    tile-bin ile strided), `obj_mat` (nesne başına 12 float), `consts` (gölgeleme
    sabitleri), `light_vp` (16 float), `shadow_depth` (opsiyonel gölge haritası),
