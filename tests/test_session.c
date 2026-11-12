@@ -518,6 +518,52 @@ static int test_gpu_render_opt_in(void)
     return 1;
 }
 
+/* The per-render-path counters must count exactly which path drew each frame:
+ * on a device-less host the GPU path falls back and the counters prove it (no
+ * silent "GPU" claim), and the CPU default path never increments them. */
+static int test_gpu_render_counters(void)
+{
+    ws_session *s = make(11ULL);
+    WS_CHECK(s != NULL);
+    run_seconds(s, 0.5);
+
+    ws_framebuffer fb;
+    WS_CHECK(ws_framebuffer_create(&fb, 320u, 180u) == WS_OK);
+
+    /* CPU default path: no GPU accounting at all. */
+    WS_CHECK(ws_session_gpu_frames(s) == 0u);
+    WS_CHECK(ws_session_cpu_fallback_frames(s) == 0u);
+    WS_CHECK(ws_session_gpu_errors(s) == 0u);
+    for (int i = 0; i < 3; ++i) {
+        WS_CHECK(ws_session_render(s, &fb, NULL) == WS_OK);
+    }
+    WS_CHECK(ws_session_gpu_frames(s) == 0u);
+    WS_CHECK(ws_session_cpu_fallback_frames(s) == 0u);
+
+    /* Enable the GPU row: every render is now accounted as either a real GPU
+     * frame or a CPU fallback, never both and never neither. */
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    while (ws_session_settings_cursor(s) < WS_SET_ITEM_GPU_RENDER) {
+        (void)ws_session_apply_command(s, WS_CMD_SETTINGS_MOVE, 1.0);
+    }
+    (void)ws_session_apply_command(s, WS_CMD_SETTINGS_ADJUST, 1.0);
+    (void)ws_session_apply_command(s, WS_CMD_TOGGLE_SETTINGS, 0.0);
+    WS_CHECK(ws_session_gpu_render_enabled(s) == 1);
+
+    const int n = 4;
+    for (int i = 0; i < n; ++i) {
+        WS_CHECK(ws_session_render(s, &fb, NULL) == WS_OK);
+    }
+    uint64_t gpu = ws_session_gpu_frames(s);
+    uint64_t fallback = ws_session_cpu_fallback_frames(s);
+    WS_CHECK(gpu + fallback == (uint64_t)n); /* every frame accounted for */
+    WS_CHECK(ws_session_gpu_errors(s) == 0u); /* no render call errored */
+
+    ws_framebuffer_free(&fb);
+    ws_session_destroy(s);
+    return 1;
+}
+
 static int test_settings_apply_and_readonly(void)
 {
     /* Applying a persistent settings snapshot drives the observer (view, clock,
@@ -1141,6 +1187,7 @@ int main(void)
         {"session_stats_demography", test_stats_and_demography},
         {"session_shadows_toggle", test_shadows_toggle},
         {"session_gpu_render_opt_in", test_gpu_render_opt_in},
+        {"session_gpu_render_counters", test_gpu_render_counters},
         {"session_settings_apply_readonly", test_settings_apply_and_readonly},
         {"session_replay_enter_seek_exit", test_replay_enter_seek_exit},
         {"session_replay_observation_only", test_replay_is_observation_only},

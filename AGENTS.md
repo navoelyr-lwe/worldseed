@@ -114,12 +114,18 @@ kural kanıtla uygulanır:
   referans GPU çekirdeğinden ~13x hızlı ve **bit-özdeş**; aygıt kaybı CPU geri
   dönüşüne temiz kapanır. Referans GPU çekirdeği bu iş yükünde CPU'dan yavaştır
   (`verdict=use_cpu`), yani "GPU yalnız gerçekten kazanç sağlıyorsa" ölçümle
-  uygulanır. **Sınır:** native 4K ürün sahnesi hâlâ CPU yolunda ölçülür (~7 FPS);
-  döşemeli çekirdek yalnız **düz-renk** rasterdir ve CI golden kapısı ürün
-  karesinin CPU golden'ıyla **bit-özdeş** olmasını (`cmp`, 17 sahne) şart koşar.
-  Bu yüzden GPU'yu ürün sahnesine bağlamak, gölgeleme ardışık düzeninin tamamının
-  (Lambert + hemisferik ortam + opaklık + gölge haritası + gökyüzü) OpenCL C 1.2'ye
-  **bit-özdeş** taşınmasına bağlıdır; bu büyük ve ayrı bir iştir.
+  uygulanır. **Canlı ürün döngüsü artık GPU yoluna bağlı:** `--live-bench` modu
+  gerçek ürün döngüsünü (dünya adımı + ekoloji + aktörler + kamera + render + HUD)
+  native 4K'da `--live-gpu` ile 10 dakika ölçer ve kare-başı yol sayaçlarıyla
+  (`gpu_frames`, `cpu_fallback_frames`, `gpu_errors`) GPU'nun her kareyi çizdiğini
+  kanıtlar. Ölçülen (izole runner, PR #67): `path=gpu p95_ms=21.96` (51,2 FPS),
+  `cpu_fallback_frames=0 gpu_errors=0` — native 4K/30 FPS hedefi (p95 ≤ 33,3 ms)
+  bu cihazda **karşılanır** ve zorunlu CI geçididir. Döşemeli çekirdek yalnız
+  **düz-renk** rasterdir; ürün gölgelemesi ayrı `kernels/ws_scene.cl` yolundadır ve
+  CI golden kapısı CPU golden'ıyla **bit-özdeş** olmayı (`cmp`, 17 sahne) şart
+  koştuğu için GPU yolu golden üretiminde kullanılmaz. **Sınır:** ölçüm `shadows=0`
+  ve 6 GB cihazda alındı; 12 GB sınıfı referans donanım ve gölge-açık canlı ölçüm
+  ayrıca üretilmelidir.
 - **Release paketleme betiği PR'larda çalışmaz; kapıları bayatlayabilir:** PR #50
   hareket harness'ini 4 türe çıkarıp `ci.yml`'yi güncelledi ama
   `tools/package-windows.ps1` içindeki "tam 1 verdict=PASS" kapısını güncellemedi;

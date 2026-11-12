@@ -160,6 +160,7 @@ Henüz bulunmayanlar:
 - Etkileşimli pencere ölçeği CPU maliyetini sınırlamak için otomatik küçültülür. Bu, büyük bir pencerede görülen görüntünün aynı çözünürlükte native render edildiği anlamına gelmez.
 - OpenCL kernel'i yalnız flat-shaded triangle raster testidir. Her piksel work-item'i üçgen listesinin tamamını dolaşır; bu nedenle sahne karmaşıklığı büyüdükçe piksel × üçgen iş yükü oluşur.
 - P10 belgesi tam sahne GPU raster/pixel-buffer entegrasyonunun sonraki dilime bırakıldığını ve gerçek GPU donanımında performans ölçülmediğini açıkça belirtir. Son CI'daki OpenCL işi pocl CPU ICD'de kernel derleme/çalıştırma kanıtıdır; gerçek GPU hızlanma kanıtı değildir.
+- **Güncelleme (PR #64/#66 ve PR #67):** Tam sahne OpenCL C 1.2 gölgeleme yolu (`kernels/ws_scene.cl`) artık uygulanmıştır ve canlı ürün döngüsüne opt-in bağlanmıştır. Gerçek GPU donanımı mevcuttur (izole Windows runner, NVIDIA GeForce RTX 3060 Laptop GPU, OpenCL 3.0 CUDA, 6 GB). `--live-bench 600 --live-gpu --size 3840x2160` ile **canlı ürün döngüsü** (dünya adımı + ekoloji + aktörler + kamera + render + HUD) native 4K'da 10 dakika ölçüldü: `path=gpu p95_ms=21.96` (51,2 FPS), `cpu_fallback_frames=0 gpu_errors=0` — 33,3 ms kabul bütçesi bu cihazda karşılanır ve artık zorunlu CI geçididir. Bu, "GPU test kernel'i başarılı olması tam ürün renderer'ının GPU'ya taşındığı anlamına gelmez" itirazını artık karşılar. Açık kalan: ölçüm `shadows=0` ile ve 6 GB cihazda alındı; 12 GB sınıfı referans donanım ve gölge-açık canlı ölçüm ayrıca üretilmelidir.
 - PBR benzeri malzeme, yüksek ayrıntılı özgün mesh, doğal kürk/deri, çok seviyeli bitki ve mesh LOD, yoğunluk/occlusion culling, güncel hareketli nesne gölgeleri ve atmosferik kalite henüz ürün hedefi seviyesinde değildir.
 
 **Sonuç:** P12 gerçek bir blokajdır. 4K/30 FPS yalnız bir benchmark sayısı değildir; tam ürün sahnesi, animasyon, gölge, bitki, UI ve canlı dünya yüküyle ölçülmelidir. GPU test kernel'inin başarılı olması, tam ürün renderer'ının GPU'ya taşındığı anlamına gelmez.
@@ -250,7 +251,7 @@ Kaynak:
 
 | Öncelik | Risk | Neden önemli | Önerilen çözüm |
 |---|---|---|---|
-| P0 / Blokaj | 4K/30 FPS ve tam sahne renderer entegrasyonu yok | 1.0 görsel/perf release kapısı karşılanmıyor | P12'yi açık tut; tam sahne benchmark ve GPU entegrasyonu |
+| P0 / Blokaj | 4K/30 FPS ve tam sahne renderer entegrasyonu yok | 1.0 görsel/perf release kapısı karşılanmıyor | **Kısmen çözüldü (PR #64/#66/#67):** tam sahne OpenCL C 1.2 yolu canlı döngüye bağlı ve gerçek GPU'da native 4K `p95 ≈ 22 ms` (51 FPS) ölçüldü; kalan: 12 GB sınıfı referans donanım ve gölge-açık ölçüm |
 | P0 / Blokaj | Biyomekanik yalnız sagittal ortak model | Dört türde 3B beden/kontrol hedefi karşılanmıyor | 3B bağımsız uzuv/temas/denge, önce kızıl geyik D3 |
 | P0 / Blokaj | Ekoloji homojen ve kalibre edilmemiş | 2 km habitat mozaiği ve besin ağı hedefi karşılanmıyor | Tür/habitat/bitki katmanlarını bağla; D3 referans kıyası |
 | P1 / Yüksek | Ses olay-tonu düzeyinde | Orman/animal soundscape ürün deneyimi yok | Çevre tabakaları, tür sesleri, yayılım ve canlı cihaz çıkışı |

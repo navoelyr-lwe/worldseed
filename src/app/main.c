@@ -24,7 +24,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "invalid live arguments (use --live, --fullscreen, "
                         "--live-no-select, --live-headless <s>, --live-tour <dir>, "
                         "--live-replay <dir>, --live-select <dir>, "
-                        "--live-export <dir>, --live-gpu, --live-capture <file>)\n");
+                        "--live-export <dir>, --live-bench <s>, --live-gpu, "
+                        "--live-capture <file>)\n");
         return 2;
     }
     if (live.enabled) {

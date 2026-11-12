@@ -10,6 +10,7 @@
 #include "../audio/ws_audio.h"
 #include "../platform/ws_clock.h"
 #include "../platform/ws_fs.h"
+#include "../platform/ws_hardware.h"
 #include "../render/ws_image.h"
 #include "../ui/ws_hud.h"
 #include "../ui/ws_session.h"
@@ -26,6 +27,8 @@ ws_live_options ws_live_options_default(void)
     o.worldselect = 0;
     o.export_mode = 0;
     o.export_seconds = 0.0;
+    o.bench = 0;
+    o.bench_seconds = 0.0;
     o.no_select = 0;
     o.out_dir = NULL;
     o.capture_path = NULL;
@@ -123,6 +126,26 @@ ws_result ws_live_parse_options(int argc, const char *const *argv, ws_live_optio
             if (!(opts->export_seconds > 0.0)) {
                 return WS_ERR_INVALID_ARGUMENT;
             }
+        } else if (strcmp(a, "--live-bench") == 0) {
+            /* Live-loop benchmark (P12): step the real world, render, draw the
+             * HUD and present nothing, for a wall-clock duration, on the GPU
+             * path when --live-gpu is also given. */
+            if (i + 1 >= argc) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
+            opts->enabled = 1;
+            opts->headless = 1;
+            opts->bench = 1;
+            opts->bench_seconds = strtod(argv[++i], NULL);
+            if (!(opts->bench_seconds > 0.0)) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
+        } else if (strcmp(a, "--live-bench-out") == 0) {
+            if (i + 1 >= argc) {
+                return WS_ERR_INVALID_ARGUMENT;
+            }
+            opts->enabled = 1;
+            opts->out_dir = argv[++i];
         } else if (strcmp(a, "--live-no-select") == 0) {
             /* Skip the startup world-selection screen and open the world
              * directly (used by the GUI/evidence runs so they present frames). */
@@ -451,6 +474,209 @@ static int run_headless(const ws_live_options *opts)
     ws_framebuffer_free(&fb);
     ws_session_destroy(s);
     return frames > 0u ? 0 : 1;
+}
+
+/* --- live-loop benchmark (P12) ------------------------------------------ *
+ *
+ * Measures the real product loop the window presents: fixed world step, the
+ * session render (camera + world + ecology + actors), and the HUD, every frame,
+ * for a wall-clock duration. This is not the reference-scene micro-benchmark in
+ * tools/ws_perf: it carries the ecology, the living actors, the camera and the
+ * HUD load, so it is the number the native-4K/30-FPS acceptance gate is about.
+ *
+ * The device/OpenCL/VRAM/hardware summary, the resolution, seed and quality
+ * settings are printed with the p50/p95/p99 frame times, the frame count and the
+ * world digest. When the GPU path is requested the session's own per-path frame
+ * counters prove the device drew every frame: a CPU fallback (device absent or
+ * kernel failure) is reported explicitly and never silently counted as GPU.
+ */
+static void bench_write_frames_csv(const ws_live_options *opts,
+                                   const double *samples, uint64_t frames)
+{
+    if (opts->out_dir == NULL || samples == NULL) {
+        return;
+    }
+    if (ws_fs_make_dirs(opts->out_dir) != WS_OK) {
+        return;
+    }
+    char path[512];
+    snprintf(path, sizeof(path), "%s/frames.csv", opts->out_dir);
+    FILE *f = fopen(path, "w");
+    if (f == NULL) {
+        return;
+    }
+    fprintf(f, "# Worldseed Engine live-loop benchmark raw frame times (P12)\n");
+    fprintf(f, "# frame_index frame_ms\n");
+    for (uint64_t i = 0; i < frames; ++i) {
+        fprintf(f, "%llu %.4f\n", (unsigned long long)i, samples[i]);
+    }
+    fclose(f);
+}
+
+static int run_bench(const ws_live_options *opts)
+{
+    ws_session *s = NULL;
+    if (ws_live_make_session(opts, &s) != WS_OK) {
+        fprintf(stderr, "live bench: session create failed\n");
+        return 1;
+    }
+    ws_framebuffer fb;
+    if (ws_framebuffer_create(&fb, opts->width, opts->height) != WS_OK) {
+        ws_session_destroy(s);
+        fprintf(stderr, "live bench: framebuffer allocation failed\n");
+        return 1;
+    }
+    float *depth = malloc((size_t)opts->width * opts->height * sizeof(float));
+    if (depth == NULL) {
+        ws_framebuffer_free(&fb);
+        ws_session_destroy(s);
+        fprintf(stderr, "live bench: depth allocation failed\n");
+        return 1;
+    }
+
+    /* The device summary is captured once, up front, so the report names the
+     * exact hardware the numbers came from (docs/11). */
+    ws_hardware_info hw;
+    (void)ws_hardware_probe(&hw);
+    char hwdesc[512];
+    ws_hardware_describe(&hw, hwdesc, sizeof(hwdesc));
+    printf("live_bench hardware %s\n", hwdesc);
+    printf("live_bench config %ux%u seed=%llu gpu_render=%d "
+           "shadows=%d duration_s=%.1f\n",
+           opts->width, opts->height, (unsigned long long)opts->seed,
+           ws_session_gpu_render_enabled(s),
+           ws_session_shadows_visible(s), opts->bench_seconds);
+
+    const double dt = 1.0 / 60.0;
+    uint64_t frames = 0u;
+    double worst_ms = 0.0;
+    double total_ms = 0.0;
+    double total_step_ms = 0.0;
+    double total_render_ms = 0.0;
+    double total_hud_ms = 0.0;
+    size_t cap = 8192u;
+    double *samples = (double *)malloc(cap * sizeof(double));
+    if (samples == NULL) {
+        free(depth);
+        ws_framebuffer_free(&fb);
+        ws_session_destroy(s);
+        fprintf(stderr, "live bench: sample allocation failed\n");
+        return 1;
+    }
+
+    /* Wall-clock deadline: the run measures real elapsed time, not simulated
+     * seconds, so a slow frame counts against the budget (docs/11). */
+    uint64_t start_ns = ws_clock_monotonic_ns();
+    uint64_t deadline_ns = start_ns + (uint64_t)(opts->bench_seconds * 1.0e9);
+    int step_failed = 0;
+    int render_failed = 0;
+    while (ws_clock_monotonic_ns() < deadline_ns) {
+        uint64_t t0 = ws_clock_monotonic_ns();
+        if (ws_session_step(s, dt) != WS_OK) {
+            fprintf(stderr, "live bench: step failed\n");
+            step_failed = 1;
+            break;
+        }
+        uint64_t t1 = ws_clock_monotonic_ns();
+        if (ws_session_render(s, &fb, depth) != WS_OK) {
+            fprintf(stderr, "live bench: render failed\n");
+            render_failed = 1;
+            break;
+        }
+        uint64_t t2 = ws_clock_monotonic_ns();
+        ws_hud_options ho = ws_hud_options_default();
+        ws_hud_draw(&fb, s, &ho);
+        uint64_t t3 = ws_clock_monotonic_ns();
+
+        double ms = ws_clock_ns_to_seconds(t3 - t0) * 1000.0;
+        total_step_ms += ws_clock_ns_to_seconds(t1 - t0) * 1000.0;
+        total_render_ms += ws_clock_ns_to_seconds(t2 - t1) * 1000.0;
+        total_hud_ms += ws_clock_ns_to_seconds(t3 - t2) * 1000.0;
+        ws_session_note_frame(s, ms);
+        if (ms > worst_ms) { worst_ms = ms; }
+        total_ms += ms;
+        if (frames == cap) {
+            size_t ncap = cap * 2u;
+            double *grown = (double *)realloc(samples, ncap * sizeof(double));
+            if (grown == NULL) { break; }
+            samples = grown;
+            cap = ncap;
+        }
+        samples[frames] = ms;
+        frames += 1u;
+    }
+    uint64_t end_ns = ws_clock_monotonic_ns();
+    double wall_s = ws_clock_ns_to_seconds(end_ns - start_ns);
+
+    double p50 = 0.0, p95 = 0.0, p99 = 0.0;
+    if (frames > 0u) {
+        /* ws_live_percentile_ms sorts a copy in place; keep the raw order for
+         * the per-frame CSV, so sort a scratch copy instead. */
+        double *scratch = (double *)malloc((size_t)frames * sizeof(double));
+        if (scratch != NULL) {
+            memcpy(scratch, samples, (size_t)frames * sizeof(double));
+            p50 = ws_live_percentile_ms(scratch, (size_t)frames, 0.50);
+            p95 = ws_live_percentile_ms(scratch, (size_t)frames, 0.95);
+            p99 = ws_live_percentile_ms(scratch, (size_t)frames, 0.99);
+            free(scratch);
+        }
+    }
+
+    char wdigest[WS_SESSION_DIGEST_HEX];
+    (void)ws_session_digest(s, wdigest);
+
+    uint64_t gpu_frames = ws_session_gpu_frames(s);
+    uint64_t cpu_fallback = ws_session_cpu_fallback_frames(s);
+    uint64_t gpu_errors = ws_session_gpu_errors(s);
+    int gpu_requested = ws_session_gpu_render_enabled(s);
+    /* The GPU carried the run only if the path was requested, the device drew
+     * every rendered frame, and no GPU-path error occurred. */
+    int gpu_all_frames = gpu_requested && (cpu_fallback == 0u) && (gpu_errors == 0u) &&
+                         (gpu_frames == frames);
+    const char *path = gpu_all_frames ? "gpu" : (gpu_requested ? "gpu_partial" : "cpu");
+
+    printf("live_bench result path=%s frames=%llu wall_s=%.2f "
+           "avg_ms=%.2f p50_ms=%.2f p95_ms=%.2f p99_ms=%.2f worst_ms=%.2f fps=%.1f "
+           "step_ms=%.2f render_ms=%.2f hud_ms=%.2f "
+           "gpu_frames=%llu cpu_fallback_frames=%llu gpu_errors=%llu "
+           "world_digest=%s pop=%u loaded=%u\n",
+           path, (unsigned long long)frames, wall_s,
+           frames ? total_ms / (double)frames : 0.0, p50, p95, p99, worst_ms,
+           frames ? 1000.0 / (total_ms / (double)frames) : 0.0,
+           frames ? total_step_ms / (double)frames : 0.0,
+           frames ? total_render_ms / (double)frames : 0.0,
+           frames ? total_hud_ms / (double)frames : 0.0,
+           (unsigned long long)gpu_frames, (unsigned long long)cpu_fallback,
+           (unsigned long long)gpu_errors, wdigest,
+           ws_session_total_population(s), ws_session_loaded_regions(s));
+
+    /* The native-4K/30-FPS gate is p95 <= 33.3 ms (docs/11). Report the verdict
+     * honestly; the caller decides whether it blocks. */
+    printf("live_bench verdict p95_ok=%d p95_ms=%.2f target_ms=33.30\n",
+           (p95 <= 33.3) ? 1 : 0, p95);
+
+    bench_write_frames_csv(opts, samples, frames);
+
+    free(samples);
+    free(depth);
+    ws_framebuffer_free(&fb);
+    ws_session_destroy(s);
+
+    if (frames == 0u || step_failed || render_failed) {
+        return 1;
+    }
+    /* A GPU-requested run that never actually used the device is a failure, not
+     * a silent CPU measurement (docs/P12). */
+    if (gpu_requested && !gpu_all_frames) {
+        fprintf(stderr, "live bench: GPU path requested but the device did not "
+                        "draw every frame (gpu=%llu fallback=%llu errors=%llu)\n",
+                (unsigned long long)gpu_frames, (unsigned long long)cpu_fallback,
+                (unsigned long long)gpu_errors);
+        return 3;
+    }
+    printf("WS_LIVE_BENCH_OK path=%s frames=%llu p95_ms=%.2f p95_ok=%d\n",
+           path, (unsigned long long)frames, p95, (p95 <= 33.3) ? 1 : 0);
+    return 0;
 }
 
 /* --- scripted evidence tour --------------------------------------------- */
@@ -1259,6 +1485,9 @@ int ws_live_run(const ws_live_options *opts)
      * so the windowed and headless paths drive exactly the same product. */
     if (opts->export_mode) {
         return run_export(opts);
+    }
+    if (opts->bench) {
+        return run_bench(opts);
     }
     if (opts->tour) {
         return run_tour(opts);

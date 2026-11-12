@@ -37,6 +37,20 @@ for ($i = 0; $i -lt $scenes.Count; $i++) {
 New-Item -ItemType Directory -Force -Path evidence/live/tour-a,evidence/live/tour-b | Out-Null
 & $exe --live-headless 3 --size 1280x720 | Tee-Object -FilePath evidence/live/headless.txt
 if (-not (Select-String -Path evidence/live/headless.txt -Pattern "LIVE_HEADLESS_OK" -Quiet)) { exit 1 }
+
+# P12 live-loop benchmark: the real product loop (world step + ecology + actors
+# + camera + render + HUD) for a fixed wall-clock duration, with p50/p95/p99 and
+# the per-render-path frame counters. This is the number the native-4K/30-FPS
+# acceptance gate is about, distinct from the reference-scene micro-benchmark.
+# It runs on the CPU path here so packaging works on any runner; the full
+# native-4K GPU run is the Windows GUI workflow's gui-smoke artifact
+# (evidence/gui/live/gpu-4k-live.txt).
+New-Item -ItemType Directory -Force -Path evidence/live/bench | Out-Null
+& $exe --live-bench 5 --live-no-settings --live-no-select --size 1280x720 `
+    --live-bench-out evidence/live/bench | Tee-Object -FilePath evidence/live/bench.txt
+if (-not (Select-String -Path evidence/live/bench.txt -Pattern "WS_LIVE_BENCH_OK" -Quiet)) { exit 1 }
+if (-not (Test-Path evidence/live/bench/frames.csv)) { Write-Error "no live-bench frame evidence"; exit 1 }
+
 & $exe --live-tour evidence/live/tour-a --size 1280x720 | Tee-Object -FilePath evidence/live/tour-a.txt
 if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "LIVE_TOUR_OK" -Quiet)) { exit 1 }
 if (-not (Select-String -Path evidence/live/tour-a.txt -Pattern "saved=1 loaded=1 roundtrip=1" -Quiet)) { exit 1 }
@@ -147,6 +161,10 @@ Copy-Item evidence/preview/perf.txt "$stage/preview/"
 New-Item -ItemType Directory -Force -Path "$stage/live" | Out-Null
 Copy-Item evidence/live/tour-a/*.png "$stage/live/"
 Copy-Item evidence/live/tour-a/manifest.txt "$stage/live/"
+Copy-Item evidence/live/headless.txt "$stage/live/"
+Copy-Item evidence/live/bench.txt "$stage/live/"
+New-Item -ItemType Directory -Force -Path "$stage/live/bench" | Out-Null
+Copy-Item evidence/live/bench/frames.csv "$stage/live/bench/"
 New-Item -ItemType Directory -Force -Path "$stage/select" | Out-Null
 Copy-Item evidence/live/select/*.png "$stage/select/"
 Copy-Item evidence/live/select/select-manifest.txt "$stage/select/"
@@ -186,6 +204,9 @@ Copy-Item evidence/motion/motion.txt "$stage/quality/"
 $mfFiles = @("$stage/worldseed.exe")
 $mfFiles += Get-ChildItem "$stage/preview/*.png" | ForEach-Object { $_.FullName }
 $mfFiles += Get-ChildItem "$stage/live/*.png" | ForEach-Object { $_.FullName }
+$mfFiles += "$stage/live/headless.txt"
+$mfFiles += "$stage/live/bench.txt"
+$mfFiles += "$stage/live/bench/frames.csv"
 $mfFiles += Get-ChildItem "$stage/select/*.png" | ForEach-Object { $_.FullName }
 $mfFiles += Get-ChildItem "$stage/export/*.png" | ForEach-Object { $_.FullName }
 $mfFiles += "$stage/export/soundscape.wav"

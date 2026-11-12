@@ -138,9 +138,12 @@ gerçek cihaz ölçümü olmadan yapılmaz.
 
 ## Bilinen sınırlamalar
 
-- Gerçek GPU donanımı bu ortamda yoktur; GPU hızlanma iddiası yalnız OpenCL uyumlu
-  CPU ICD ile semantik ve yol kanıtına dayanır. Gerçek GPU ölçümü referans
-  donanımda yapılmalıdır.
+- **Gerçek GPU donanımı artık mevcuttur ve ölçülmüştür:** izole Windows x64
+  runner'ında NVIDIA GeForce RTX 3060 Laptop GPU (OpenCL 3.0 CUDA, 30 birim, 6 GB).
+  `ws_gpu_check` gerçek GPU'da `semantic_match=ok`, döşemeli çekirdek
+  `bit_identical=1` ve `device_loss_recovered=1` verir. pocl CPU ICD ile semantik
+  ve yol kanıtı korunur; hız iddiası yalnız gerçek cihazda geçerlidir. 12 GB sınıfı
+  referans donanım henüz kullanılmadı.
 - Kernel yalnız düz gölgeli üçgen rasterleme yapar (semantik karşılaştırma için
   referansla eşleşen alt küme). Tam sahne GPU rasterleme/pixel-buffer sunumu
   sonraki dilimdedir. **Güncelleme:** tam sahne GPU yolu artık uygulandı ve her
@@ -150,5 +153,9 @@ gerçek cihaz ölçümü olmadan yapılmaz.
 - Çok çekirdekli zamanlayıcı altyapısı hazırdır ve ölçülmüştür; otoritatif
   simülasyon adımının paralelleştirilmesi (bölge/canlı işleri) determinizm kanıtıyla
   birlikte sonraki dilimlere bırakılmıştır.
-- 4K/30 FPS ürün hedefi henüz karşılanmamıştır; bu bir CPU referans renderer'ıdır ve
-  hedef profiller donanım benchmark'ıyla doğrulanır (`docs/11`).
+- 4K/30 FPS ürün hedefi **canlı ürün döngüsünde gerçek GPU'da karşılanmıştır:**
+  native 3840×2160 `--live-bench --live-gpu` 10 dakika `path=gpu p95_ms=21.96`
+  (51,2 FPS), `cpu_fallback_frames=0 gpu_errors=0` (PR #67; `docs/P12` bölüm 16).
+  CPU referans yolu aynı hedefi tutmaz; hedef profiller donanım benchmark'ıyla
+  doğrulanır (`docs/11`). Açık kalan: 12 GB sınıfı referans donanım ve gölge-açık
+  canlı ölçüm.

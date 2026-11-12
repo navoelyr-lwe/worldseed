@@ -200,6 +200,51 @@ static int test_live_gpu_run(void)
     return 1;
 }
 
+static int test_bench_run(void)
+{
+    /* The live-loop benchmark drives the real product loop for a wall-clock
+     * duration and reports frame times with the per-path counters. On the CPU
+     * path it must succeed and write a per-frame CSV. */
+    const char *const argv[] = {"worldseed", "--live-bench", "1",
+                                "--live-no-settings", "--size", "240x135",
+                                "--live-bench-out", "ws_live_bench_test_out"};
+    ws_live_options o;
+    WS_CHECK(ws_live_parse_options(8, argv, &o) == WS_OK);
+    WS_CHECK(o.bench == 1);
+    WS_CHECK(o.headless == 1);
+    WS_CHECK(o.bench_seconds == 1.0);
+    WS_CHECK(ws_live_run(&o) == 0);
+    FILE *f = fopen("ws_live_bench_test_out/frames.csv", "r");
+    WS_CHECK(f != NULL);
+    if (f != NULL) {
+        char line[128];
+        int rows = 0;
+        while (fgets(line, sizeof(line), f) != NULL) {
+            if (line[0] != '#') { rows += 1; }
+        }
+        fclose(f);
+        WS_CHECK(rows > 0);
+    }
+    return 1;
+}
+
+/* A GPU-requested benchmark that cannot use a device must fail loudly (exit
+ * non-zero) instead of reporting a CPU measurement as a GPU result. */
+static int test_bench_gpu_requires_device(void)
+{
+    const char *const argv[] = {"worldseed", "--live-bench", "1",
+                                "--live-no-settings", "--size", "160x90",
+                                "--live-gpu"};
+    ws_live_options o;
+    WS_CHECK(ws_live_parse_options(7, argv, &o) == WS_OK);
+    WS_CHECK(o.settings.gpu_render == 1);
+    int rc = ws_live_run(&o);
+    /* Either the device drew every frame (rc == 0) or the run failed because it
+     * fell back (rc == 3). Any other code would mean the accounting is wrong. */
+    WS_CHECK(rc == 0 || rc == 3);
+    return 1;
+}
+
 static int test_replay_run(void)
 {
     const char *const argv[] = {"worldseed", "--live-replay", "ws_live_replay_test_out",
@@ -333,6 +378,8 @@ int main(void)
         {"live_tour_run", test_tour_run},
         {"live_settings_precedence", test_settings_file_precedence},
         {"live_gpu_run", test_live_gpu_run},
+        {"live_bench_run", test_bench_run},
+        {"live_bench_gpu_requires_device", test_bench_gpu_requires_device},
         {"live_replay_run", test_replay_run},
         {"live_worldselect_run", test_worldselect_run},
         {"live_export_run", test_export_run},
