@@ -46,6 +46,12 @@ typedef struct ws_quad3_storage {
     ws_foot3 feet[8];
 } ws_quad3_storage;
 
+/* Suggested fixed step for a species. Smaller animals have stiffer legs, so the
+ * same stable integration needs a smaller step; the reference deer (shoulder
+ * 1.05 m) maps to 2 ms and the step scales with the shoulder height to the 3/4
+ * power. This keeps every species stable at its own scale. */
+double ws_quad3_suggested_dt(const ws_species_profile *p);
+
 /* Build the reference quadruped into `c` (already initialised) using `st`.
  * Places it standing at the origin with the given ground height. Returns WS_OK
  * or an error. */

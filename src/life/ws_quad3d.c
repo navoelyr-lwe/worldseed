@@ -45,6 +45,19 @@ static void ik_angles(double hip_x, double hip_y, double foot_x, double foot_y,
     *out_lower = atan2(foot_y - ky, foot_x - kx);
 }
 
+double ws_quad3_suggested_dt(const ws_species_profile *p)
+{
+    double scale = 1.0;
+    if (p != NULL && p->shoulder_h > 0.0) {
+        scale = p->shoulder_h / 1.05;
+    }
+    double dt = 0.002 * pow(scale, 0.75);
+    if (dt < 2.0e-4) {
+        dt = 2.0e-4;
+    }
+    return dt;
+}
+
 ws_result ws_quad3_build(ws_body3d *c, ws_quad3_storage *st,
                          const ws_species_profile *p, double ground_y,
                          ws_quad3_parts *out_parts)
