@@ -490,10 +490,14 @@ yayar. `gui-windows.yml` bunu izole Windows runner'ında native `3840×2160` ve 
     bu sınıf donanımda ulaşılamaz; hedef gerçek bir GPU cihazı (OpenCL C 1.2)
     gerektirir. **Gerçek GPU artık mevcut ve ölçüldü:** izole Windows runner'ında
     NVIDIA GeForce RTX 3060 Laptop GPU (bkz. bölüm 13); döşemeli OpenCL çekirdeği
-    bit-özdeş ve referans GPU çekirdeğinden 13x hızlı. Ancak bu çekirdek **düz-renk**
-    rasterdir; ürün sahnesinin gölgeleme ardışık düzeni henüz GPU'ya taşınmadığı
-    için native 4K ürün sahnesi hâlâ CPU yolunda ölçülür (~7 FPS). 4K/30 FPS,
-    gölgeleme ardışık düzeninin OpenCL C 1.2'ye bit-özdeş taşınmasına bağlıdır.
+    bit-özdeş ve referans GPU çekirdeğinden 13x hızlı. **Canlı ürün döngüsü artık
+    tam sahne OpenCL C 1.2 gölgeleme yolundan geçer ve bu yolda native 4K hedefi
+    gerçek GPU'da karşılanır:** 10 dakikalık canlı koşu `3840×2160` `path=gpu`
+    `p95_ms=21.96` (51,2 FPS), `cpu_fallback_frames=0 gpu_errors=0` (bkz. bölüm 16).
+    Döşemeli çekirdek (düz-renk raster) ürün sahnesi için kullanılmaz; ürün
+    gölgelemesi `kernels/ws_scene.cl` içindedir. Sınır: ölçüm `shadows=0` ve 6 GB
+    cihazda alındı; 12 GB sınıfı referans donanım ve gölge-açık canlı ölçüm ayrıca
+    üretilmelidir.
   - CPU yolunda kalan büyük bit-özdeş olmayan fırsatlar ölçülüp reddedildi:
     aşırı-çizim yeniden sıralama (float32 derinlik beraberliği, 4188 bayt fark)
     ve arka-yüz eleme (renderer iki yüzlü, 15/17 sahne değişir). CPU referans
@@ -560,8 +564,31 @@ geçer" kuralını kanıtla uygular.
 **Zorunlu CI adımı:** `gui-windows.yml` bu modu izole Windows runner'ında native
 `3840×2160`, `--live-gpu` ve en az `600` s (10 dakika) ile koşar; `path=gpu`,
 `cpu_fallback_frames=0`, `gpu_errors=0` ve `gpu_frames>0` **zorunlu** geçitlerdir.
-P12 kabul p95 değeri (`p95_ok`) her koşuda raporlanır; p95 hedefi tutmuyorsa iş
-akışı bunu açık bir uyarı olarak yayar ve değer gizlenmez. Ham kare zamanları
-`evidence/gui/live/gpu-4k/frames.csv` olarak `gui-smoke` artefaktında saklanır.
-Linux CI (`ci.yml`) ve paket betiği (`tools/package-windows.ps1`) aynı modu CPU
-yolunda koşup sayaçların `path=cpu` bildirdiğini doğrular.
+P12 kabul eşiği (`p95_ok=1`, p95 ≤ 33,3 ms) artık **zorunlu** geçittir: canlı döngü
+gerçek GPU'da eşiği tuttuğu için bir gerileme işi düşürür ve başarısız ölçüm
+gizlenmez. Ham kare zamanları `evidence/gui/live/gpu-4k/frames.csv` olarak
+`gui-smoke` artefaktında saklanır. Linux CI (`ci.yml`) ve paket betiği
+(`tools/package-windows.ps1`) aynı modu CPU yolunda koşup sayaçların `path=cpu`
+bildirdiğini doğrular.
+
+**Ölçülen — gerçek GPU, izole Windows runner (run 43209725164, PR #67):**
+
+- Donanım: `NVIDIA GeForce RTX 3060 Laptop GPU`, OpenCL 3.0 CUDA, 30 birim, 6 GB,
+  16 CPU iş parçacığı, 15,7 GB RAM, Windows.
+- Yapılandırma: `3840×2160`, `seed=20260101`, `gpu_render=1`, `shadows=0`,
+  `duration_s=600`.
+- Sonuç: **`path=gpu`**, `frames=30730`, `wall_s=600.01`,
+  `avg_ms=19.53 p50_ms=19.35 p95_ms=21.96 p99_ms=25.89 worst_ms=81.45` (**51,2 FPS**),
+  `step_ms=0.41 render_ms=18.90 hud_ms=0.21`, `gpu_frames=30730
+  cpu_fallback_frames=0 gpu_errors=0`, `pop=84 loaded=49`,
+  `world_digest=0908d0f3…b1e635`.
+- Kabul: `p95_ok=1` — **native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda
+  karşılanmıştır.**
+
+**Dürüst sınır:** Bu ölçüm `shadows=0` (varsayılan; gölge geçişi opt-in) ile alındı
+ve cihaz **6 GB**, referans 12 GB sınıfının altındadır. Bu yüzden ölçüm, 4K/30 FPS
+yolunun gerçek GPU'da çalıştığını kanıtlar; 12 GB sınıfı referans donanım kabulü ve
+gölge-açık ölçüm ayrıca üretilmelidir. Referans sahne mikro-benchmark'ı da aynı
+koşuda GPU yolunda `scene_gpu terrain_day 3840×2160 avg_ms=28.11 p95_ms=29.00`
+(~35,6 FPS) verir; CPU yolunda aynı sahne `p95_ms=142.08` (~7,3 FPS) idi — iki
+ölçüm ayrı tutulur (biri referans sahne, diğeri canlı ürün döngüsü).

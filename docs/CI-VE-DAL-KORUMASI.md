@@ -118,3 +118,24 @@ P12 gölge kanıtı ve release paketleme için izole Windows self-hosted yedek y
 
 Not: yukarıdaki GPU kanıtı **referans sahne** mikro-benchmark'ıdır; P12 kabul
 eşiği artık canlı ürün döngüsü ölçümüyle (`--live-bench`, bu PR) değerlendirilir.
+
+## Canlı ürün döngüsü GPU kabulü (2026-11-12, PR #67)
+
+`gui-windows.yml` artık native 4K canlı ürün döngüsünü zorunlu adım olarak ölçer.
+PR #67 dalı `feat/live-loop-gpu-benchmark` için:
+
+- CI run `43209725312`: **başarılı**.
+- İzole Windows GUI run `43209725164`: **başarılı**; adım 18 "Live product loop
+  GPU benchmark on isolated runner" geçti. `evidence/gui/live/gpu-4k-live.txt`:
+  - `device="NVIDIA GeForce RTX 3060 Laptop GPU" version="OpenCL 3.0 CUDA"
+    units=30 global_mem_gb=6.0`, 16 CPU iş parçacığı, Windows.
+  - `3840×2160 seed=20260101 gpu_render=1 shadows=0 duration_s=600`.
+  - **`path=gpu frames=30730 wall_s=600.01 avg_ms=19.53 p95_ms=21.96 p99_ms=25.89`
+    (51,2 FPS), `gpu_frames=30730 cpu_fallback_frames=0 gpu_errors=0`.**
+  - `p95_ok=1` — native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda karşılanır.
+  - Ham kare zamanları: `evidence/gui/live/gpu-4k/frames.csv` (30730 satır).
+- Adım, `path=gpu`, `cpu_fallback_frames=0`, `gpu_errors=0` ve `p95_ok=1`
+  koşullarını zorunlu geçit yapar; cihaz her kareyi çizmezse veya p95 hedefi
+  tutmazsa iş düşer. Bir CPU ölçümü asla GPU sonucu olarak raporlanmaz.
+- Sınır: ölçüm `shadows=0` ve 6 GB cihazda alındı; 12 GB sınıfı referans donanım
+  ve gölge-açık canlı ölçüm ayrıca üretilmelidir.

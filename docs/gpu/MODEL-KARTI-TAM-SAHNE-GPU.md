@@ -78,9 +78,12 @@
     garanti edilmez; pocl CPU ICD gerçek GPU'dan yavaştır, hızlanma iddiası yalnız
     gerçek cihazda geçerlidir. Kanıt düzeyi **D2** (determinizm, tolerans ve hata
     yolu testleri geçti; gerçek GPU performans kıyası referans donanımda yapılır,
-    bkz. `gui-windows.yml`). Native 4K canlı döngünün 30 FPS kabulü bu kart
-    yazıldığında henüz geçilmemiştir; geçildiğinde bu maddede güncel değerle
-    kaydedilir.
+    bkz. `gui-windows.yml`). **Ölçülen canlı kabul (gerçek GPU, izole Windows
+    runner, PR #67):** native 4K `3840×2160` canlı ürün döngüsü 10 dakika
+    `path=gpu` `p95_ms=21.96` (51,2 FPS), `cpu_fallback_frames=0 gpu_errors=0` —
+    30 FPS hedefi (`p95 ≤ 33,3 ms`) bu cihazda karşılanır ve artık zorunlu CI
+    geçididir. Sınır: ölçüm `shadows=0` ve 6 GB cihazda; 12 GB sınıfı referans
+    donanım ve gölge-açık canlı ölçüm ayrıca üretilmelidir.
 11. **Değişiklik kaydı:** Edge testi, derinlik kuralı, gölgeleme ardışık düzeni,
     `float`/`double` tercihi veya tolerans değişirse bu kart, `kernels/ws_scene.cl`,
     `src/render/ws_gpu_scene.c`, `src/gpu/ws_opencl.*`, ilgili testler,
