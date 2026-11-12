@@ -20,6 +20,7 @@ model D3 diye tanıtılmaz.
 | `MODEL-KARTI-EKOLOJI.md` | Popülasyon dinamiği, bitki üretimi, av-avcı, üreme/ölüm | D2 (korunum, sınır ve çok tohum testleri geçti) |
 | `MODEL-KARTI-POPULASYON.md` | Toplam bölge popülasyonu (P8 FAR/MID vekili) | D2 (korunum, sınır ve determinizm testleri geçti) |
 | `MODEL-KARTI-FRONTAL-DENGE.md` | Frontal düzlem (lateral) denge, dört ayak teması ve dönüş (P13) | D2 (dört türde sınır, temas, yük korunumu, dönüş izleme ve determinizm testleri geçti) |
+| `MODEL-KARTI-UCD-BEDEN.md` | Üç boyutlu rijit-gövde çekirdeği ve referans dört ayaklı (P13) | D1 (referans kızıl geyikte duruş/yürüyüş/düz baş/bağımsız sol-sağ ayak yükü ve dört ayak teması CI kapısı geçti; ölçülmüş D3 kıyası yok) |
 
 ## Tür kartları (P7)
 
@@ -30,10 +31,15 @@ model D3 diye tanıtılmaz.
 | `TUR-KARTI-AVRUPA-TAVSANI.md` | Avrupa tavşanı (*Oryctolagus cuniculus*) | D2 |
 | `TUR-KARTI-YABAN-DOMUZU.md` | Yaban domuzu (*Sus scrofa*) | D2 |
 
-Bilinen ortak sınır: beden modelleri düzlemseldir (sagittal); lateral denge ve
-yaw torku bu düzlemsel çözücüde yoktur. P13 ilk dilimi olarak frontal düzlem
-(lateral) denge ve dönüş ayrı bir azaltılmış mertebeden modelle
-(`MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.c`) eklendi; tam 3B
-bağımsız uzuv/temas çözücüsü henüz yoktur. Ekolojik oranlar kalibre
-edilmemiştir; besin ağı ilk release'te tek kenardır (tilki → tavşan).
+Bilinen ortak sınır: sagittal golden sahnelerin beden modelleri düzlemseldir
+(sagittal); lateral denge ve yaw torku bu düzlemsel çözücüde yoktur. P13 ilk
+dilimi olarak frontal düzlem (lateral) denge ve dönüş ayrı bir azaltılmış
+mertebeden modelle (`MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.c`)
+eklendi. P13 ikinci dilimi olarak kuaterniyon yönelimli, bağımsız sağ/sol uzuvlu
+tam 3B rijit-gövde çözücüsü ve referans dört ayaklı
+(`MODEL-KARTI-UCD-BEDEN.md`, `src/life/ws_body3d.*`, `src/life/ws_quad3d.*`)
+eklendi; bu çözücü golden sahnelerden ayrıdır ve golden CPU çıktısını
+değiştirmez. Koşu/yokuş senaryoları ve diğer üç türün 3B doğrulaması açıktır.
+Ekolojik oranlar kalibre edilmemiştir; besin ağı ilk release'te tek kenardır
+(tilki → tavşan).
 

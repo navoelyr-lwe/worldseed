@@ -69,6 +69,8 @@ add_library(worldseed_core STATIC
   life/ws_creature.c
   life/ws_quadruped.c
   life/ws_lateral.c
+  life/ws_body3d.c
+  life/ws_quad3d.c
   life/ws_perception.c
   life/ws_organism.c
   life/ws_agent.c

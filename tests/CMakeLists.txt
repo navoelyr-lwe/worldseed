@@ -24,6 +24,9 @@ target_link_libraries(ws_test_life PRIVATE worldseed_core)
 add_executable(ws_test_lateral test_lateral.c)
 target_link_libraries(ws_test_lateral PRIVATE worldseed_core)
 
+add_executable(ws_test_body3d test_body3d.c)
+target_link_libraries(ws_test_body3d PRIVATE worldseed_core)
+
 add_executable(ws_test_agent test_agent.c)
 target_link_libraries(ws_test_agent PRIVATE worldseed_core)
 
@@ -64,6 +67,7 @@ add_test(NAME world_env COMMAND ws_test_world_env)
 add_test(NAME physics COMMAND ws_test_physics)
 add_test(NAME life COMMAND ws_test_life)
 add_test(NAME lateral COMMAND ws_test_lateral)
+add_test(NAME body3d COMMAND ws_test_body3d)
 add_test(NAME agent COMMAND ws_test_agent)
 add_test(NAME ecology COMMAND ws_test_ecology)
 add_test(NAME world_host COMMAND ws_test_world_host)

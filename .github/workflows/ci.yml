@@ -204,6 +204,18 @@ jobs:
           test "$(grep -c 'verdict=PASS' evidence/lateral/lateral.txt)" = "4" \
             || { echo "a species failed the lateral balance/turning checklist"; exit 1; }
 
+      - name: Three-dimensional body evidence (P13)
+        run: |
+          # P13 builds a full 3D rigid-body solver (separate from the sagittal
+          # golden solver, which stays bit-identical). The reference species (red
+          # deer) is gated on standing stability, forward walking, straight
+          # heading, independent left/right foot load and four-foot contact.
+          mkdir -p evidence/body3d
+          ./build/tools/ws_body3d_check evidence/body3d 20260101 | tee evidence/body3d/body3d.txt
+          grep -q "WS_BODY3D_OK" evidence/body3d/body3d.txt
+          test "$(grep -c 'reference=1 verdict=PASS' evidence/body3d/body3d.txt)" = "1" \
+            || { echo "the reference 3D quadruped failed its biomechanics checklist"; exit 1; }
+
       - name: Asset pipeline
         run: |
           mkdir -p evidence/assets

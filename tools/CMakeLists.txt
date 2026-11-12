@@ -38,3 +38,6 @@ target_link_libraries(ws_motion PRIVATE worldseed_core)
 
 add_executable(ws_lateral_check ws_lateral_check.c)
 target_link_libraries(ws_lateral_check PRIVATE worldseed_core)
+
+add_executable(ws_body3d_check ws_body3d_check.c)
+target_link_libraries(ws_body3d_check PRIVATE worldseed_core)

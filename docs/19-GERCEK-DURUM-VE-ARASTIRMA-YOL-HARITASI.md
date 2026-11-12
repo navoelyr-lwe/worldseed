@@ -290,15 +290,28 @@ Kabul kapıları:
 - Sonraki türlerin vücut oranı, kütle/atalet, ekstremite, ayak/pençe/toynak ve gait profilleri birbirinden ayrılır.
 - Görsel beden her zaman fiziksel state'ten türetilir; animasyon pozu fiziksel gerçeğin yerine geçmez.
 
-**İlerleme (2026-11):** İlk dilim tamamlandı — frontal düzlem (lateral) denge,
-dört ayak teması ve dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
-(`docs/life/MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.*`,
-`tools/ws_lateral_check.c`, `tests/test_lateral.c`). Bu model bağımsız dört ayak
-teması (duruş/salınım, yük korunumu), yük-ağırlıklı destek merkezi, LIPM +
-yakalama-noktası ayak yerleştirme, sönümlü yalpa ve tür-ölçekli dönüş sınırını
-**azaltılmış mertebeden** içerir ve sagittal çözücüye yazmaz. Yukarıdaki
-kapıların tam 3B kısmı (bağımsız 3B uzuv eklem state'i, dinamik temas kuvveti,
-3B denge/enerji D3 kıyası, tür-özel 3B gait doğrulaması) **açıktır**.
+**İlerleme (2026-11):** İki dilim tamamlandı.
+
+- *Dilim 1 — frontal düzlem:* frontal düzlem (lateral) denge, dört ayak teması ve
+  dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
+  (`docs/life/MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.*`,
+  `tools/ws_lateral_check.c`, `tests/test_lateral.c`). Bu model bağımsız dört
+  ayak teması (duruş/salınım, yük korunumu), yük-ağırlıklı destek merkezi, LIPM +
+  yakalama-noktası ayak yerleştirme, sönümlü yalpa ve tür-ölçekli dönüş sınırını
+  **azaltılmış mertebeden** içerir ve sagittal çözücüye yazmaz.
+- *Dilim 2 — tam 3B rijit gövde:* kuaterniyon yönelim, gövde-çerçevesi atalet
+  tensörü, ball-socket eklem + gerçek menteşe kilidi + tek taraflı limit, 3B
+  temas + Coulomb sürtünme ve deterministik ardışık-impuls çözücü
+  (`src/life/ws_body3d.*`); bağımsız sağ/sol uzuvlu referans dört ayaklı, tırıs
+  yürüyüşü ve vestibüler denge refleksi (`src/life/ws_quad3d.*`). Referans tür
+  kızıl geyik için duruş/yürüyüş/düz baş/bağımsız sol-sağ ayak yükü/dört ayak
+  teması CI'da kapılanıyor (`docs/life/MODEL-KARTI-UCD-BEDEN.md`,
+  `tools/ws_body3d_check.c`, `tests/test_body3d.c`). Bu çözücü sagittal golden
+  sahnelerden ayrıdır; golden CPU çıktısı bit-özdeş kalır.
+
+Yukarıdaki kapıların açık kısmı: koşu/yokuş/farklı zemin senaryoları, dinamik
+temas kuvveti ve 3B denge/enerji D3 kıyası, ve diğer üç türün (tilki, tavşan,
+domuz) aynı standartta 3B doğrulaması.
 
 ### P14 — Çok duyulu algı ve doğal davranış
 

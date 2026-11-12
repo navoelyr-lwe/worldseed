@@ -87,11 +87,15 @@
     gerçek cihazda geçerlidir. Kanıt düzeyi **D2** (determinizm, tolerans ve hata
     yolu testleri geçti; gerçek GPU performans kıyası referans donanımda yapılır,
     bkz. `gui-windows.yml`). **Ölçülen canlı kabul (gerçek GPU, izole Windows
-    runner, PR #67):** native 4K `3840×2160` canlı ürün döngüsü 10 dakika
-    `path=gpu` `p95_ms=21.96` (51,2 FPS), `cpu_fallback_frames=0 gpu_errors=0` —
-    30 FPS hedefi (`p95 ≤ 33,3 ms`) bu cihazda karşılanır ve artık zorunlu CI
-    geçididir. Sınır: ölçüm `shadows=0` ve 6 GB cihazda; 12 GB sınıfı referans
-    donanım ve gölge-açık canlı ölçüm ayrıca üretilmelidir.
+    runner, `main` = `cde1c12` GUI koşusu `43228087106`):** native 4K
+    `3840×2160` canlı ürün döngüsü 10 dakika `path=gpu` `frames=31274`
+    `p50=19,15 ms p95=21,15 ms p99=22,83 ms` (~52 FPS),
+    `cpu_fallback_frames=0 gpu_errors=0`, cihaz "NVIDIA GeForce RTX 3060 Laptop
+    GPU" / "OpenCL 3.0 CUDA" / 30 birim / 6 GB, `world_digest` kayıtlı — 30 FPS
+    hedefi (`p95 ≤ 33,3 ms`) bu cihazda karşılanır ve artık zorunlu CI geçididir.
+    (Önceki kayıt PR #67'de `p95=21,96 ms` idi; aynı iş yükü, aynı cihaz sınıfı.)
+    Sınır: ölçüm `shadows=0` ve 6 GB cihazda; 12 GB sınıfı referans donanım ve
+    gölge-açık canlı ölçüm ayrıca üretilmelidir.
 11. **Değişiklik kaydı:** Edge testi, derinlik kuralı, gölgeleme ardışık düzeni,
     `float`/`double` tercihi veya tolerans değişirse bu kart, `kernels/ws_scene.cl`,
     `src/render/ws_gpu_scene.c`, `src/gpu/ws_opencl.*`, ilgili testler,

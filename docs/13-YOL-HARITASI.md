@@ -111,12 +111,26 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
 
 **Kabul:** yürüme/koşu/dönüş/yokuş/zemin senaryoları; 3B temas ve denge testleri; enerji maliyeti ve hareket kıyasları; veri kaynağı/belirsizlikleri belgeli D3 referans tür doğrulaması. Diğer üç türün beden ve gait parametreleri ayrı doğrulanır.
 
-**Durum:** Başladı (ilk dilim). Frontal düzlem (lateral) denge, dört ayak teması
-ve dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
-(`docs/life/MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.*`,
-`tools/ws_lateral_check.c`). Tam 3B rijit-gövde çözücüsü, bağımsız uzuv eklem
-state'i, dinamik temas kuvveti, 3B denge/enerji D3 kıyası ve tür-özel 3B gait
-doğrulaması **açık**.
+**Durum:** Başladı (iki dilim).
+
+- *Dilim 1 — frontal düzlem:* Frontal düzlem (lateral) denge, dört ayak teması ve
+  dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
+  (`docs/life/MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.*`,
+  `tools/ws_lateral_check.c`).
+- *Dilim 2 — tam 3B rijit gövde:* Kuaterniyon yönelim, gövde-çerçevesi atalet
+  tensörü, ball-socket eklem + gerçek menteşe kilidi + tek taraflı limit, 3B
+  temas + Coulomb sürtünme ve deterministik ardışık-impuls çözücü eklendi
+  (`src/life/ws_body3d.*`). Bağımsız sağ/sol uzuvlu referans dört ayaklı
+  (`src/life/ws_quad3d.*`) tırıs yürüyüşü ve vestibüler denge refleksiyle
+  (pitch/roll/yaw) ayakta duruyor ve yürüyor. Referans tür kızıl geyik için
+  duruş kararlılığı, ileri yürüyüş, düz baş, bağımsız sol/sağ ayak yükü ve dört
+  ayak teması CI'da kapılanıyor (`docs/life/MODEL-KARTI-UCD-BEDEN.md`,
+  `tools/ws_body3d_check.c`, `tests/test_body3d.c`). Bu çözücü sagittal golden
+  sahnelerden ayrıdır; golden CPU çıktısı bit-özdeş kalır.
+
+**Açık:** koşu/yokuş/farklı zemin senaryoları, dinamik temas kuvveti ve 3B
+denge/enerji D3 kıyası, ve diğer üç türün (tilki, tavşan, domuz) aynı standartta
+3B doğrulaması.
 
 ## P14 — Çok duyulu algı ve doğal davranış
 
