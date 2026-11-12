@@ -95,6 +95,11 @@ kural kanıtla uygulanır:
   ölçüldü: 4188 bayt farklı çıktı (uzak mesafede float32 nicelemesi kaba olduğu
   için çok sayıda yüzey aynı derinliğe çöküyor). Bu yüzden çizim sırasını
   değiştiren aşırı-çizim azaltma bit-özdeş değildir ve bloke.
+- **Arka-yüz (backface) eleme bit-özdeş DEĞİL:** Renderer **iki yüzlüdür**
+  (double-sided); kapalı bir gövdenin iç yüzeyleri ürün sahnelerinde gerçekten
+  görünür. `area < 0` üçgenleri atmak 17 sahnenin 15'ini değiştirir (ölçüldü);
+  bu yüzden arka-yüz eleme yapılmaz. `inside_pos` yalnız tarama sırası içindir,
+  yüz atma değildir.
 - **Sıradaki büyük fırsat — aşırı çizim (overdraw):** Güncel ürün ölçümü
   (1920×1080) `terrain_day` **1.31x** (ertelenmiş gökyüzü bunu önceki ~1.9x'ten
   düşürdü), `ecosystem` 0.80x, `world_stream` 0.56x. Derinlik testi zaten
