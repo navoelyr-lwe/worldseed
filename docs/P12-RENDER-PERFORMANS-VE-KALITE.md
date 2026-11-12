@@ -380,7 +380,21 @@ silinirdi). Gölge geçişi ışık frustum'u farklı olduğundan tüm nesneleri
 
 ## Bilinen sınırlamalar
 
-- Hedef 30 FPS henüz 1080p'de tutulmuyor (~6 FPS). Gölge geçişi ek bir
+- Hedef 30 FPS henüz 1080p'de tutulmuyor. Ölçülen güncel profil (bu makine,
+  4 çekirdek, CPU referans yolu):
+  - `terrain_day` 1920×1080 ~134 ms (~7,5 FPS), 3840×2160 ~600 ms (~1,7 FPS).
+  - Canlı ürün (`--live-headless 8`, 1280×720) `p50≈47 ms`, `p95≈54 ms`
+    (~21 FPS). 1080p canlı ürün `p95≈120 ms`.
+  - P12 kabulü native 3840×2160'da `p95 ≤ 33,3 ms` ister. CPU'da bu hedef,
+    bu sınıf donanımda ulaşılamaz; hedef gerçek bir GPU cihazı (OpenCL C 1.2)
+    gerektirir. Döşemeli OpenCL raster çekirdeği pocl CPU aygıtında bile
+    referansa göre yüzlerce kat hızlanıp `bit_identical=1` verir, ancak bu
+    ortamda **gerçek GPU yok**, bu yüzden gerçek 4K GPU ölçümü yapılamıyor.
+  - CPU yolunda kalan büyük bit-özdeş olmayan fırsatlar ölçülüp reddedildi:
+    aşırı-çizim yeniden sıralama (float32 derinlik beraberliği, 4188 bayt fark)
+    ve arka-yüz eleme (renderer iki yüzlü, 15/17 sahne değişir). CPU referans
+    yolu kendi bit-özdeş tavanına yakındır; kalan hız GPU entegrasyonuna bağlı.
+- Gölge geçişi ek bir
   geometri geçişi maliyeti getirir; sahne başına opt-in'dir.
 - Gölge haritası **her karede** sahnenin güncel nesne listesinden yeniden
   kurulur, bu yüzden hareketli nesneler (canlı üründeki aktörler) gölgelerini
