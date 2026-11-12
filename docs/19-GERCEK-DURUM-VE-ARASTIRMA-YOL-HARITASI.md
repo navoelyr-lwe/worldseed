@@ -290,13 +290,14 @@ Kabul kapıları:
 - Sonraki türlerin vücut oranı, kütle/atalet, ekstremite, ayak/pençe/toynak ve gait profilleri birbirinden ayrılır.
 - Görsel beden her zaman fiziksel state'ten türetilir; animasyon pozu fiziksel gerçeğin yerine geçmez.
 
-**İlerleme (2026-11):** İlk dilim tamamlandı — frontal düzlem (lateral) denge ve
-dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
+**İlerleme (2026-11):** İlk dilim tamamlandı — frontal düzlem (lateral) denge,
+dört ayak teması ve dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
 (`docs/life/MODEL-KARTI-FRONTAL-DENGE.md`, `src/life/ws_lateral.*`,
-`tools/ws_lateral_check.c`, `tests/test_lateral.c`). Bu model bağımsız sol/sağ
-duruş, LIPM + yakalama-noktası ayak yerleştirme, sönümlü yalpa ve tür-ölçekli
-dönüş sınırını içerir; **azaltılmış mertebedendir** ve sagittal çözücüye yazmaz.
-Yukarıdaki kapıların tam 3B kısmı (bağımsız 3B uzuv state'i, temas kuvveti,
+`tools/ws_lateral_check.c`, `tests/test_lateral.c`). Bu model bağımsız dört ayak
+teması (duruş/salınım, yük korunumu), yük-ağırlıklı destek merkezi, LIPM +
+yakalama-noktası ayak yerleştirme, sönümlü yalpa ve tür-ölçekli dönüş sınırını
+**azaltılmış mertebeden** içerir ve sagittal çözücüye yazmaz. Yukarıdaki
+kapıların tam 3B kısmı (bağımsız 3B uzuv eklem state'i, dinamik temas kuvveti,
 3B denge/enerji D3 kıyası, tür-özel 3B gait doğrulaması) **açıktır**.
 
 ### P14 — Çok duyulu algı ve doğal davranış

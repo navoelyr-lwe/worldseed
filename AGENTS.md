@@ -134,3 +134,23 @@ kural kanıtla uygulanır:
   Ayrıca Windows GUI iş akışına gerçek paketleme betiğini koşturan "Release package
   smoke" adımı eklendi; kırık release yolu artık PR'da yakalanır. Yeni bir
   sahne/tür kapısı eklerken hem `ci.yml` hem `tools/package-windows.ps1` güncellenir.
+
+## P13 notları — frontal düzlem denge, dört ayak teması ve dönüş (ilk dilim)
+
+- Mevcut referans çözücü (`src/life/ws_creature.c`, `ws_quadruped.c`) **sagittal/
+  planar** bir zincirdir; sağ/sol bağımsız 3B state, yanal denge, roll ve yaw
+  torku içermez. Sagittal golden sahneler bu yüzden **bit-özdeş kalır**; onlara
+  lateral davranış eklemek altın kareyi kırar.
+- Frontal düzlem dilimi ayrı bir azaltılmış mertebeden modelle eklendi:
+  `src/life/ws_lateral.{h,c}` (LIPM + yakalama-noktası ayak yerleştirme + dört
+  bağımsız ayak teması/yük + yük-ağırlıklı destek merkezi + sönümlü yalpa +
+  tür-ölçekli yaw sınırı). Model sagittal çözücüye **yazmaz**; bağımsızlık
+  korunur. Model kartı: `docs/life/MODEL-KARTI-FRONTAL-DENGE.md`.
+- Kanıt ve kapılar: `tests/test_lateral.c` (birim; dört ayak temas + yük korunumu)
+  + `tools/ws_lateral_check` (dört tür, düz yürüyüş + komutlu dönüş + temas/yük
+  metrikleri). Kapı hem `ci.yml`'e hem `tools/package-windows.ps1`'e eklenir
+  (yukarıdaki bayatlama kuralı).
+- **Sınır:** bu azaltılmış mertebeden bir modeldir, tam 3B rijit-gövde çözücüsü
+  değildir. Dikey yön entegre edilmez; yük yarı-statik ve korunumludur. P13'ün
+  kalan kapıları (bağımsız 3B uzuv eklem state'i, dinamik temas kuvveti, 3B
+  denge/enerji D3 kıyası, tür-özel 3B gait) açıktır; tam 3B çözücü ayrı iştir.

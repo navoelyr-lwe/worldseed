@@ -192,6 +192,78 @@ static int test_determinism(void)
     return 1;
 }
 
+/* ---------- four-foot contact and load ---------- */
+
+static int test_four_feet_contact(void)
+{
+    ws_lateral_params p = deer_params();
+    ws_lateral_state s;
+    ws_lateral_init(&s, &p);
+    /* At rest all four feet are down and share the weight. */
+    double total = 0.0;
+    for (int i = 0; i < WS_LATERAL_FEET; ++i) {
+        WS_CHECK(s.foot_contact[i] == 1.0);
+        total += s.foot_load[i];
+    }
+    WS_CHECK(fabs(total - p.mass * G) < 1e-9);
+
+    /* Step for a while: exactly the loaded pair is down each step and the two
+     * stance feet always sum to the body weight (conservation). */
+    int saw_left = 0;
+    int saw_right = 0;
+    for (int i = 0; i < (int)(5.0 / DT); ++i) {
+        WS_CHECK(ws_lateral_step(&s, &p, DT, 1.2, 0.0) == WS_OK);
+        int stance = 0;
+        double sum = 0.0;
+        for (int f = 0; f < WS_LATERAL_FEET; ++f) {
+            stance += (s.foot_contact[f] > 0.5) ? 1 : 0;
+            sum += s.foot_load[f];
+        }
+        WS_CHECK(stance == 2);
+        WS_CHECK(fabs(sum - p.mass * G) < 1e-6);
+        /* A swing foot never carries load; a stance foot always does. */
+        for (int f = 0; f < WS_LATERAL_FEET; ++f) {
+            if (s.foot_contact[f] > 0.5) {
+                WS_CHECK(s.foot_load[f] > 0.0);
+            } else {
+                WS_CHECK(s.foot_load[f] == 0.0);
+            }
+        }
+        if (s.foot_contact[0] > 0.5) {
+            saw_left = 1;
+        } else {
+            saw_right = 1;
+        }
+    }
+    WS_CHECK(saw_left && saw_right); /* both sides take their turn */
+    return 1;
+}
+
+static int test_support_center_tracks_load(void)
+{
+    ws_lateral_params p = deer_params();
+    ws_lateral_state s;
+    ws_lateral_init(&s, &p);
+    /* With only the left pair loaded the support centre is the left feet's
+     * lateral position; with only the right pair it is the right feet's. */
+    int checked_left = 0;
+    int checked_right = 0;
+    for (int i = 0; i < (int)(6.0 / DT); ++i) {
+        WS_CHECK(ws_lateral_step(&s, &p, DT, 1.2, 0.0) == WS_OK);
+        double sc = ws_lateral_support_center(&s);
+        WS_CHECK(isfinite(sc));
+        if (s.foot_contact[0] > 0.5) {
+            WS_CHECK(fabs(sc - s.foot_y[0]) < 1e-9);
+            checked_left = 1;
+        } else {
+            WS_CHECK(fabs(sc - s.foot_y[1]) < 1e-9);
+            checked_right = 1;
+        }
+    }
+    WS_CHECK(checked_left && checked_right);
+    return 1;
+}
+
 /* ---------- measurement API ---------- */
 
 static int test_measure_api(void)
@@ -204,6 +276,9 @@ static int test_measure_api(void)
     WS_CHECK(m.max_abs_y < 0.5);
     WS_CHECK(m.max_abs_phi < 0.25);
     WS_CHECK(m.turn_track_err < 1e-9); /* straight: commanded rate is 0 */
+    WS_CHECK(m.min_stance_feet == 2);  /* a lateral pair is always loaded */
+    WS_CHECK(m.contact_changes > 0);   /* feet actually switch stance */
+    WS_CHECK(m.max_load_error < 1e-6); /* weight is conserved every step */
 
     /* A commanded turn settles close to the command, so the mean tracking error
      * over the second half is small. */
@@ -253,6 +328,8 @@ int main(void)
         {"turn rate bounded", test_turn_rate_bounded},
         {"species scale", test_species_scale},
         {"determinism", test_determinism},
+        {"four feet contact", test_four_feet_contact},
+        {"support center tracks load", test_support_center_tracks_load},
         {"measure api", test_measure_api},
         {"invalid input", test_invalid_input},
     };
