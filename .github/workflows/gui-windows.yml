@@ -24,6 +24,10 @@ jobs:
   windows-gui:
     name: windows x64 gui/smoke
     runs-on: [self-hosted, windows, x64, worldseed-gui]
+    # The live-loop GPU benchmark below runs for at least 10 minutes of real
+    # wall-clock time; the job budget leaves room for build, tests, smoke, the
+    # reference-scene 4K perf run and the package smoke.
+    timeout-minutes: 60
     # Trusted-ref allowlist: the default branch, and PRs whose head is a branch
     # of this same repository (never a fork). Untrusted fork code never reaches
     # the isolated runner.
