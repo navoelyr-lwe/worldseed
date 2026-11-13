@@ -302,6 +302,15 @@ kural kanıtla uygulanır:
   sayı olmalı. Sabit bir "koşu adım açısı" referans türde doğru görünür ama kısa
   bacaklı türlerde sessizce doyuma girer; kapı yalnız referans türde olduğu sürece
   bu görünmez.
+- **Dönüş hızı kaotik bir uçurum gösterdi (kanıtla bulundu).** Dönüş kapısı
+  eskiden 0,6 rad/s sabit yaw ile koşuyordu. Windows koşucusunda (farklı libm)
+  tavşan bu hızda tam ters döndü (`upright=-1.0`); Linux'ta şansla geçiyordu.
+  Yaw hızını taradım: **0,16 rad/s üstünde dört tür de devriliyor**, altında
+  kararlı. Bu yüzden kabul kapısı tüm türlerde geniş marjla kararlı olan **0,10
+  rad/s**'ye çekildi (dört türde de `upright ≥ 0,987`). Ders: kaotik bir rejimde
+  eşiği şanslı bir noktaya sabitlemek kırılgan bir kapı üretir; kapı, ölçülmüş
+  kararlılık bölgesinin içinde geniş marjla seçilmeli. Daha hızlı ve sağlam dönüş
+  ayrı bir denetleyici dilimidir.
 - **Golden bit-özdeşliği:** `ws_quad3_gait_run` sagittal golden sahnelerden
   ayrıdır; 18 golden sahne bu değişiklikten sonra bit-özdeş kaldı (doğrulandı).
 

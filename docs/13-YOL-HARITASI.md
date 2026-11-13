@@ -185,7 +185,11 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
   Ölçülen yürüyüş→koşu oranı: geyik 1,20, tilki 1,38, tavşan 1,64, domuz 1,28.
   Kanıt aracı artık 20 sahne üretir (her aile dört türden geçer); yeni birim
   testi `species run exceeds walk` ve CI/paketleme kapıları (aile bazında 4/4)
-  bunu kilitler. 17 golden sahne bit-özdeş kalır.
+  bunu kilitler. 17 golden sahne bit-özdeş kalır. **Dönüş hızı uyarısı:** dönüş
+  kapısı eskiden 0,6 rad/s sabit yaw kullanıyordu; Windows koşucusunda tavşan bu
+  hızda devrildi (farklı libm). Yaw taraması **0,16 rad/s üstünde dört türün de
+  devrildiğini** gösterdi; kapı geniş marjla kararlı olan **0,10 rad/s**'ye
+  çekildi.
 
 **Açık:** dinamik temas kuvveti ve 3B denge/enerji D3 kıyası. Kapalı-çevrim
 denetleyici hızı komuta yaklaştırır ama **hiçbir tür komut hızının tamamına

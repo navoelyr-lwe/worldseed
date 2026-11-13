@@ -142,7 +142,10 @@
    göre düşürülmesi ya da tür adım/kadans geometrisinin yeniden ayarlanması ayrı
    bir P13 dilimidir. Kapalı-çevrim denetleyici şu an yalnız düz zemin yürüyüşü
    için kapılanır; dönüş/yokuş/engebeli zeminde kapalı-çevrim kapılanması da ayrı
-   bir dilimdir.
+   bir dilimdir. **Dönüş kararlılığı sınırlıdır:** açık-çevrim gait + baş açısı
+   servosu **~0,16 rad/s üstünde dört türde de devrilir** (yaw hızı taramasıyla
+   ölçüldü); kabul kapısı bu yüzden geniş marjla kararlı olan 0,10 rad/s kullanır.
+   Daha hızlı ve sağlam dönüş ayrı bir denetleyici dilimidir.
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.

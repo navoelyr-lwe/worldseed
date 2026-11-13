@@ -330,7 +330,10 @@ Kabul kapıları:
   "koşusu" yürüyüşünden hızlı olmuyordu (oran ~1,05). Ölçülen yürüyüş→koşu oranı:
   geyik 1,20, tilki 1,38, tavşan 1,64, domuz 1,28. Kanıt aracı 20 sahne üretir
   (her aile dört türden geçer); `species run exceeds walk` birim testi ve
-  CI/paketleme kapıları (aile bazında 4/4) bunu kilitler.
+  CI/paketleme kapıları (aile bazında 4/4) bunu kilitler. Dönüş hızı kapısı da
+  sağlamlaştırıldı: 0,6 rad/s sabit yaw Windows'ta tavşanı deviriyordu; yaw
+  taraması 0,16 rad/s üstünde dört türün de devrildiğini gösterdi, kapı 0,10
+  rad/s'ye çekildi.
 
 Yukarıdaki kapıların açık kısmı: dinamik temas kuvveti ve 3B denge/enerji D3
 kıyası. Kapalı-çevrim denetleyici hızı komuta yaklaştırır ama küçük türlerin
