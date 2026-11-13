@@ -461,10 +461,14 @@ int main(int argc, char **argv)
         /* The closed-loop controller must stay upright, go forward, and not
          * regress the open-loop trot (within 5%). It is the P13 closed-loop
          * mechanism: on the small species it lifts the achieved speed toward the
-         * commanded value, which the open-loop fixed-angle trot cannot do. */
+         * commanded value, which the open-loop fixed-angle trot cannot do. The
+         * upper bound catches a runaway: the Raibert neutral offset is capped at
+         * 0.8 x reach, so the deer overshoots its command ~1.5x and the boar
+         * ~0.8x while the fox/rabbit undershoot (their profile speed exceeds
+         * their own stride reach). Anything above 2x the command is a defect. */
         int cl_tracks = cl_ok && clm.finite && clm.upright_min > 0.9 &&
                         clm.lateral_drift < 0.6 && clm.v_fwd > 0.05 &&
-                        clm.v_fwd >= 0.95 * wm.v_fwd;
+                        clm.v_fwd >= 0.95 * wm.v_fwd && clm.v_fwd < 2.0 * v_des;
         scenes++;
         const char *verdict = gates ? "PASS" : "FAIL";
         fprintf(csv, "%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%s\n", si->name, drift,

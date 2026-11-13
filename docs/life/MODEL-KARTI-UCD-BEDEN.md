@@ -162,7 +162,13 @@
    sınırını yükseltmek (dönüş-hızına bağlı kazanç veya yanal hip serbestliği) ayrı
    bir modelleme dilimidir; burada iddia edilmez. 3B referans gait'in stance
    sırasında zamanın ~%46'sında temasın sıfıra düşmesi (gövde zıplaması) de ayrı
-   bir dilim olarak açıktır.
+   bir dilim olarak açıktır. Kapalı-çevrim hız denetimi de sınırlıdır: Raibert
+   nötr ayağı bacak erişiminin 0,8 katıyla sınırlı olduğundan, doğal gait hızı bu
+   adımı aşan gövdeyi frenleyemez — ölçülen: geyik komutun ~1,5 katına (2,29 /
+   1,50) kaçar, domuz ~0,8 katında kalır; profil hızı kendi erişimini aşan
+   tilki/tavşan ise altında kalır (0,45 / 0,18 katı). Dokuzuncu dilim bu kaçışı
+   önlemek için kapıya **üst sınır** ekledi (`v_fwd < 2 × v_des`); kaçış hâlâ
+   açık bir kalibrasyon işidir.
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.
