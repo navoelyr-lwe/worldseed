@@ -215,12 +215,16 @@ static double ramp(void *ctx, double x, double y)
 }
 
 /* Turn in place: walk with a commanded yaw rate and report how much the
- * heading actually changed and whether the body stayed upright. */
+ * heading actually changed and whether the body stayed upright. `upright_min`
+ * is the minimum uprightness over the whole run: a final-frame check hides a
+ * mid-run flip that the body later recovers from, which the earlier 0.6 rad/s
+ * turn did (it flipped to up.y ~ -1.0 and still passed an end-of-run check). */
 typedef struct turn_metrics {
     double heading_change;
     double heading_cmd;
     double track_error;
     double upright;
+    double upright_min;
     double v_fwd;
     int finite;
 } turn_metrics;
@@ -242,6 +246,7 @@ static int run_turn(const ws_species_profile *p, double yaw_rate, double seconds
     double phase = 0.0;
     ws_quad3_gait gait = ws_quad3_gait_walk(p);
     m->finite = 1;
+    m->upright_min = 1.0;
     int steps = (int)(seconds / dt);
     for (int s = 0; s < steps; ++s) {
         phase += gait.freq * dt;
@@ -252,6 +257,11 @@ static int run_turn(const ws_species_profile *p, double yaw_rate, double seconds
         if (ws_body3d_step(&c) != WS_OK) {
             m->finite = 0;
             return 0;
+        }
+        ws_vec3 up_i = ws_quat_rotate(c.bodies[parts.torso].orient,
+                                      ws_vec3_make(0.0, 1.0, 0.0));
+        if (up_i.y < m->upright_min) {
+            m->upright_min = up_i.y;
         }
     }
     const ws_body3 *torso = &c.bodies[parts.torso];
@@ -492,9 +502,13 @@ int main(int argc, char **argv)
         gait_metrics rn = {0};
         gait_metrics rg = {0};
         /* Turn: a slow, steady heading ramp. The open-loop gait plus the heading
-         * servo lose stability above ~0.16 rad/s (measured: every species tips
-         * over), so the acceptance uses a rate that is stable for all four with
-         * a wide margin. A faster, robust turn is a separate controller slice. */
+         * servo lose stability above ~0.15 rad/s (measured: every species tips
+         * over, the feet leave the ground and the torso flips), so the
+         * acceptance uses a rate that is stable for all four with a wide margin.
+         * A faster, robust turn needs a hip abduction joint, which the sagittal
+         * leg model does not have; that is a separate modelling slice. The gate
+         * tracks the minimum uprightness over the whole run, so a mid-run flip
+         * that recovers by the final frame cannot pass. */
         int t_ok = run_turn(pp, 0.10, 10.0, &t2);
         int s_ok = run_slope(pp, 0.10, 20.0, &sl);
         /* Run: a faster cadence with a longer, body-scaled stride. */
@@ -505,7 +519,7 @@ int main(int argc, char **argv)
         int g_ok = run_gait(pp, ws_quad3_gait_walk(pp), undulating, &rough_amp,
                             20.0, &rg);
         int t_gate = t_ok && t2.finite && fabs(t2.track_error) < 0.25 &&
-                     t2.upright > 0.9;
+                     t2.upright > 0.9 && t2.upright_min > 0.9;
         /* Climb at least the body's own height, and keep a forward pace at
          * least half the species' walk speed up the ramp. */
         int s_gate = s_ok && sl.finite && sl.climb > 1.2 * pp->shoulder_h &&
@@ -524,9 +538,9 @@ int main(int argc, char **argv)
         }
         scenes += 4;
         printf("body3d turn species=%s yaw_rate=0.10 cmd=%.3f actual=%.3f "
-               "track_err=%.3f upright=%.3f verdict=%s\n",
+               "track_err=%.3f upright=%.3f upright_min=%.3f verdict=%s\n",
                si->name, t2.heading_cmd, t2.heading_change, t2.track_error,
-               t2.upright, t_gate ? "PASS" : "FAIL");
+               t2.upright, t2.upright_min, t_gate ? "PASS" : "FAIL");
         printf("body3d slope species=%s grade=0.10 climb=%.3f v_fwd=%.3f "
                "upright=%.3f verdict=%s\n",
                si->name, sl.climb, sl.v_fwd, sl.upright,

@@ -142,10 +142,21 @@
    göre düşürülmesi ya da tür adım/kadans geometrisinin yeniden ayarlanması ayrı
    bir P13 dilimidir. Kapalı-çevrim denetleyici şu an yalnız düz zemin yürüyüşü
    için kapılanır; dönüş/yokuş/engebeli zeminde kapalı-çevrim kapılanması da ayrı
-   bir dilimdir. **Dönüş kararlılığı sınırlıdır:** açık-çevrim gait + baş açısı
-   servosu **~0,16 rad/s üstünde dört türde de devrilir** (yaw hızı taramasıyla
-   ölçüldü); kabul kapısı bu yüzden geniş marjla kararlı olan 0,10 rad/s kullanır.
-   Daha hızlı ve sağlam dönüş ayrı bir denetleyici dilimidir.
+   bir dilimdir. **Dönüş kararlılığı mimari olarak sınırlıdır:** bacaklar yalnız
+   **sagittal menteşeli** (`hinge_lock=1`, tek lateral eksen) ve **abduction
+   (yanal serbestlik) eklemi yoktur**; dönüş komutu stance'i aştığında ayaklar
+   yerden kesilir ve gövde öne devrilir. İkili aramayla ölçülen yerinde dönüş
+   sınırı tüm türlerde ~0,15 rad/s'dir (geyik 0,157, tilki 0,158, tavşan 0,160,
+   domuz 0,138 rad/s). Dünya-çerçevesi, gövde-çerçevesi, diferansiyel adım
+   uzunluğu ve skid-steer ayak yerleştirme varyantları denendi; hiçbiri bu sınırı
+   güvenilir biçimde yükseltmedi (kök neden yerleştirme kuralı değil, eklem
+   serbestlik derecesidir). Sekizinci dilim dönüş kanıtını **dürüst kapıya**
+   bağladı: eski test yalnız son kareyi kontrol ettiği için gövde koşu ortasında
+   takla atıp (`up_min = −0,998`) toparlandığında yine "geçiyordu"; hem birim
+   testi hem kanıt aracı artık koşu boyunca **minimum dikliği** izler ve
+   `upright_min > 0,9` şartını arar. Kabul kapısı geniş marjla kararlı 0,10 rad/s
+   kullanır (dört türde `upright_min ≥ 0,965`). Daha hızlı ve sağlam dönüş, hip
+   abduction eklemi gerektiren ayrı bir modelleme dilimidir.
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.
