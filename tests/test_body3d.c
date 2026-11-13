@@ -281,26 +281,41 @@ static int test_quad3_turns(void)
         ws_quad3_balance(&c, &parts, &p, 0.0);
         ws_body3d_step(&c);
     }
-    const double yaw_rate = 0.6;
+    /* The turn rate is bounded by the sagittal leg model, not by the servo: the
+     * legs hinge about the lateral axis only (no abduction joint), so a fast
+     * yaw command eventually outruns the stance and the body topples. Measured
+     * on this solver, every species stays upright up to ~0.15 rad/s in an
+     * in-place turn; above that the feet leave the ground and the torso flips.
+     * The test therefore commands a rate inside the stable envelope and tracks
+     * the *minimum* uprightness over the whole run, not just the final frame. A
+     * final-frame check alone hides a mid-run flip that the body later recovers
+     * from (the earlier 0.6 rad/s case flipped to up.y ~ -1.0 and still passed
+     * its end-of-run check). */
+    const double yaw_rate = 0.10;
     double phase = 0.0;
     int steps = 480 * 10;
+    double up_min = 1.0;
     for (int s = 0; s < steps; ++s) {
         phase += 1.4 * DT;
         double heading_cmd = yaw_rate * (double)s * DT;
         ws_quad3_gait_targets(&c, &parts, &p, phase);
         ws_quad3_balance(&c, &parts, &p, heading_cmd);
         WS_CHECK(ws_body3d_step(&c) == WS_OK);
+        ws_vec3 up_i = ws_quat_rotate(c.bodies[parts.torso].orient,
+                                      ws_vec3_make(0.0, 1.0, 0.0));
+        if (up_i.y < up_min) {
+            up_min = up_i.y;
+        }
     }
     const ws_body3 *torso = &c.bodies[parts.torso];
     ws_vec3 fwd = ws_quat_rotate(torso->orient, ws_vec3_make(1.0, 0.0, 0.0));
-    ws_vec3 up = ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
     double heading = atan2(-fwd.z, fwd.x);
     double err = heading - yaw_rate * (double)steps * DT;
     err = atan2(sin(err), cos(err));
     /* The servo tracks the commanded heading within a quarter radian and the
-     * body stays upright through the turn. */
+     * body never leaves the upright envelope at any point in the turn. */
     WS_CHECK(fabs(err) < 0.25);
-    WS_CHECK(up.y > 0.9);
+    WS_CHECK(up_min > 0.9);
     return 1;
 }
 

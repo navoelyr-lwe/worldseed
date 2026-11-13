@@ -191,6 +191,11 @@ foreach ($fam in $families) {
     $n = (Select-String -Path evidence/body3d/body3d.txt -Pattern ([regex]::Escape($fam) + ".*verdict=PASS") -AllMatches).Matches.Count
     if ($n -ne 4) { Write-Error "body3d '$fam': $n/4 species passed"; exit 1 }
 }
+# The turn gate reports the minimum uprightness over the whole run (a
+# final-frame-only check hid a mid-run flip). Every species must stay at least
+# 0.9 upright at all times through the turn.
+$turnUpright = (Select-String -Path evidence/body3d/body3d.txt -Pattern "body3d turn species=.*upright_min=0\.9[0-9]*.*verdict=PASS" -AllMatches).Matches.Count
+if ($turnUpright -ne 4) { Write-Error "body3d turn: $turnUpright/4 species stayed upright through the whole turn"; exit 1 }
 if (Select-String -Path evidence/body3d/body3d.txt -Pattern "verdict=FAIL" -Quiet) {
     Write-Error "a 3D body scenario failed"; exit 1
 }

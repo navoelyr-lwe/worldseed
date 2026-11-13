@@ -224,6 +224,11 @@ jobs:
             test "$(grep -c "body3d $fam.*verdict=PASS" evidence/body3d/body3d.txt)" = "4" \
               || { echo "not all species passed '$fam'"; exit 1; }
           done
+          # The turn gate must report the minimum uprightness over the whole run
+          # (a final-frame-only check hid a mid-run flip). Every species must be
+          # at least 0.9 upright at all times through the turn.
+          test "$(grep -c 'body3d turn species=.*upright_min=0\.9[0-9]*.*verdict=PASS' evidence/body3d/body3d.txt)" = "4" \
+            || { echo "a species left the upright envelope during the turn"; exit 1; }
           ! grep -q 'verdict=FAIL' evidence/body3d/body3d.txt \
             || { echo "a 3D body scenario failed"; exit 1; }
 

@@ -314,3 +314,31 @@ kural kanıtla uygulanır:
 - **Golden bit-özdeşliği:** `ws_quad3_gait_run` sagittal golden sahnelerden
   ayrıdır; 18 golden sahne bu değişiklikten sonra bit-özdeş kaldı (doğrulandı).
 
+## P13 notları — dönüş kanıtı dürüst kapıya bağlandı (sekizinci dilim)
+
+- **Birim testi gerçek bir hatayı gizliyordu.** `tests/test_body3d.c::quad3 turns`
+  0,6 rad/s ile koşup yalnız **son kareyi** kontrol ediyordu. Ölçtüm: bu hızda
+  gövde koşu ortasında takla atıyor (`up_min = −0,998`, diklik `up.y ≈ −1`),
+  sonra toparlanıp son karede `up.y > 0,9` dönüyordu — test yine "geçiyordu".
+  Düzeltme: test artık koşu boyunca **minimum dikliği** izler ve `up_min > 0,9`
+  şartını arar. Ders: bir testin yalnız son durumu kontrol etmesi, koşu ortasında
+  olup biten bir devrilmeyi gizler; kararlılık kapısı **tüm koşu boyunca** en kötü
+  değeri izlemeli.
+- **Dönüş sınırının kök nedeni mimari (ölçüldü).** İkili aramayla yerinde dönüşün
+  kararlı sınırı tüm türlerde ~0,15 rad/s bulundu (geyik 0,157, tilki 0,158,
+  tavşan 0,160, domuz 0,138 rad/s). Tanı: sınırın üstünde **temas sayısı 0'a
+  düşüyor** (ayaklar yerden kesiliyor) ve gövde öne devriliyor. Neden: bacaklar
+  `hinge_lock=1` ile **yalnız sagittal menteşeli** (tek lateral eksen);
+  **abduction (yanal serbestlik) eklemi yok**, bu yüzden dönüşte yanal kuvvet
+  üretilemiyor ve stance aşıldığında bacak tam uzayıp gövdeyi fırlatıyor.
+  Denedim ve **hiçbiri** sınırı güvenilir biçimde yükseltmedi: (a) gövde-çerçeveli
+  ayak kilidi, (b) dünya-çerçeveli diferansiyel adım uzunluğu, (c) skid-steer
+  gövde-sabit ayak, (d) kapalı-çevrim Raibert gait (geyikte 10 s'de ~0,28 rad/s'ye
+  taşıdı ama 15 s'de 0,18'de yine devrildi — kaotik). Sonuç: sorun ayak yerleştirme
+  kuralı değil, **eklem serbestlik derecesi**; gerçek çözüm hip abduction eklemi
+  (ayrı bir modelleme dilimi). Kapalı-çevrim gait'in geyikteki geçici kazancını
+  "iyileştirme" olarak **iddia etmedim** çünkü 15 s'de kayboluyor.
+- **Kapı geniş marjla kararlı 0,10 rad/s'de kalır** (dört türde `upright_min ≥
+  0,965`); kanıt aracının `body3d turn` satırı artık `upright_min` değerini de
+  yazdırır ve kapı `upright_min > 0,9` arar. 17 golden sahne bit-özdeş kalır.
+

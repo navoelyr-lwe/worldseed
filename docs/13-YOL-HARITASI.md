@@ -197,9 +197,36 @@ ulaşmaz**: küçük türlerin bacak erişimi ve kadansı tilki 1,8 / tavşan 2,
 bu gövde geometrisiyle yapısal olarak engeller. Bu değerler ayrıca sabit-Froude
 yürüyüş ölçeklemesiyle (`sqrt(shoulder_h)`) tutarsızdır (tilki ≈0,90, tavşan
 ≈0,62 m/s olurdu); profil hızlarının gözden geçirilmesi ya da tür adım/kadans
-geometrisinin yeniden ayarlanması ayrı bir dilimdir. Kapalı-çevrim denetleyicinin
-dönüş/yokuş/engebeli zeminde de kapılanması ve 3B doğrulamanın dört türün
-tamamında D3 kıyasıyla tamamlanması da açıktır.
+geometrisinin yeniden ayarlanması ayrı bir dilimdir.
+
+- *Dilim 8 — dönüş kararlılığı dürüst kapıya bağlandı (gerçek hata düzeltmesi):*
+  Dönüş kanıtı yalnız **son kareyi** kontrol ediyordu; bu, gövde takla atıp
+  (diklik `up.y ≈ −1`) sonra toparlandığında testi yine geçiriyordu. Ölçüldü:
+  eski `test_quad3_turns` 0,6 rad/s'de "geçiyordu" ama koşu ortasında gövde
+  devriliyordu (`up_min = −0,998`). Düzeltme: hem birim testi hem kanıt aracı
+  artık koşu boyunca **minimum dikliği** (`upright_min`) izler ve dönüş kapısı
+  `upright_min > 0,9` şartını arar; `body3d turn` satırı `upright_min` değerini
+  yazdırır. Ayrıca yerinde dönüşün **gerçek kararlılık sınırı** ölçüldü
+  (ikili arama): tüm türler ~0,15 rad/s'de devriliyor (geyik 0,157, tilki 0,158,
+  tavşan 0,160, domuz 0,138 rad/s). Kök neden mimari: bacaklar yalnız **sagittal
+  menteşeli** (`hinge_lock=1`, yalnız lateral eksen), **abduction (yanal
+  serbestlik) eklemi yok**; dönüş komutu stance'i aştığında ayaklar yerden
+  kesiliyor ve gövde öne devriliyor. Dünya-çerçevesi, gövde-çerçevesi,
+  diferansiyel adım uzunluğu ve skid-steer ayak yerleştirme denendi; hiçbiri
+  ~0,15 rad/s üstünde kararlılığı sağlamadı (kök neden yerleştirme kuralı değil,
+  eklem serbestlik derecesi). Kapalı-çevrim Raibert gait geyikte sınırı geçici
+  olarak ~0,28 rad/s'ye taşıdı ama 15 s'de 0,18'de yine devrildi (kaotik), bu
+  yüzden güvenilir bir iyileştirme olarak iddia edilmedi. Dönüş kapısı geniş
+  marjla kararlı **0,10 rad/s**'de kalır (dört türde `upright_min ≥ 0,965`).
+  Gerçek çözüm (hip abduction eklemi) ayrı bir modelleme dilimidir. 17 golden
+  sahne bit-özdeş kalır (bu çözücü sagittal golden sahnelerden ayrıdır).
+
+**Açık:** dinamik temas kuvveti ve 3B denge/enerji D3 kıyası. **Dönüş hızı
+sınırı mimari:** ~0,15 rad/s üstünde kararlı dönüş için bacaklara yanal
+serbestlik (abduction) eklemi gerekir; mevcut sagittal model bunu yapısal olarak
+engeller. Kapalı-çevrim denetleyicinin dönüş/yokuş/engebeli zeminde de
+kapılanması ve 3B doğrulamanın dört türün tamamında D3 kıyasıyla tamamlanması
+da açıktır.
 
 ## P14 — Çok duyulu algı ve doğal davranış
 
