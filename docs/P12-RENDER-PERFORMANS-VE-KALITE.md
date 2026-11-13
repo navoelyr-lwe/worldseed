@@ -493,7 +493,7 @@ yayar. `gui-windows.yml` bunu izole Windows runner'ında native `3840×2160` ve 
     bit-özdeş ve referans GPU çekirdeğinden 13x hızlı. **Canlı ürün döngüsü artık
     tam sahne OpenCL C 1.2 gölgeleme yolundan geçer ve bu yolda native 4K hedefi
     gerçek GPU'da karşılanır:** 10 dakikalık canlı koşu `3840×2160` `path=gpu`
-    `p95_ms=20.90` (52,6 FPS), `cpu_fallback_frames=0 gpu_errors=0` (bkz. bölüm 16).
+    `p95_ms=21.67` (51,2 FPS), `cpu_fallback_frames=0 gpu_errors=0` (bkz. bölüm 16).
     Döşemeli çekirdek (düz-renk raster) ürün sahnesi için kullanılmaz; ürün
     gölgelemesi `kernels/ws_scene.cl` içindedir. Sınır: ölçüm `shadows=0` ve 6 GB
     cihazda alındı; 12 GB sınıfı referans donanım ve gölge-açık canlı ölçüm ayrıca
@@ -571,18 +571,18 @@ gizlenmez. Ham kare zamanları `evidence/gui/live/gpu-4k/frames.csv` olarak
 (`tools/package-windows.ps1`) aynı modu CPU yolunda koşup sayaçların `path=cpu`
 bildirdiğini doğrular.
 
-**Ölçülen — gerçek GPU, izole Windows runner (güncel: run 43239422714, PR #71; önceki: run 43209725164, PR #67):**
+**Ölçülen — gerçek GPU, izole Windows runner (güncel: run 43366085226, PR #77; önceki: run 43239422714, PR #71):**
 
 - Donanım: `NVIDIA GeForce RTX 3060 Laptop GPU`, OpenCL 3.0 CUDA, 30 birim, 6 GB,
   16 CPU iş parçacığı, 15,7 GB RAM, Windows.
 - Yapılandırma: `3840×2160`, `seed=20260101`, `gpu_render=1`, `shadows=0`,
   `duration_s=600`.
-- Sonuç (güncel run 43239422714): **`path=gpu`**, `frames=31572`, `wall_s=600.01`,
-  `avg_ms=19.00 p50_ms=18.98 p95_ms=20.90 p99_ms=22.12 worst_ms=80.50` (**52,6 FPS**),
-  `step_ms=0.42 render_ms=18.37 hud_ms=0.21`, `gpu_frames=31572
-  cpu_fallback_frames=0 gpu_errors=0`, `pop=85 loaded=49`,
-  `world_digest=b5ce3465…54db`. (Önceki run 43209725164: `frames=30730`,
-  `p95_ms=21.96`.)
+- Sonuç (güncel run 43366085226): **`path=gpu`**, `frames=30708`, `wall_s=600.01`,
+  `avg_ms=19.54 p50_ms=19.41 p95_ms=21.67 p99_ms=25.36 worst_ms=80.07` (**51,2 FPS**),
+  `step_ms=0.41 render_ms=18.93 hud_ms=0.20`, `gpu_frames=30708
+  cpu_fallback_frames=0 gpu_errors=0`, `pop=84 loaded=49`,
+  `world_digest=518bd15e…431a`. (Önceki run 43239422714: `frames=31572`,
+  `p95_ms=20.90`; run 43209725164: `frames=30730`, `p95_ms=21.96`.)
 - Kabul: `p95_ok=1` — **native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda
   karşılanmıştır.**
 

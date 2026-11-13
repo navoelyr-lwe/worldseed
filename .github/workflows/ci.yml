@@ -207,21 +207,25 @@ jobs:
       - name: Three-dimensional body evidence (P13)
         run: |
           # P13 builds a full 3D rigid-body solver (separate from the sagittal
-          # golden solver, which stays bit-identical). The reference species (red
-          # deer) is gated on standing stability, forward walking, straight
-          # heading, commanded turning, slope climbing, independent left/right
-          # foot load and four-foot contact.
+          # golden solver, which stays bit-identical). All four species are gated
+          # at their own scale on standing stability, forward walking, straight
+          # heading, commanded turning, slope climbing, a run above their own
+          # walk, rough-ground travel and independent left/right foot load.
           mkdir -p evidence/body3d
           ./build/tools/ws_body3d_check evidence/body3d 20260101 | tee evidence/body3d/body3d.txt
           grep -q "WS_BODY3D_OK" evidence/body3d/body3d.txt
+          # The reference deer keeps its own PASS line.
           test "$(grep -c 'reference=1 verdict=PASS' evidence/body3d/body3d.txt)" = "1" \
             || { echo "the reference 3D quadruped failed its biomechanics checklist"; exit 1; }
-          # The closed-loop gait controller must track speed for every species:
-          # one PASS line per species and no FAIL.
-          test "$(grep -c 'closed_loop .*verdict=PASS' evidence/body3d/body3d.txt)" = "4" \
-            || { echo "the closed-loop gait controller did not pass for all species"; exit 1; }
-          ! grep -q 'closed_loop .*verdict=FAIL' evidence/body3d/body3d.txt \
-            || { echo "the closed-loop gait controller failed for a species"; exit 1; }
+          # Every species must pass the stand/walk checklist, the closed-loop
+          # controller and all four scenario families (turn, slope, run, rough).
+          for fam in "species=" "closed_loop species=" "turn species=" \
+                     "slope species=" "run species=" "rough_ground species="; do
+            test "$(grep -c "body3d $fam.*verdict=PASS" evidence/body3d/body3d.txt)" = "4" \
+              || { echo "not all species passed '$fam'"; exit 1; }
+          done
+          ! grep -q 'verdict=FAIL' evidence/body3d/body3d.txt \
+            || { echo "a 3D body scenario failed"; exit 1; }
 
       - name: Asset pipeline
         run: |

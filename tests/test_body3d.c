@@ -493,6 +493,66 @@ static int test_closed_loop_speed(void)
     return 1;
 }
 
+/* Species-scaled run: every species must genuinely run faster than its own walk.
+ * The run stride is a hip angle scaled by sqrt(ref_leg/leg) so the short-legged
+ * species do not saturate; before the scaling the rabbit's "run" was no faster
+ * than its walk (ratio ~1.05). This locks that fix. */
+static int test_species_run_exceeds_walk(void)
+{
+    for (int k = 0; k < WS_SPECIES_COUNT; ++k) {
+        const ws_species_info *si = ws_species_get((ws_species_kind)k);
+        if (si == NULL) {
+            return 0;
+        }
+        static ws_body3d c;
+        static ws_quad3_storage st;
+        static ws_quad3_parts parts;
+        const ws_species_profile *p = &si->body;
+        double dt = ws_quad3_suggested_dt(p);
+        int steps_per_s = (int)(1.0 / dt + 0.5);
+
+        double v_walk = 0.0;
+        double v_run = 0.0;
+        for (int pass = 0; pass < 2; ++pass) {
+            WS_CHECK(ws_body3d_init(&c, dt, G, ITERS, BIAS, st.bodies, 16,
+                                    st.joints, 16, st.feet, 8) == WS_OK);
+            ws_body3d_set_ground(&c, flat, NULL);
+            WS_CHECK(ws_quad3_build(&c, &st, p, 0.0, &parts) == WS_OK);
+            ws_quad3_hold_rest(&c, &parts);
+            for (int s = 0; s < steps_per_s * 3; ++s) {
+                ws_quad3_balance(&c, &parts, p, 0.0);
+                WS_CHECK(ws_body3d_step(&c) == WS_OK);
+            }
+            ws_vec3 a = ws_body3d_center_of_mass(&c);
+            ws_quad3_gait gait = pass == 0 ? ws_quad3_gait_walk(p)
+                                           : ws_quad3_gait_run(p);
+            double phase = 0.0;
+            double upright_min = 1.0;
+            for (int s = 0; s < steps_per_s * 20; ++s) {
+                phase += gait.freq * dt;
+                ws_quad3_gait_apply(&c, &parts, &gait, phase);
+                ws_quad3_balance(&c, &parts, p, 0.0);
+                WS_CHECK(ws_body3d_step(&c) == WS_OK);
+                const ws_body3 *torso = &c.bodies[parts.torso];
+                ws_vec3 up =
+                    ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
+                if (up.y < upright_min) {
+                    upright_min = up.y;
+                }
+            }
+            ws_vec3 b = ws_body3d_center_of_mass(&c);
+            WS_CHECK(upright_min > 0.9);
+            if (pass == 0) {
+                v_walk = (b.x - a.x) / 20.0;
+            } else {
+                v_run = (b.x - a.x) / 20.0;
+            }
+        }
+        WS_CHECK(v_run > 1.10 * v_walk);
+    }
+    return 1;
+}
+
 /* ---------- invalid input ---------- */
 
 static int test_invalid_input(void)
@@ -536,6 +596,7 @@ int main(void)
         {"quad3 runs", test_quad3_runs},
         {"species walk own dt", test_species_walk_own_dt},
         {"closed-loop speed", test_closed_loop_speed},
+        {"species run exceeds walk", test_species_run_exceeds_walk},
         {"lateral independence", test_lateral_independence},
         {"invalid input", test_invalid_input},
     };

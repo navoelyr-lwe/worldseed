@@ -15,8 +15,10 @@
    (ball-socket) bağı, gerçek menteşe kilidi ve tek taraflı açısal limit ile
    modellenir; temas üç boyutlu normal + Coulomb sürtünmedir. Amaç, P13'ün
    "yürüme/koşu/dönüş/yokuş senaryolarında bağımsız uzuvlu 3B beden" ölçütünü
-   gerçek, deterministik ve kapılanabilir bir çözücüyle karşılamak. İlk dilim
-   referans tür **kızıl geyik**tir; diğer üç tür bilgi amaçlı raporlanır.
+   gerçek, deterministik ve kapılanabilir bir çözücüyle karşılamak. Yedinci dilim
+   ile **dört tür de** (kızıl geyik, kızıl tilki, Avrupa tavşanı, yaban domuzu)
+   aynı standartta kapılanır; kızıl geyik yüksek ayrıntılı referans tür olarak
+   kalır.
 3. **Ölçek:** SI. Konum m, hız m/s, açı rad, açısal hız rad/s, kütle kg, kuvvet
    N, tork N·m. Referans geyik: omuz 1,05 m, gövde uzunluğu 1,6 m, toplam kütle
    110 kg, bacak üst/alt 0,60 m, duruş 0,80 m. Önerilen adım
@@ -88,20 +90,24 @@
    türler daha küçük adım gerektirir (önerilen adım yardımcısı). Bu çözücü
    **sagittal golden sahneleri etkilemez**; golden CPU çıktısı bit-özdeş kalır.
 8. **Kalibrasyon / doğrulama durumu:** D1 (kavramsal/geometrik doğrulama).
-   Referans geyik için duruş kararlılığı, ileri yürüyüş (~1,7 m/s), düz baş
-   (yanal sürüklenme < 0,3 m / 20 s), **komutlu dönüş (izleme hatası < 0,25 rad,
-   dik kalma > 0,9)**, **yokuş tırmanışı (%10 eğimde > 0,5 m tırmanış, ileri
-   ilerleme, dik kalma)**, **koşu (~2,1 m/s, yürüyüşten belirgin hızlı, dik
-   kalma > 0,9)** ve **engebeli zemin (10 cm genlikli dalgalı yüzeyde ileri
-   ilerleme)** ile bağımsız sol/sağ ayak yükü ve dört ayak teması CI'da
-   kapılanır. **Kapalı-çevrim denetleyici** dört tür için de CI'da kapılanır:
-   her tür kendi komut yürüyüş hızında ileri gider, dik kalır (`upright_min >
-   0,9`) ve yaklaşık düz bir çizgi tutar; birim testi `closed-loop speed`
-   (`tests/test_body3d.c`) ve kanıt aracı `closed_loop` satırları
+   **Dört tür de** (geyik, tilki, tavşan, domuz) CI'da aynı standartta kapılanır;
+   her tür kendi ölçeğinde değerlendirilir. Duruş kararlılığı, ileri yürüyüş,
+   düz baş (yanal sürüklenme omuz yüksekliğiyle sınırlı, 20 s), **komutlu dönüş
+   (izleme hatası < 0,25 rad, dik kalma > 0,9)**, **yokuş tırmanışı (%10 eğimde
+   gövde yüksekliğinin >1,2 katı tırmanış, yürüyüş hızının >0,5 katı ileri
+   ilerleme, dik kalma)**, **koşu (türün kendi yürüyüş hızının >1,10 katı, dik
+   kalma > 0,9)** ve **engebeli zemin (10 cm genlikli dalgalı yüzeyde yürüyüş
+   hızının >0,6 katı ileri ilerleme)** ile bağımsız sol/sağ ayak yükü ve dört
+   ayak teması CI'da kapılanır (kanıt aracı toplam 20 sahne üretir; her aile
+   dört türden geçer). **Kapalı-çevrim denetleyici** dört tür için de CI'da
+   kapılanır: her tür kendi komut yürüyüş hızında ileri gider, dik kalır
+   (`upright_min > 0,9`) ve yaklaşık düz bir çizgi tutar; birim testleri
+   `closed-loop speed` ve `species run exceeds walk` (`tests/test_body3d.c`) ile
+   kanıt aracı `closed_loop` satırları
    (`tools/ws_body3d_check.c`) bunu doğrular. D3 (ölçülmüş saha verisiyle kıyas)
    açıktır.
-9. **Bilinen sınırlama:** Referans tür kızıl geyik tam kapılanır; diğer üç tür
-   (tilki, tavşan, domuz) bilgi amaçlı raporlanır. Beşinci dilim küçük türlerin
+9. **Bilinen sınırlama:** Dört tür de aynı standartta kapılanır (yedinci dilim);
+   kızıl geyik yüksek ayrıntılı referans türdür. Beşinci dilim küçük türlerin
    adım kuralını düzeltti (`ws_quad3_suggested_dt` artık `leg_upper` ile
    ölçekler) ve kanıt aracının tüm türlere sabit 1,4 Hz uygulamasını kaldırıp
    türün kendi `ws_quad3_gait_walk` frekansını kullanmasını sağladı. Altıncı
@@ -119,16 +125,27 @@
    | Yaban domuzu | 1,30 | 1,07 | 1,04 | 0,98 |
 
    Kapalı-çevrim tilki ve tavşanı belirgin biçimde hızlandırır ve dört tür de
-   ayakta kalır. Hâlâ eksik: **hiçbir tür komut hızının tamamına ulaşmaz** —
-   küçük türlerin bacak erişimi ve kadansı komut hızlarını yapısal olarak
-   sınırlar (tilki 1,8 / tavşan 2,0 m/s bu gövde geometrisiyle ulaşılamaz). Bu
-   yüzden `ws_species_walk_speed` içindeki tilki/tavşan değerleri hâlâ Froude
-   ölçeklemesiyle tutarsızdır (sabit-Froude yürüyüş `sqrt(shoulder_h)` ile
-   ölçeklenir; tilki ≈0,90, tavşan ≈0,62 m/s olurdu). Bu değerlerin ya profile
-   göre düşürülmesi ya da tür adım/kadans geometrisinin yeniden ayarlanması
-   ayrı bir P13 dilimidir. Ayrıca koşu/dönüş/yokuş senaryoları dört türe
-   yayılmadı; kapalı-çevrim denetleyici şu an yalnız düz zemin yürüyüşü için
-   kapılanır.
+   ayakta kalır. Yedinci dilimde **dönüş, yokuş, koşu ve engebeli zemin
+   senaryoları dört türe yayıldı**; her kapı türün kendi ölçeğine göre kurulur
+   (duruş/yürüyüş sınırları omuz yüksekliğiyle, koşu eşiği türün gerçekleşen
+   yürüyüş hızının 1,10 katıyla, yokuş tırmanışı gövde yüksekliğiyle ölçeklenir).
+   Koşu adımı da artık tür ölçeğine göre ayarlanır: `ws_quad3_gait_run` hip
+   açısını `sqrt(0,60 m / leg_upper)` ile ölçekler; sabit açı kısa bacaklı
+   türlerde doyuma giriyor ve tavşanın "koşusu" yürüyüşünden hızlı olmuyordu.
+   Ölçülen yürüyüş→koşu oranı: geyik 1,20, tilki 1,38, tavşan 1,64, domuz 1,28
+   (`species run exceeds walk` testi). Hâlâ eksik: **hiçbir tür komut hızının
+   tamamına ulaşmaz** — küçük türlerin bacak erişimi ve kadansı komut hızlarını
+   yapısal olarak sınırlar (tilki 1,8 / tavşan 2,0 m/s bu gövde geometrisiyle
+   ulaşılamaz). Bu yüzden `ws_species_walk_speed` içindeki tilki/tavşan değerleri
+   hâlâ Froude ölçeklemesiyle tutarsızdır (sabit-Froude yürüyüş `sqrt(shoulder_h)`
+   ile ölçeklenir; tilki ≈0,90, tavşan ≈0,62 m/s olurdu). Bu değerlerin ya profile
+   göre düşürülmesi ya da tür adım/kadans geometrisinin yeniden ayarlanması ayrı
+   bir P13 dilimidir. Kapalı-çevrim denetleyici şu an yalnız düz zemin yürüyüşü
+   için kapılanır; dönüş/yokuş/engebeli zeminde kapalı-çevrim kapılanması da ayrı
+   bir dilimdir. **Dönüş kararlılığı sınırlıdır:** açık-çevrim gait + baş açısı
+   servosu **~0,16 rad/s üstünde dört türde de devrilir** (yaw hızı taramasıyla
+   ölçüldü); kabul kapısı bu yüzden geniş marjla kararlı olan 0,10 rad/s kullanır.
+   Daha hızlı ve sağlam dönüş ayrı bir denetleyici dilimidir.
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.
