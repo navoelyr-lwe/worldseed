@@ -281,19 +281,20 @@ static int test_quad3_turns(void)
         ws_quad3_balance(&c, &parts, &p, 0.0);
         ws_body3d_step(&c);
     }
-    /* The turn rate is bounded by the sagittal leg model, not by the servo: the
-     * legs hinge about the lateral axis only (no abduction joint), so a fast
-     * yaw command eventually outruns the stance and the body topples. Measured
-     * on this solver, every species stays upright up to ~0.15 rad/s in an
-     * in-place turn; above that the feet leave the ground and the torso flips.
-     * The test therefore commands a rate inside the stable envelope and tracks
-     * the *minimum* uprightness over the whole run, not just the final frame. A
-     * final-frame check alone hides a mid-run flip that the body later recovers
-     * from (the earlier 0.6 rad/s case flipped to up.y ~ -1.0 and still passed
-     * its end-of-run check). */
-    const double yaw_rate = 0.10;
+    /* Sustained in-place turn. The heading servo is marginally stable on this
+     * sagittal model: at 0.10 rad/s every species slowly pitches forward and
+     * topples after 15-21 s, so a 10 s window passes on a turn that cannot be
+     * held. Measured over 45 s, only <=0.04 rad/s stays upright for the whole
+     * run (0.05 rad/s flips at 27-42 s). The test therefore commands 0.04 rad/s
+     * for 30 s and tracks the *minimum* uprightness over the whole run, not just
+     * the final frame: a final-frame check alone hides a mid-run flip that the
+     * body later recovers from (the earlier 0.6 rad/s case flipped to
+     * up.y ~ -1.0 and still passed its end-of-run check). Raising this bound is
+     * a separate modelling slice (turn-rate-dependent balance gain or a lateral
+     * hip degree of freedom); it is not claimed here. */
+    const double yaw_rate = 0.04;
     double phase = 0.0;
-    int steps = 480 * 10;
+    int steps = 480 * 30;
     double up_min = 1.0;
     for (int s = 0; s < steps; ++s) {
         phase += 1.4 * DT;

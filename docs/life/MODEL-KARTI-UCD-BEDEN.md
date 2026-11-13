@@ -142,21 +142,27 @@
    göre düşürülmesi ya da tür adım/kadans geometrisinin yeniden ayarlanması ayrı
    bir P13 dilimidir. Kapalı-çevrim denetleyici şu an yalnız düz zemin yürüyüşü
    için kapılanır; dönüş/yokuş/engebeli zeminde kapalı-çevrim kapılanması da ayrı
-   bir dilimdir. **Dönüş kararlılığı mimari olarak sınırlıdır:** bacaklar yalnız
-   **sagittal menteşeli** (`hinge_lock=1`, tek lateral eksen) ve **abduction
-   (yanal serbestlik) eklemi yoktur**; dönüş komutu stance'i aştığında ayaklar
-   yerden kesilir ve gövde öne devrilir. İkili aramayla ölçülen yerinde dönüş
-   sınırı tüm türlerde ~0,15 rad/s'dir (geyik 0,157, tilki 0,158, tavşan 0,160,
-   domuz 0,138 rad/s). Dünya-çerçevesi, gövde-çerçevesi, diferansiyel adım
-   uzunluğu ve skid-steer ayak yerleştirme varyantları denendi; hiçbiri bu sınırı
-   güvenilir biçimde yükseltmedi (kök neden yerleştirme kuralı değil, eklem
-   serbestlik derecesidir). Sekizinci dilim dönüş kanıtını **dürüst kapıya**
-   bağladı: eski test yalnız son kareyi kontrol ettiği için gövde koşu ortasında
-   takla atıp (`up_min = −0,998`) toparlandığında yine "geçiyordu"; hem birim
-   testi hem kanıt aracı artık koşu boyunca **minimum dikliği** izler ve
-   `upright_min > 0,9` şartını arar. Kabul kapısı geniş marjla kararlı 0,10 rad/s
-   kullanır (dört türde `upright_min ≥ 0,965`). Daha hızlı ve sağlam dönüş, hip
-   abduction eklemi gerektiren ayrı bir modelleme dilimidir.
+   bir dilimdir. **Dönüş kararlılığı ölçülen bir sınıra sahiptir ve bu sınır
+   mimari değil, denetleyici/ayar sınırıdır.** Dokuzuncu dilim önceki kök-neden
+   iddiasını çürüttü: sınırın nedeni "abduction eklemi yokluğu" değildir.
+   Ölçümler (dört tür, 45 s'lik koşular): 0,10 rad/s'de her tür **15–21 s sonra**
+   yavaşça öne yunuslayıp devrilir (tavşan 14,7 / domuz 14,9 / tilki 16,8 / geyik
+   20,8 s), yani 10 s'lik eski kapı sürdürülemeyen bir dönüşü "geçiriyordu".
+   Yalnız **≤0,04 rad/s** tüm türlerde 30–45 s boyunca dik kalır (0,05 rad/s
+   geyikte 42, tavşanda 28 s'de devrilir). Bu sınırı yükseltme denemeleri:
+   yalpa/yunuslama integral terimi (etkisiz), dönüş-hızına bağlı denge kazancı
+   (yürüyüşü bozuyor), hip abduction eklemi (roll geri beslemesiyle de devrilme
+   sürüyor), gövde-çerçevesi/dünya-çerçevesi yaw torku, dönüşe yatış referansı
+   (`phi_ref = a_lat/g`), daha küçük adım (dt/4 sürdürülebilirliği düzeltir ama
+   yürüyüş hızını durdurur: geyik 2,2→0,25 m/s) ve 16–32× denge kazancı (dönüşü
+   düzeltir ama yürüyüşü bozar). Dokuzuncu dilim kanıtı **sürdürülebilir** dönüşe
+   bağladı: hem birim testi hem kanıt aracı artık **0,04 rad/s'de 30 s** koşar ve
+   koşu boyunca **minimum dikliği** izler (`upright_min > 0,9`); ölçülen değerler
+   dört türde `upright_min ≥ 0,933`, `track_err ≤ 0,010`. Sürdürülebilir dönüş
+   sınırını yükseltmek (dönüş-hızına bağlı kazanç veya yanal hip serbestliği) ayrı
+   bir modelleme dilimidir; burada iddia edilmez. 3B referans gait'in stance
+   sırasında zamanın ~%46'sında temasın sıfıra düşmesi (gövde zıplaması) de ayrı
+   bir dilim olarak açıktır.
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.

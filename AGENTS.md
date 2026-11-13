@@ -324,21 +324,28 @@ kural kanıtla uygulanır:
   şartını arar. Ders: bir testin yalnız son durumu kontrol etmesi, koşu ortasında
   olup biten bir devrilmeyi gizler; kararlılık kapısı **tüm koşu boyunca** en kötü
   değeri izlemeli.
-- **Dönüş sınırının kök nedeni mimari (ölçüldü).** İkili aramayla yerinde dönüşün
-  kararlı sınırı tüm türlerde ~0,15 rad/s bulundu (geyik 0,157, tilki 0,158,
-  tavşan 0,160, domuz 0,138 rad/s). Tanı: sınırın üstünde **temas sayısı 0'a
-  düşüyor** (ayaklar yerden kesiliyor) ve gövde öne devriliyor. Neden: bacaklar
-  `hinge_lock=1` ile **yalnız sagittal menteşeli** (tek lateral eksen);
-  **abduction (yanal serbestlik) eklemi yok**, bu yüzden dönüşte yanal kuvvet
-  üretilemiyor ve stance aşıldığında bacak tam uzayıp gövdeyi fırlatıyor.
-  Denedim ve **hiçbiri** sınırı güvenilir biçimde yükseltmedi: (a) gövde-çerçeveli
-  ayak kilidi, (b) dünya-çerçeveli diferansiyel adım uzunluğu, (c) skid-steer
-  gövde-sabit ayak, (d) kapalı-çevrim Raibert gait (geyikte 10 s'de ~0,28 rad/s'ye
-  taşıdı ama 15 s'de 0,18'de yine devrildi — kaotik). Sonuç: sorun ayak yerleştirme
-  kuralı değil, **eklem serbestlik derecesi**; gerçek çözüm hip abduction eklemi
-  (ayrı bir modelleme dilimi). Kapalı-çevrim gait'in geyikteki geçici kazancını
-  "iyileştirme" olarak **iddia etmedim** çünkü 15 s'de kayboluyor.
-- **Kapı geniş marjla kararlı 0,10 rad/s'de kalır** (dört türde `upright_min ≥
-  0,965`); kanıt aracının `body3d turn` satırı artık `upright_min` değerini de
-  yazdırır ve kapı `upright_min > 0,9` arar. 17 golden sahne bit-özdeş kalır.
+- **Dönüş sınırı mimari DEĞİL; denetleyici/ayar sınırı (ölçüldü).** Önceki
+  "kök neden abduction eklemi yokluğu" iddiası dokuzuncu dilimde **çürütüldü**.
+  45 s'lik koşularda: 0,10 rad/s'de her tür **15–21 s sonra** yavaşça öne
+  yunuslayıp devrilir (tavşan 14,7 / domuz 14,9 / tilki 16,8 / geyik 20,8 s), yani
+  10 s'lik eski kapı sürdürülemeyen bir dönüşü "geçiriyordu". Yalnız **≤0,04
+  rad/s** dört türde 30–45 s dik kalır (0,05 rad/s geyikte 42, tavşanda 28 s'de
+  devrilir). Denenip **başarısız** olan yükseltmeler: (a) yalpa/yunuslama integral
+  terimi (etkisiz), (b) dönüş-hızına bağlı denge kazancı (yürüyüşü bozar),
+  (c) hip abduction eklemi + roll geri beslemesi (devrilme sürer), (d) gövde/
+  dünya-çerçevesi yaw torku, (e) dönüşe yatış referansı (`phi_ref = a_lat/g`),
+  (f) dt/4 (dönüşü düzeltir ama yürüyüş hızını durdurur: geyik 2,2→0,25 m/s),
+  (g) 16–32× denge kazancı (dönüşü düzeltir ama yürüyüşü bozar). Sonuç: sınır
+  sayısal/kontrolcü ayarına bağlı; sürdürülebilir dönüşü yükseltmek ayrı bir
+  dilimdir ve burada **iddia edilmez**. Ek ölçüm: 3B referans gait stance
+  sırasında zamanın ~%46'sında teması sıfıra düşürüyor (gövde zıplaması); diz
+  kaldırma (knee_lift) bunun ana kaynağı — ayrı bir dilim.
+- **Dönüş kanıtı artık sürdürülebilir hıza bağlı.** Birim testi ve kanıt aracı
+  `0,04 rad/s'de 30 s` koşar ve koşu boyunca `upright_min > 0,9` arar (ölçülen
+  dört türde ≥ 0,933, `track_err ≤ 0,010`); `body3d turn` satırı `upright_min`
+  değerini yazdırır.
+- **Kapı artık sürdürülebilir hızda.** Yukarıdaki eski "0,10 rad/s'de kalır"
+  notu geçersizdir; birim testi ve kanıt aracı `0,04 rad/s'de 30 s` koşar
+  (`upright_min > 0,9`; ölçülen dört türde ≥ 0,933). 17 golden sahne bit-özdeş
+  kalır.
 
