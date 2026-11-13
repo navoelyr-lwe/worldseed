@@ -152,3 +152,16 @@ doğrulanan `main` koşusu (commit `4348b5f6`, izole Windows GUI run `4328068316
   ve gölge-açık canlı ölçüm ayrıca üretilmelidir. Ayrıca bu kanıt **referans
   sahne** mikro-benchmark'ından ayrıdır: P12 kabul eşiği canlı ürün döngüsü
   ölçümüyle (`--live-bench`) değerlendirilir; ikisi karıştırılmamalıdır.
+
+**Güncel koşu (2026-11-13, PR #77 branch, GUI run `43366085226`):** izole Windows
+runner aynı canlı kabul adımını yeniden geçti. `evidence/gui/live/gpu-4k-live.txt`:
+`3840×2160 seed=20260101 gpu_render=1 shadows=0 duration_s=600.0`,
+`path=gpu frames=30708 wall_s=600.01 avg_ms=19.54 p50_ms=19.41 p95_ms=21.67
+p99_ms=25.36 worst_ms=80.07 fps=51.2`, `gpu_frames=30708 cpu_fallback_frames=0
+gpu_errors=0`, `world_digest=518bd15e…431a`, `p95_ok=1`. Aynı koşuda
+`evidence/gui/gpu/gpu-check.txt`: `gpu=available device="NVIDIA GeForce RTX 3060
+Laptop GPU" version="OpenCL 3.0 CUDA" units=30`; `semantic_match=ok`;
+`tiled bit_identical=1`; `device_loss_recovered=1`; CPU fallback ok. Bu koşu
+**dönüş hızı sağlamlaştırması** ile geldi (bkz. P13 notları): önceki denemede
+Windows'ta tavşanın dönüş sahnesi devrilmişti, kapı 0,10 rad/s'ye çekilince
+GUI adımı yeşile döndü.
