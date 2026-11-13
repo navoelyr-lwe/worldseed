@@ -55,6 +55,28 @@
      genliğinden türetilir (`ws_quad3_gait_walk`, `ws_quad3_gait_run`,
      `ws_quad3_gait_apply`). Koşu referans geyikte yürüyüşü ~1,8 m/s'den ~2,1
      m/s'ye çıkarır.
+   - **Açık-çevrim yürüyüş (sürücü):** `ws_quad3_gait_apply` her bacak eklemine
+     fazdan türeyen **sabit** açı hedefi yazar. Hızı düzenleyemez: belli bir
+     kadasta gövde pasif dinamiğin bıraktığı yerde oturur ve küçük türler komut
+     hızlarının çok altında kalır (bkz. sınır 9).
+   - **Kapalı-çevrim yürüyüş (Raibert ayak yerleştirme):**
+     `ws_quad3_gait_closed_loop` her bacağı temas noktasından türetir. Kalça
+     çapası gövde çerçevesinden dünya konumuna dönüştürülür; dikey IK referansı
+     **nominal** ayakta durma yüksekliğidir (`ground + shoulder_h`), ölçülen
+     (çökmüş olabilir) kalça yüksekliği değil — çöküşü geri beslemek bacağı tam
+     düşerken kısaltır ve duruşu çökertir (pozitif geri besleme). Duruş fazında
+     ayak dünya uzayında sabit kalır (latch edilmiş `td_x`), salınım fazında
+     ileri taşınır. Nötr temas noktası Raibert kuralıdır:
+     `neutral = 0,5·v_ff·T_stance + kv·(v_act − v_des)`; ileri besleme hızı
+     `v_ff` bacağın erişebileceği en hızlı adımla sınırlanır
+     (`v_stride = 2·0,8·reach/T_stance`, `reach = sqrt((l1+l2)² − shoulder_h²)`),
+     çünkü ulaşılamaz bir komut nötr noktayı bacağın dışına taşır ve gövdeyi geri
+     sürükler. `v_des` ölçülen hızdan büyükken nötr nokta kalçanın gerisine düşer
+     ve gövdeyi ileri iter. Durum `ws_quad3_gait_state` içinde tutulur; bacak
+     başına salınım tepesi ve yerleştirme kazancı `ws_quad3_gait_state_init` ile
+     tür boyutundan ölçeklenir (referans geyik 0,08 m tepe / 0,30 s kazanç).
+     Çağıran, açık-çevrim sürücüde olduğu gibi `ws_quad3_balance` ile gövdeyi
+     dengeler.
 6. **Ayrıklaştırma ve çözücü:** Ardışık-impuls (sequential impulse),
    `solver_iterations = 30`, `position_bias = 0,2`, sabit adım. Deterministik:
    aynı girdi aynı çıktıyı verir (bit düzeyinde test edilir). **Adım duyarlılığı:**
@@ -72,20 +94,41 @@
    ilerleme, dik kalma)**, **koşu (~2,1 m/s, yürüyüşten belirgin hızlı, dik
    kalma > 0,9)** ve **engebeli zemin (10 cm genlikli dalgalı yüzeyde ileri
    ilerleme)** ile bağımsız sol/sağ ayak yükü ve dört ayak teması CI'da
-   kapılanır. D3 (ölçülmüş saha verisiyle kıyas) açıktır.
+   kapılanır. **Kapalı-çevrim denetleyici** dört tür için de CI'da kapılanır:
+   her tür kendi komut yürüyüş hızında ileri gider, dik kalır (`upright_min >
+   0,9`) ve yaklaşık düz bir çizgi tutar; birim testi `closed-loop speed`
+   (`tests/test_body3d.c`) ve kanıt aracı `closed_loop` satırları
+   (`tools/ws_body3d_check.c`) bunu doğrular. D3 (ölçülmüş saha verisiyle kıyas)
+   açıktır.
 9. **Bilinen sınırlama:** Referans tür kızıl geyik tam kapılanır; diğer üç tür
    (tilki, tavşan, domuz) bilgi amaçlı raporlanır. Beşinci dilim küçük türlerin
    adım kuralını düzeltti (`ws_quad3_suggested_dt` artık `leg_upper` ile
    ölçekler) ve kanıt aracının tüm türlere sabit 1,4 Hz uygulamasını kaldırıp
-   türün kendi `ws_quad3_gait_walk` frekansını kullanmasını sağladı; dört tür de
-   artık kendi adımıyla ayakta kalır ve ileri yürür. Ölçüm (aynı kazançlar):
-   tilki 0,15 → **0,63 m/s**, tavşan ~0,20 → **0,17 m/s**, domuz 1,36 → **1,07
-   m/s** (`min_contacts=4`). Hâlâ eksik: açık-çevrim tırıs tür profil hızlarının
-   altında kalır (tilki 1,8 / tavşan 2,0 / domuz 1,3 m/s); koşu/dönüş/yokuş
-   senaryoları dört türe yayılmadı. Bunlar kapalı-çevrim (temas/hız geri
-   beslemeli) denetleyici gerektirir ve ayrı bir P13 dilimidir. Ayrıca profil
-   yürüyüş hızları Froude ölçeklemesiyle tutarsız görünüyor (tilki/tavşan için
-   fiziksel olarak yüksek); bu da o dilimde gözden geçirilecek.
+   türün kendi `ws_quad3_gait_walk` frekansını kullanmasını sağladı. Altıncı
+   dilim **kapalı-çevrim (Raibert ayak yerleştirmeli) denetleyiciyi** ekledi
+   (`ws_quad3_gait_closed_loop`): hız geri beslemesi olmadığı için açık-çevrim
+   tırıs küçük türlerde komut hızının çok altında kalıyordu; kapalı-çevrim
+   denetleyici aynı koşullarda hızı komuta yaklaştırır. Ölçüm (20 s, düz zemin,
+   her tür kendi komut hızında):
+
+   | Tür | Komut (m/s) | Açık-çevrim (m/s) | Kapalı-çevrim (m/s) | Dik kalma |
+   |---|---|---|---|---|
+   | Kızıl geyik | 1,50 | 1,77 | 2,29 | 0,97 |
+   | Kızıl tilki | 1,80 | 0,63 | 0,81 | 0,99 |
+   | Avrupa tavşanı | 2,00 | 0,17 | 0,36 | 0,98 |
+   | Yaban domuzu | 1,30 | 1,07 | 1,04 | 0,98 |
+
+   Kapalı-çevrim tilki ve tavşanı belirgin biçimde hızlandırır ve dört tür de
+   ayakta kalır. Hâlâ eksik: **hiçbir tür komut hızının tamamına ulaşmaz** —
+   küçük türlerin bacak erişimi ve kadansı komut hızlarını yapısal olarak
+   sınırlar (tilki 1,8 / tavşan 2,0 m/s bu gövde geometrisiyle ulaşılamaz). Bu
+   yüzden `ws_species_walk_speed` içindeki tilki/tavşan değerleri hâlâ Froude
+   ölçeklemesiyle tutarsızdır (sabit-Froude yürüyüş `sqrt(shoulder_h)` ile
+   ölçeklenir; tilki ≈0,90, tavşan ≈0,62 m/s olurdu). Bu değerlerin ya profile
+   göre düşürülmesi ya da tür adım/kadans geometrisinin yeniden ayarlanması
+   ayrı bir P13 dilimidir. Ayrıca koşu/dönüş/yokuş senaryoları dört türe
+   yayılmadı; kapalı-çevrim denetleyici şu an yalnız düz zemin yürüyüşü için
+   kapılanır.
 10. **İlişkili belgeler:** `docs/life/MODEL-KARTI-FRONTAL-DENGE.md` (P13 ilk
     dilim), `docs/life/MODEL-KARTI-REFERANS-TUR.md`, `docs/13-YOL-HARITASI.md`
     (P13), `docs/MILESTONE-BOARD.md`.

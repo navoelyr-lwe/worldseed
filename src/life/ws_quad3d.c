@@ -352,6 +352,133 @@ void ws_quad3_gait_apply(ws_body3d *c, const ws_quad3_parts *parts,
     (void)parts;
 }
 
+void ws_quad3_gait_state_init(ws_quad3_gait_state *gs,
+                              const ws_species_profile *p)
+{
+    if (gs == NULL) {
+        return;
+    }
+    memset(gs, 0, sizeof(*gs));
+    gs->kv = 0.30;
+    gs->foot_lift = 0.08;
+    gs->initialised = 1;
+    if (p == NULL || p->shoulder_h <= 0.0) {
+        return;
+    }
+    /* Swing apex scales with body size, like the planar controller. The
+     * foot-placement gain is a time, but the offset it commands (kv x speed
+     * error) must stay inside the leg's horizontal reach, so scale it by the
+     * reach relative to the reference deer. The deer maps to exactly 1.0 and
+     * keeps the 0.08 m apex and 0.30 s gain. */
+    double scale = p->shoulder_h / 1.05;
+    gs->foot_lift = 0.08 * scale;
+    double s = p->leg_upper + p->leg_lower;
+    double reach = (s > p->shoulder_h)
+                       ? sqrt(s * s - p->shoulder_h * p->shoulder_h)
+                       : 0.0;
+    const double deer_reach = sqrt(1.2 * 1.2 - 1.05 * 1.05);
+    if (reach > 0.0) {
+        gs->kv = 0.30 * (reach / deer_reach);
+    }
+}
+
+void ws_quad3_gait_closed_loop(ws_body3d *c, const ws_quad3_parts *parts,
+                               const ws_species_profile *p,
+                               ws_quad3_gait_state *gs,
+                               const ws_quad3_gait *g, double phase,
+                               double v_des)
+{
+    if (c == NULL || parts == NULL || p == NULL || gs == NULL || g == NULL) {
+        return;
+    }
+    if (!gs->initialised) {
+        ws_quad3_gait_state_init(gs, p);
+    }
+    const double duty = g->duty;
+    const double l1 = p->leg_upper;
+    const double l2 = p->leg_lower;
+    const double half_stance = p->stance * 0.5;
+    const double T_stance = (g->freq > 0.0) ? duty / g->freq : 0.0;
+
+    const ws_body3 *torso = &c->bodies[parts->torso];
+    ws_vec3 fwd = ws_quat_rotate(torso->orient, ws_vec3_make(1.0, 0.0, 0.0));
+    double v_act = ws_vec3_dot(torso->vel, fwd);
+
+    for (int leg = 0; leg < WS_LEG_COUNT; ++leg) {
+        int front = (leg == WS_LEG_FL || leg == WS_LEG_FR);
+        double hip_x_local = front ? half_stance : -half_stance;
+        /* Hip anchor in the torso frame, exactly as the builder placed it, so
+         * the foot target tracks the body through any pose. */
+        ws_vec3 hip_w = ws_body3_point(torso, ws_vec3_make(hip_x_local, 0.0, 0.0));
+        /* The IK vertical reference is the nominal standing hip height above
+         * the local ground, not the instantaneous (possibly sagging) hip
+         * height. Feeding the sagged height back into the target would shorten
+         * the commanded leg exactly when the body dips, which is positive
+         * feedback and collapses the stance; the open-loop driver holds the leg
+         * at its standing extension for the same reason. */
+        double ground_hip = c->ground(c->ground_ctx, hip_w.x, hip_w.z);
+        double hip_y_ref = ground_hip + p->shoulder_h;
+
+        double leg_phase = phase + ((leg == WS_LEG_FL || leg == WS_LEG_RR)
+                                        ? 0.0
+                                        : 0.5);
+        leg_phase -= floor(leg_phase);
+
+        /* Raibert foot placement: the stance foot is planted at a neutral point
+         * ahead of the hip (half the distance the body travels in one stance,
+         * so the body vaults over it) plus a velocity-error term. Using v_des in
+         * the neutral term drives the body to the command; holding the planted
+         * foot fixed in the world during stance is what keeps the gait stable
+         * (a stance foot that sweeps backward always pushes forward and runs
+         * away).
+         *
+         * A real limb cannot place its foot past its own reach. The neutral
+         * offset 0.5 * v * T_stance must stay inside the leg's horizontal reach,
+         * so the *feedforward* speed is capped at the fastest stride the leg
+         * allows (v_stride = 2 * reach / T_stance). The velocity-error term still
+         * uses the true v_des, so an unreachable command keeps pulling the foot
+         * behind the hip (a forward push) instead of planting it always ahead,
+         * which would walk the body backward. */
+        double s_leg = l1 + l2;
+        double reach = (s_leg > p->shoulder_h)
+                           ? sqrt(s_leg * s_leg - p->shoulder_h * p->shoulder_h)
+                           : 0.0;
+        double max_off = 0.8 * reach;
+        double v_stride = (T_stance > 0.0) ? (2.0 * max_off / T_stance) : 0.0;
+        double v_ff = (v_des < v_stride) ? v_des : v_stride;
+        double neutral = 0.5 * v_ff * T_stance + gs->kv * (v_act - v_des);
+        if (neutral > max_off) {
+            neutral = max_off;
+        } else if (neutral < -max_off) {
+            neutral = -max_off;
+        }
+
+        double foot_x;
+        double foot_y;
+        if (leg_phase < duty) {
+            if (!gs->stance[leg]) {
+                gs->td_x[leg] = hip_w.x + neutral;
+                gs->stance[leg] = 1;
+            }
+            foot_x = gs->td_x[leg];
+            foot_y = c->ground(c->ground_ctx, foot_x, hip_w.z);
+        } else {
+            gs->stance[leg] = 0;
+            double s = (leg_phase - duty) / (1.0 - duty);
+            foot_x = hip_w.x + neutral;
+            foot_y = c->ground(c->ground_ctx, foot_x, hip_w.z) +
+                     gs->foot_lift * sin(WS_PI_D * s);
+        }
+
+        double ua, la;
+        ik_angles(hip_w.x, hip_y_ref, foot_x, foot_y, l1, l2, 1.0, &ua, &la);
+        ws_joint3 *hj = &c->joints[2 + leg * 2];
+        ws_joint3 *kj = &c->joints[2 + leg * 2 + 1];
+        hj->motor_target = ua - hj->rest_angle;
+        kj->motor_target = (la - ua) - kj->rest_angle;
+    }
+}
+
 /* Body x is forward, y is up, z is lateral (right-handed). Roll is a rotation
  * about the forward (x) axis; pitch is a rotation about the lateral (z) axis. */
 void ws_quad3_balance(ws_body3d *c, const ws_quad3_parts *parts,

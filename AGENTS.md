@@ -226,11 +226,51 @@ kural kanıtla uygulanır:
   `worldseed --live-bench 600 --live-gpu --size 3840x2160` koşar; gerçek dünya
   adımı + ekoloji + aktörler + kamera + render + HUD, `gpu_frames` == kare sayısı,
   `cpu_fallback_frames=0 gpu_errors=0`, ham `frames.csv`, `p95_ok=1`. Son
-  ölçüm (RTX 3060 Laptop, `main`=`b066d49`): p95 20,90 ms / ~52,6 FPS (run 43239422714). Bunu yeni bir
-  iş sanma; mevcut kapıyı koru.
+  doğrulanan ölçüm (`main`=`4348b5f`, run 43280683169): `path=gpu frames=31275
+  avg_ms=19.19 p50=19.17 p95=21.02 p99=22.02 fps=52.1 cpu_fallback_frames=0
+  gpu_errors=0`. Bunu yeni bir iş sanma; mevcut kapıyı koru.
 - **Branch protection açığı sürüyor:** token ile `branches/main/protection`
   (PUT/GET) ve `rulesets` **oluşturma** uç noktaları **403 "Resource not
   accessible by integration"** verir (repo `permissions.admin=true` bildirse ve
   `rulesets` listesi okunabilse de; liste boş). Bu, token'da `administration`
   yetkisi olmadığını gösterir. Dal koruması kurulmuş gibi işaretlenmez; bu erişim
   sınırı kullanıcıya sade dille raporlanır.
+
+## P13 notları — kapalı-çevrim yürüyüş denetleyicisi (altıncı dilim)
+
+- **Açık-çevrim sürücü hızı düzenleyemez.** `ws_quad3_gait_apply` her ekleme
+  fazdan türeyen sabit açı yazar; belli bir kadasta gövde pasif dinamiğin
+  bıraktığı yerde oturur. Küçük türler komut hızının çok altında kalır (tilki
+  0,63, tavşan 0,17 m/s).
+- **Kapalı-çevrim denetleyici Raibert ayak yerleştirme kullanır:**
+  `ws_quad3_gait_closed_loop`, `neutral = 0,5·v_ff·T_stance + kv·(v_act − v_des)`.
+  İki tuzak kanıtla bulundu ve kodda kaçınıldı:
+  1. **Dikey IK referansı nominal olmalı.** Ölçülen (çökmüş) kalça yüksekliğini
+     hedefe geri beslemek, gövde çökerken bacağı tam o anda kısaltır — pozitif
+     geri besleme, duruş çöker (deer 1,04 → 0,53 m). Referans `ground +
+     shoulder_h` olmalı (açık-çevrim sürücü de böyle yapar).
+  2. **İleri besleme hızı bacak erişimine sınırlanmalı.** `0,5·v_des·T_stance`
+     bacağın yatay erişimini (`reach = sqrt((l1+l2)² − shoulder_h²)`) aşarsa nötr
+     nokta bacağın dışına taşar, IK doyar ve gövde geri sürüklenir (tavşan
+     −0,31 m/s). `v_ff = min(v_des, 2·0,8·reach/T_stance)` bunu önler; hız-hata
+     terimi yine gerçek `v_des` kullanır.
+- **Sürüş mekanizması:** duruş ayağı dünya uzayında sabit kalır (latch edilmiş
+  `td_x`); `v_des > v_act` iken nötr nokta kalçanın gerisine düşer ve gövdeyi
+  ileri iter. Ayağı duruş boyunca geriye "yürüyen bant" gibi kaydırmak **yanlış**
+  (her zaman ileri iter, kaçar) — denenip geri alındı.
+- **Ölçüm (20 s, düz zemin, komut türün kendi `ws_species_walk_speed` değeri):**
+  tilki 0,63→**0,81**, tavşan 0,17→**0,36**, geyik 1,77→2,29, domuz 1,07→1,04
+  m/s; dört tür de dik (`upright_min > 0,9`). `tests/test_body3d.c::closed-loop
+  speed` ve `tools/ws_body3d_check.c` `closed_loop` satırları bunu kilitler.
+- **Sınır:** hiçbir tür komut hızının tamamına ulaşmaz; küçük türlerin bacak
+  erişimi ve kadansı tilki 1,8 / tavşan 2,0 m/s'yi bu gövde geometrisiyle yapısal
+  olarak engeller. Bu değerler ayrıca sabit-Froude (`sqrt(shoulder_h)`)
+  ölçeklemesiyle tutarsızdır (tilki ≈0,90, tavşan ≈0,62 m/s olurdu). Profil
+  hızlarının gözden geçirilmesi ya da tür adım/kadans geometrisinin yeniden
+  ayarlanması ayrı bir dilimdir. Koşu/dönüş/yokuş senaryoları dört türe
+  yayılmadı; kapalı-çevrim şu an yalnız düz zemin yürüyüşü için kapılanır.
+- **Golden bit-özdeşliği:** bu çözücü sagittal golden sahnelerden ayrıdır; 17
+  golden sahne bit-özdeş kalır (doğrulandı). `ws_species_walk_speed`'i Froude
+  değerlerine çekmek ürün 2B hareket kapısını kırar (2B model de komutun ~%15'ini
+  tutturur) — geri alındı; değerler bu yüzden değiştirilmedi, yalnız yorum
+  gerçeği yansıtacak biçimde güncellendi.

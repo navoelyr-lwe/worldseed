@@ -111,7 +111,7 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
 
 **Kabul:** yürüme/koşu/dönüş/yokuş/zemin senaryoları; 3B temas ve denge testleri; enerji maliyeti ve hareket kıyasları; veri kaynağı/belirsizlikleri belgeli D3 referans tür doğrulaması. Diğer üç türün beden ve gait parametreleri ayrı doğrulanır.
 
-**Durum:** Başladı (dört dilim).
+**Durum:** Başladı (altı dilim).
 
 - *Dilim 1 — frontal düzlem:* Frontal düzlem (lateral) denge, dört ayak teması ve
   dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
@@ -156,12 +156,32 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
   `species walk own dt` bu sözleşmeyi kilitler (her tür kendi adımıyla durur ve
   ileri yürür). 17 golden sahne bit-özdeş kalır.
 
-**Açık:** dinamik temas kuvveti ve 3B denge/enerji D3 kıyası. Küçük türler artık
-kendi adımıyla kararlı ve ileri yürür, ancak açık-çevrim tırısı tür profil
-hedeflerinin (tilki 1,8, tavşan 2,0, domuz 1,3 m/s) altında kalır; bunları tam
-profile çıkarmak ve koşu/dönüş/yokuş senaryolarını dört türe genişletmek
-kapalı-çevrim (temas/hız geri beslemeli) denetleyiciye bağlıdır. Ayrıca 3B
-doğrulama dört türün tamamında D3 kıyasıyla tamamlanmalıdır.
+- *Dilim 6 — kapalı-çevrim yürüyüş denetleyicisi:* Açık-çevrim sürücü
+  (`ws_quad3_gait_apply`) her ekleme fazdan türeyen sabit açı yazar; hız geri
+  beslemesi olmadığı için küçük türler komut hızının çok altında kalır. Yeni
+  `ws_quad3_gait_closed_loop` her ayağı **Raibert kuralıyla** yerleştirir: nötr
+  temas noktası `0,5·v_ff·T_stance + kv·(v_act − v_des)`. İki kritik ayrıntı:
+  (a) dikey IK referansı **nominal** ayakta durma yüksekliğidir, ölçülen
+  (çökmüş olabilir) kalça değil — çöküşü geri beslemek duruşu çökertir; (b) ileri
+  besleme hızı `v_ff` bacağın erişebileceği en hızlı adımla sınırlanır, yoksa
+  ulaşılamaz bir komut nötr noktayı bacağın dışına taşır ve gövdeyi geri
+  sürükler. Salınım tepesi ve yerleştirme kazancı tür boyutundan ölçeklenir
+  (`ws_quad3_gait_state_init`). Ölçülen (20 s, düz zemin, komut türün kendi
+  `ws_species_walk_speed` değeri): tilki 0,63 → **0,81 m/s**, tavşan 0,17 →
+  **0,36 m/s**, geyik 1,77 → 2,29 m/s, domuz 1,07 → 1,04 m/s; dört tür de dik
+  kalır (`upright_min > 0,9`). Yeni birim testi `closed-loop speed` ve kanıt
+  aracı `closed_loop` satırları bunu kilitler. 17 golden sahne bit-özdeş kalır
+  (bu çözücü sagittal golden sahnelerden ayrıdır).
+
+**Açık:** dinamik temas kuvveti ve 3B denge/enerji D3 kıyası. Kapalı-çevrim
+denetleyici hızı komuta yaklaştırır ama **hiçbir tür komut hızının tamamına
+ulaşmaz**: küçük türlerin bacak erişimi ve kadansı tilki 1,8 / tavşan 2,0 m/s'yi
+bu gövde geometrisiyle yapısal olarak engeller. Bu değerler ayrıca sabit-Froude
+yürüyüş ölçeklemesiyle (`sqrt(shoulder_h)`) tutarsızdır (tilki ≈0,90, tavşan
+≈0,62 m/s olurdu); profil hızlarının gözden geçirilmesi ya da tür adım/kadans
+geometrisinin yeniden ayarlanması ayrı bir dilimdir. Koşu/dönüş/yokuş
+senaryolarının dört türe yayılması ve 3B doğrulamanın dört türün tamamında D3
+kıyasıyla tamamlanması da açıktır.
 
 ## P14 — Çok duyulu algı ve doğal davranış
 

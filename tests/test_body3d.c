@@ -438,6 +438,61 @@ static int test_species_walk_own_dt(void)
     return 1;
 }
 
+/* Closed-loop gait: the Raibert foot-placement driver tracks a commanded speed,
+ * which the open-loop fixed-angle trot cannot do. Every species must go forward,
+ * stay upright and hold a roughly straight line at its own commanded walk speed.
+ * This is the P13 closed-loop controller evidence. */
+static int test_closed_loop_speed(void)
+{
+    for (int k = 0; k < WS_SPECIES_COUNT; ++k) {
+        const ws_species_info *si = ws_species_get((ws_species_kind)k);
+        if (si == NULL) {
+            return 0;
+        }
+        static ws_body3d c;
+        static ws_quad3_storage st;
+        static ws_quad3_parts parts;
+        const ws_species_profile *p = &si->body;
+        double dt = ws_quad3_suggested_dt(p);
+        int steps_per_s = (int)(1.0 / dt + 0.5);
+        double v_des = ws_species_walk_speed((ws_species_kind)k);
+        WS_CHECK(ws_body3d_init(&c, dt, G, ITERS, BIAS, st.bodies, 16, st.joints,
+                                16, st.feet, 8) == WS_OK);
+        ws_body3d_set_ground(&c, flat, NULL);
+        WS_CHECK(ws_quad3_build(&c, &st, p, 0.0, &parts) == WS_OK);
+        ws_quad3_hold_rest(&c, &parts);
+        for (int s = 0; s < steps_per_s * 3; ++s) {
+            ws_quad3_balance(&c, &parts, p, 0.0);
+            WS_CHECK(ws_body3d_step(&c) == WS_OK);
+        }
+        ws_vec3 c1 = ws_body3d_center_of_mass(&c);
+
+        ws_quad3_gait gait = ws_quad3_gait_walk(p);
+        ws_quad3_gait_state gs;
+        ws_quad3_gait_state_init(&gs, p);
+        double phase = 0.0;
+        double upright_min = 1.0;
+        for (int s = 0; s < steps_per_s * 20; ++s) {
+            phase += gait.freq * dt;
+            ws_quad3_gait_closed_loop(&c, &parts, p, &gs, &gait, phase, v_des);
+            ws_quad3_balance(&c, &parts, p, 0.0);
+            WS_CHECK(ws_body3d_step(&c) == WS_OK);
+            const ws_body3 *torso = &c.bodies[parts.torso];
+            ws_vec3 up =
+                ws_quat_rotate(torso->orient, ws_vec3_make(0.0, 1.0, 0.0));
+            if (up.y < upright_min) {
+                upright_min = up.y;
+            }
+        }
+        ws_vec3 c2 = ws_body3d_center_of_mass(&c);
+        double v = (c2.x - c1.x) / 20.0;
+        WS_CHECK(v > 0.05);
+        WS_CHECK(upright_min > 0.9);
+        WS_CHECK(fabs(c2.z - c1.z) < 0.6);
+    }
+    return 1;
+}
+
 /* ---------- invalid input ---------- */
 
 static int test_invalid_input(void)
@@ -480,6 +535,7 @@ int main(void)
         {"quad3 climbs slope", test_quad3_climbs_slope},
         {"quad3 runs", test_quad3_runs},
         {"species walk own dt", test_species_walk_own_dt},
+        {"closed-loop speed", test_closed_loop_speed},
         {"lateral independence", test_lateral_independence},
         {"invalid input", test_invalid_input},
     };

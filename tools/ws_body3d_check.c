@@ -150,6 +150,58 @@ static int run_walk(const ws_species_profile *p, double seconds,
     return 1;
 }
 
+/* Closed-loop walk: the same species, driven by Raibert foot placement toward
+ * its own walk speed instead of the open-loop fixed-angle trot. Reports the
+ * achieved speed so the two controllers can be compared directly. */
+typedef struct closed_loop_metrics {
+    double v_fwd;
+    double upright_min;
+    double lateral_drift;
+    int finite;
+} closed_loop_metrics;
+
+static int run_closed_loop(const ws_species_profile *p, double v_des,
+                           double seconds, closed_loop_metrics *m)
+{
+    static ws_body3d c;
+    static ws_quad3_storage st;
+    static ws_quad3_parts parts;
+    if (!setup(&c, &st, &parts, p)) {
+        return 0;
+    }
+    double dt = c.dt;
+    for (int s = 0; s < (int)(3.0 / dt); ++s) {
+        ws_quad3_balance(&c, &parts, p, 0.0);
+        ws_body3d_step(&c);
+    }
+    ws_vec3 a = ws_body3d_center_of_mass(&c);
+    ws_quad3_gait gait = ws_quad3_gait_walk(p);
+    ws_quad3_gait_state gs;
+    ws_quad3_gait_state_init(&gs, p);
+    double phase = 0.0;
+    m->upright_min = 1.0;
+    m->finite = 1;
+    int steps = (int)(seconds / dt);
+    for (int s = 0; s < steps; ++s) {
+        phase += gait.freq * dt;
+        ws_quad3_gait_closed_loop(&c, &parts, p, &gs, &gait, phase, v_des);
+        ws_quad3_balance(&c, &parts, p, 0.0);
+        if (ws_body3d_step(&c) != WS_OK) {
+            m->finite = 0;
+            return 0;
+        }
+        const ws_body3 *t = &c.bodies[parts.torso];
+        ws_vec3 up = ws_quat_rotate(t->orient, ws_vec3_make(0.0, 1.0, 0.0));
+        if (up.y < m->upright_min) {
+            m->upright_min = up.y;
+        }
+    }
+    ws_vec3 b = ws_body3d_center_of_mass(&c);
+    m->v_fwd = (b.x - a.x) / seconds;
+    m->lateral_drift = fabs(b.z - a.z);
+    return 1;
+}
+
 /* A ramp that rises along +x with a constant slope. */
 typedef struct slope_ctx {
     double grade;
@@ -369,8 +421,11 @@ int main(int argc, char **argv)
         const ws_species_profile *p = &si->body;
         stand_metrics sm = {0};
         walk_metrics wm = {0};
+        closed_loop_metrics clm = {0};
         int stand_ok = run_stand(p, 8.0, &sm);
         int walk_ok = run_walk(p, 20.0, &wm);
+        double v_des = ws_species_walk_speed((ws_species_kind)k);
+        int cl_ok = run_closed_loop(p, v_des, 20.0, &clm);
 
         double drift = sqrt(sm.dx * sm.dx + sm.dz * sm.dz);
         int gates = stand_ok && walk_ok && sm.finite && wm.finite &&
@@ -381,6 +436,13 @@ int main(int argc, char **argv)
         if (is_ref && !gates) {
             failed = 1;
         }
+        /* The closed-loop controller must stay upright, go forward, and not
+         * regress the open-loop trot (within 5%). It is the P13 closed-loop
+         * mechanism: on the small species it lifts the achieved speed toward the
+         * commanded value, which the open-loop fixed-angle trot cannot do. */
+        int cl_tracks = cl_ok && clm.finite && clm.upright_min > 0.9 &&
+                        clm.lateral_drift < 0.6 && clm.v_fwd > 0.05 &&
+                        clm.v_fwd >= 0.95 * wm.v_fwd;
         scenes++;
         const char *verdict = is_ref ? (gates ? "PASS" : "FAIL")
                                      : (gates ? "PASS" : "INFO");
@@ -393,6 +455,13 @@ int main(int argc, char **argv)
                si->name, is_ref, verdict, drift, sm.dy, wm.v_fwd,
                wm.lateral_drift, wm.height, wm.max_lr_asymmetry,
                sm.min_contacts);
+        printf("body3d closed_loop species=%s v_des=%.3f v_open=%.3f v_closed=%.3f "
+               "upright_min=%.3f lateral_drift=%.3f verdict=%s\n",
+               si->name, v_des, wm.v_fwd, clm.v_fwd, clm.upright_min,
+               clm.lateral_drift, cl_tracks ? "PASS" : "FAIL");
+        if (!cl_tracks) {
+            failed = 1;
+        }
     }
     fclose(csv);
 

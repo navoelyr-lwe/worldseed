@@ -185,10 +185,17 @@ const char *ws_species_card(ws_species_kind kind)
 
 double ws_species_walk_speed(ws_species_kind kind)
 {
-    /* Froude scaling: a walk speed proportional to sqrt(shoulder height),
-     * anchored to the reference deer's 1.5 m/s. This keeps each species' stride
-     * inside its leg reach instead of demanding a deer-length stride from a
-     * short-legged body (docs/19 §4.3). */
+    /* Planning walk-speed targets per species (docs/19 §4.3): the speed the
+     * ecology and the live session command an animal to move at; the deer's
+     * 1.5 m/s is the reference the golden scene uses.
+     *
+     * Known inconsistency (documented, not hidden): the fox (1.8) and rabbit
+     * (2.0) values are not Froude-consistent with the deer. A constant-Froude
+     * walk scales as sqrt(shoulder height), which would give the fox 0.90 and
+     * the rabbit 0.62 m/s. Neither the planar product model nor the 3D
+     * closed-loop controller reaches the fixed values, so they are aspirational
+     * upper bounds kept to measure the real gap; see
+     * docs/life/MODEL-KARTI-UCD-BEDEN.md. */
     switch (kind) {
     case WS_SPECIES_DEER:   return 1.5;
     case WS_SPECIES_FOX:    return 1.8;

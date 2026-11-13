@@ -181,6 +181,12 @@ $body3dPassed = (Select-String -Path evidence/body3d/body3d.txt -Pattern "verdic
 if ($body3dPassed -lt 1 -or $body3dExpected -lt 1) {
     Write-Error "body3d: $body3dPassed/$body3dExpected scenarios passed"; exit 1
 }
+# The closed-loop gait controller must track speed for every species.
+$clFail = (Select-String -Path evidence/body3d/body3d.txt -Pattern "closed_loop .*verdict=FAIL" -AllMatches).Matches.Count
+$clPass = (Select-String -Path evidence/body3d/body3d.txt -Pattern "closed_loop .*verdict=PASS" -AllMatches).Matches.Count
+if ($clPass -lt 4 -or $clFail -gt 0) {
+    Write-Error "body3d closed-loop: $clPass passed, $clFail failed (expected 4 passed, 0 failed)"; exit 1
+}
 
 $stage = "stage/worldseed"
 New-Item -ItemType Directory -Force -Path $stage | Out-Null

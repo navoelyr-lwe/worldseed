@@ -121,23 +121,34 @@ P12 gölge kanıtı ve release paketleme için izole Windows self-hosted yedek y
 Not: yukarıdaki GPU kanıtı **referans sahne** mikro-benchmark'ıdır; P12 kabul
 eşiği artık canlı ürün döngüsü ölçümüyle (`--live-bench`, bu PR) değerlendirilir.
 
-## Canlı ürün döngüsü GPU kabulü (2026-11-12, PR #67)
+## Canlı ürün döngüsü GPU kabulü (2026-11-12)
 
-`gui-windows.yml` artık native 4K canlı ürün döngüsünü zorunlu adım olarak ölçer.
-PR #67 dalı `feat/live-loop-gpu-benchmark` için:
+`gui-windows.yml` native 4K canlı ürün döngüsünü zorunlu adım olarak ölçer. Son
+doğrulanan `main` koşusu (commit `4348b5f6`, izole Windows GUI run `43280683169`):
 
-- CI run `43209725312`: **başarılı**.
-- İzole Windows GUI run `43209725164`: **başarılı**; adım 18 "Live product loop
-  GPU benchmark on isolated runner" geçti. `evidence/gui/live/gpu-4k-live.txt`:
+- CI run `43280682989`: **başarılı**; Windows GUI run `43280683169`: **başarılı**.
+- `gui-smoke` artefaktı (`13973317206`, 9,18 MB) indirildi ve içeriği incelendi.
+- `evidence/gui/live/gpu-4k-live.txt`:
   - `device="NVIDIA GeForce RTX 3060 Laptop GPU" version="OpenCL 3.0 CUDA"
     units=30 global_mem_gb=6.0`, 16 CPU iş parçacığı, Windows.
-  - `3840×2160 seed=20260101 gpu_render=1 shadows=0 duration_s=600`.
-  - **`path=gpu frames=30730 wall_s=600.01 avg_ms=19.53 p95_ms=21.96 p99_ms=25.89`
-    (51,2 FPS), `gpu_frames=30730 cpu_fallback_frames=0 gpu_errors=0`.**
+  - `3840×2160 seed=20260101 gpu_render=1 shadows=0 duration_s=600.0`.
+  - **`path=gpu frames=31275 wall_s=600.02 avg_ms=19.19 p50_ms=19.17 p95_ms=21.02
+    p99_ms=22.02 worst_ms=75.06 fps=52.1`, `gpu_frames=31275
+    cpu_fallback_frames=0 gpu_errors=0`, `world_digest=c13ed0fd…`, `pop=85
+    loaded=49`.**
   - `p95_ok=1` — native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda karşılanır.
-  - Ham kare zamanları: `evidence/gui/live/gpu-4k/frames.csv` (30730 satır).
+  - Ham kare zamanları: `evidence/gui/live/gpu-4k/frames.csv` (31277 satır).
+- `evidence/gui/gpu/gpu-check.txt`: `semantic_match=ok`, `tiled bit_identical=1`
+  (`tiled_ms=0.80`), `device_loss_recovered=1`, CPU fallback ok.
+- `evidence/gui/gpu/gpu-scene.txt`: tam sahne OpenCL C 1.2 yolu 17/17 sahnede
+  `path=gpu`; `structural_fraction=0.00000` (dokümante edilmiş `world_stream`
+  eş-düzlem renk beraberliği dışında).
+- `evidence/gui/perf/perf-4k.txt`: native 3840×2160 **referans sahne** ölçümü
+  (CPU referans yolu `p95_ms=142.53`, GPU yolu `scene_gpu p95_ms=29.05`).
 - Adım, `path=gpu`, `cpu_fallback_frames=0`, `gpu_errors=0` ve `p95_ok=1`
   koşullarını zorunlu geçit yapar; cihaz her kareyi çizmezse veya p95 hedefi
   tutmazsa iş düşer. Bir CPU ölçümü asla GPU sonucu olarak raporlanmaz.
 - Sınır: ölçüm `shadows=0` ve 6 GB cihazda alındı; 12 GB sınıfı referans donanım
-  ve gölge-açık canlı ölçüm ayrıca üretilmelidir.
+  ve gölge-açık canlı ölçüm ayrıca üretilmelidir. Ayrıca bu kanıt **referans
+  sahne** mikro-benchmark'ından ayrıdır: P12 kabul eşiği canlı ürün döngüsü
+  ölçümüyle (`--live-bench`) değerlendirilir; ikisi karıştırılmamalıdır.

@@ -216,6 +216,12 @@ jobs:
           grep -q "WS_BODY3D_OK" evidence/body3d/body3d.txt
           test "$(grep -c 'reference=1 verdict=PASS' evidence/body3d/body3d.txt)" = "1" \
             || { echo "the reference 3D quadruped failed its biomechanics checklist"; exit 1; }
+          # The closed-loop gait controller must track speed for every species:
+          # one PASS line per species and no FAIL.
+          test "$(grep -c 'closed_loop .*verdict=PASS' evidence/body3d/body3d.txt)" = "4" \
+            || { echo "the closed-loop gait controller did not pass for all species"; exit 1; }
+          ! grep -q 'closed_loop .*verdict=FAIL' evidence/body3d/body3d.txt \
+            || { echo "the closed-loop gait controller failed for a species"; exit 1; }
 
       - name: Asset pipeline
         run: |
