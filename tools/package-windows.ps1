@@ -181,11 +181,18 @@ $body3dPassed = (Select-String -Path evidence/body3d/body3d.txt -Pattern "verdic
 if ($body3dPassed -lt 1 -or $body3dExpected -lt 1) {
     Write-Error "body3d: $body3dPassed/$body3dExpected scenarios passed"; exit 1
 }
-# The closed-loop gait controller must track speed for every species.
-$clFail = (Select-String -Path evidence/body3d/body3d.txt -Pattern "closed_loop .*verdict=FAIL" -AllMatches).Matches.Count
-$clPass = (Select-String -Path evidence/body3d/body3d.txt -Pattern "closed_loop .*verdict=PASS" -AllMatches).Matches.Count
-if ($clPass -lt 4 -or $clFail -gt 0) {
-    Write-Error "body3d closed-loop: $clPass passed, $clFail failed (expected 4 passed, 0 failed)"; exit 1
+# All four species are held to the same standard: each must pass the stand/walk
+# checklist, the closed-loop controller and the turn, slope, run and rough-ground
+# scenarios (six families, four species each).
+$families = @("body3d species=", "body3d closed_loop species=",
+              "body3d turn species=", "body3d slope species=",
+              "body3d run species=", "body3d rough_ground species=")
+foreach ($fam in $families) {
+    $n = (Select-String -Path evidence/body3d/body3d.txt -Pattern ([regex]::Escape($fam) + ".*verdict=PASS") -AllMatches).Matches.Count
+    if ($n -ne 4) { Write-Error "body3d '$fam': $n/4 species passed"; exit 1 }
+}
+if (Select-String -Path evidence/body3d/body3d.txt -Pattern "verdict=FAIL" -Quiet) {
+    Write-Error "a 3D body scenario failed"; exit 1
 }
 
 $stage = "stage/worldseed"

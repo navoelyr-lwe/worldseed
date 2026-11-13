@@ -290,7 +290,7 @@ Kabul kapıları:
 - Sonraki türlerin vücut oranı, kütle/atalet, ekstremite, ayak/pençe/toynak ve gait profilleri birbirinden ayrılır.
 - Görsel beden her zaman fiziksel state'ten türetilir; animasyon pozu fiziksel gerçeğin yerine geçmez.
 
-**İlerleme (2026-11):** İki dilim tamamlandı.
+**İlerleme (2026-11):** Yedi dilim tamamlandı.
 
 - *Dilim 1 — frontal düzlem:* frontal düzlem (lateral) denge, dört ayak teması ve
   dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
@@ -320,13 +320,23 @@ Kabul kapıları:
   besleme hızı bacak erişimine sınırlanır. Ölçülen: tilki 0,63→0,81, tavşan
   0,17→0,36 m/s, dört tür de dik kalır. `closed-loop speed` birim testi ve
   `ws_body3d_check` `closed_loop` satırları bunu kilitler.
+- *Dilim 7 — dört türde tür-ölçekli senaryolar:* koşu, dönüş, yokuş ve engebeli
+  zemin senaryoları artık dört türün tamamında kapılanıyor; her kapı türün kendi
+  ölçeğine göre kurulur (duruş/yürüyüş omuz yüksekliğiyle, koşu türün gerçekleşen
+  yürüyüş hızının 1,10 katıyla, yokuş tırmanışı gövde yüksekliğinin 1,2 katıyla,
+  engebeli zemin yürüyüş hızının 0,6 katıyla). Koşu adımı da tür ölçeğine
+  bağlandı: `ws_quad3_gait_run` hip açısı `sqrt(0,60 m / leg_upper)` ile
+  ölçeklenir; sabit açı kısa bacaklı türlerde doyuma giriyor ve tavşanın
+  "koşusu" yürüyüşünden hızlı olmuyordu (oran ~1,05). Ölçülen yürüyüş→koşu oranı:
+  geyik 1,20, tilki 1,38, tavşan 1,64, domuz 1,28. Kanıt aracı 20 sahne üretir
+  (her aile dört türden geçer); `species run exceeds walk` birim testi ve
+  CI/paketleme kapıları (aile bazında 4/4) bunu kilitler.
 
-Yukarıdaki kapıların açık kısmı: koşu/yokuş/farklı zemin senaryolarının dört
-türe yayılması, dinamik temas kuvveti ve 3B denge/enerji D3 kıyası, ve diğer üç
-türün (tilki, tavşan, domuz) aynı standartta 3B doğrulaması. Kapalı-çevrim
-denetleyici hızı komuta yaklaştırır ama küçük türlerin komut hızları (tilki 1,8 /
-tavşan 2,0 m/s) bu gövde geometrisiyle ulaşılamaz ve Froude ölçeklemesiyle
-tutarsızdır; bu ayrı bir dilimdir.
+Yukarıdaki kapıların açık kısmı: dinamik temas kuvveti ve 3B denge/enerji D3
+kıyası. Kapalı-çevrim denetleyici hızı komuta yaklaştırır ama küçük türlerin
+komut hızları (tilki 1,8 / tavşan 2,0 m/s) bu gövde geometrisiyle ulaşılamaz ve
+Froude ölçeklemesiyle tutarsızdır; bu ayrı bir dilimdir. Kapalı-çevrim
+denetleyicinin dönüş/yokuş/engebeli zeminde de kapılanması ayrı bir dilimdir.
 
 ### P14 — Çok duyulu algı ve doğal davranış
 

@@ -111,7 +111,7 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
 
 **Kabul:** yürüme/koşu/dönüş/yokuş/zemin senaryoları; 3B temas ve denge testleri; enerji maliyeti ve hareket kıyasları; veri kaynağı/belirsizlikleri belgeli D3 referans tür doğrulaması. Diğer üç türün beden ve gait parametreleri ayrı doğrulanır.
 
-**Durum:** Başladı (altı dilim).
+**Durum:** Başladı (yedi dilim).
 
 - *Dilim 1 — frontal düzlem:* Frontal düzlem (lateral) denge, dört ayak teması ve
   dönüş modeli dört tür için eklendi ve CI'da kapılanıyor
@@ -173,15 +173,29 @@ Not: GPU teknik kararı ADR-001 ile sabittir. P0/P2 feasibility spike yalnız Op
   aracı `closed_loop` satırları bunu kilitler. 17 golden sahne bit-özdeş kalır
   (bu çözücü sagittal golden sahnelerden ayrıdır).
 
+- *Dilim 7 — dört türde tür-ölçekli koşu/dönüş/yokuş/engebeli zemin:* Koşu,
+  dönüş, yokuş ve engebeli zemin senaryoları artık **yalnız referans geyikte
+  değil, dört türün tamamında** kapılanıyor ve her kapı türün kendi ölçeğine
+  göre kuruluyor: duruş/yürüyüş sınırları omuz yüksekliğiyle, koşu eşiği türün
+  gerçekleşen yürüyüş hızının 1,10 katıyla, yokuş tırmanışı gövde yüksekliğinin
+  1,2 katıyla, engebeli zemin eşiği yürüyüş hızının 0,6 katıyla ölçekleniyor.
+  Koşu adımı da tür ölçeğine bağlandı: `ws_quad3_gait_run` hip açısını
+  `sqrt(0,60 m / leg_upper)` ile ölçekler. Sabit açı kısa bacaklı türlerde
+  doyuma giriyordu; tavşanın "koşusu" yürüyüşünden hızlı değildi (oran ~1,05).
+  Ölçülen yürüyüş→koşu oranı: geyik 1,20, tilki 1,38, tavşan 1,64, domuz 1,28.
+  Kanıt aracı artık 20 sahne üretir (her aile dört türden geçer); yeni birim
+  testi `species run exceeds walk` ve CI/paketleme kapıları (aile bazında 4/4)
+  bunu kilitler. 17 golden sahne bit-özdeş kalır.
+
 **Açık:** dinamik temas kuvveti ve 3B denge/enerji D3 kıyası. Kapalı-çevrim
 denetleyici hızı komuta yaklaştırır ama **hiçbir tür komut hızının tamamına
 ulaşmaz**: küçük türlerin bacak erişimi ve kadansı tilki 1,8 / tavşan 2,0 m/s'yi
 bu gövde geometrisiyle yapısal olarak engeller. Bu değerler ayrıca sabit-Froude
 yürüyüş ölçeklemesiyle (`sqrt(shoulder_h)`) tutarsızdır (tilki ≈0,90, tavşan
 ≈0,62 m/s olurdu); profil hızlarının gözden geçirilmesi ya da tür adım/kadans
-geometrisinin yeniden ayarlanması ayrı bir dilimdir. Koşu/dönüş/yokuş
-senaryolarının dört türe yayılması ve 3B doğrulamanın dört türün tamamında D3
-kıyasıyla tamamlanması da açıktır.
+geometrisinin yeniden ayarlanması ayrı bir dilimdir. Kapalı-çevrim denetleyicinin
+dönüş/yokuş/engebeli zeminde de kapılanması ve 3B doğrulamanın dört türün
+tamamında D3 kıyasıyla tamamlanması da açıktır.
 
 ## P14 — Çok duyulu algı ve doğal davranış
 

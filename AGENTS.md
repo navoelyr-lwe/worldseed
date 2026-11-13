@@ -178,12 +178,13 @@ kural kanıtla uygulanır:
   tutma terimi** olmadan asimetrik yürüyüş yavaşça kavis yapar (yanal sürüklenme
   14 m'ye çıkabilir). `ws_quad3_balance`'a heading terimi eklenince sürüklenme
   2,0–2,2 ms adım aralığında < 0,3 m'ye iner. Hız geri beslemeli (kapalı-çevrim)
-  stride denetleyicisi denendi ve **işe yaramadı** (sistem yine kaotik); bu yüzden
-  basit açık-çevrim + heading tutma tercih edildi.
-- **Sınır:** yalnız referans kızıl geyik kapılanır. Tilki/tavşan/domuz kendi
-  adımıyla kararlı ve ileri yürür (beşinci dilim) ama açık-çevrim tırıs hâlâ
-  profil hızlarının altında; koşu/dönüş/yokuş senaryoları dört türe yayılmadı,
-  dinamik temas kuvveti ve D3 kıyası açıktır.
+  stride denetleyicisinin bu ilk denemesi **işe yaramadı** (sistem yine kaotik);
+  bu yüzden bu dilimde basit açık-çevrim + heading tutma tercih edildi. (Altıncı
+  dilimde farklı bir tasarımla — Raibert ayak yerleştirme — kapalı-çevrim
+  başarıyla eklendi; bkz. aşağıda.)
+- **Sınır:** bu dilimde yalnız referans kızıl geyik kapılanıyordu; yedinci
+  dilimde dört türün tamamı aynı standartta kapılandı. Dinamik temas kuvveti ve
+  D3 kıyası hâlâ açıktır.
 - **Üçüncü dilim — referans türde dönüş ve yokuş:** `ws_quad3_balance`'ın yaw
   hız servosu **dünya baş açısı (heading) hedef izleme** terimine çevrildi.
   Ders: "yaw hızı hedefi" ile "baş açısı hedefi" aynı şey değildir; baş açısı
@@ -267,10 +268,40 @@ kural kanıtla uygulanır:
   olarak engeller. Bu değerler ayrıca sabit-Froude (`sqrt(shoulder_h)`)
   ölçeklemesiyle tutarsızdır (tilki ≈0,90, tavşan ≈0,62 m/s olurdu). Profil
   hızlarının gözden geçirilmesi ya da tür adım/kadans geometrisinin yeniden
-  ayarlanması ayrı bir dilimdir. Koşu/dönüş/yokuş senaryoları dört türe
-  yayılmadı; kapalı-çevrim şu an yalnız düz zemin yürüyüşü için kapılanır.
+  ayarlanması ayrı bir dilimdir. Kapalı-çevrim şu an yalnız düz zemin yürüyüşü
+  için kapılanır; dönüş/yokuş/engebeli zeminde kapalı-çevrim kapılanması ayrı bir
+  dilimdir.
 - **Golden bit-özdeşliği:** bu çözücü sagittal golden sahnelerden ayrıdır; 17
   golden sahne bit-özdeş kalır (doğrulandı). `ws_species_walk_speed`'i Froude
   değerlerine çekmek ürün 2B hareket kapısını kırar (2B model de komutun ~%15'ini
   tutturur) — geri alındı; değerler bu yüzden değiştirilmedi, yalnız yorum
   gerçeği yansıtacak biçimde güncellendi.
+
+## P13 notları — dört türde tür-ölçekli senaryolar (yedinci dilim)
+
+- **Koşu/dönüş/yokuş/engebeli zemin artık dört türde kapılanıyor.** Bu senaryolar
+  önceden yalnız referans geyikte ve geyik boyutunda mutlak eşiklerle kapılanıyordu
+  (`v_fwd > 1,9`, `climb > 0,5`, `drift < 0,6`). Artık her tür kendi ölçeğinde
+  değerlendirilir: duruş/yürüyüş sınırları omuz yüksekliğiyle, koşu eşiği türün
+  **gerçekleşen** yürüyüş hızının 1,10 katıyla, yokuş tırmanışı gövde yüksekliğinin
+  1,2 katıyla, engebeli zemin eşiği yürüyüş hızının 0,6 katıyla ölçeklenir. Kanıt
+  aracı artık 20 sahne üretir (stand/walk + closed_loop + turn + slope + run +
+  rough; her aile dört türden geçer). CI ve `tools/package-windows.ps1` kapıları
+  aile bazında 4/4 ister.
+- **Koşu adımı tür ölçeğine bağlandı — asıl hata buradaydı.** `ws_quad3_gait_run`
+  hip genliğini tüm türlerde **sabit 0,20 rad**'a çıkarıyordu. Hip açısı bir
+  açıdır; ayağın kat ettiği yol = açı × bacak boyu. Sabit açı kısa bacaklı
+  türlerde doyuma giriyordu: tavşanın 0,10 m bacağı 0,60 m bacağın yarısından az
+  yol kat ediyor, bu yüzden "koşusu" yürüyüşünden hızlı olmuyordu (ölçülen oran
+  ~1,05; tilki de ~1,25'te tıkanıyordu). Düzeltme: hip açısını
+  `sqrt(0,60 m / leg_upper)` ile ölçekle (Froude tutarlı adım). Ölçülen
+  yürüyüş→koşu oranı: geyik 1,20, tilki 1,38, tavşan **1,64**, domuz 1,28.
+  `tests/test_body3d.c::species run exceeds walk` her türün koşusunun kendi
+  yürüyüşünü 1,10×'ten fazla geçtiğini kilitler.
+- **Ders:** tür-ölçekli bir gait parametresi mutlak değil, boyutla ölçeklenen bir
+  sayı olmalı. Sabit bir "koşu adım açısı" referans türde doğru görünür ama kısa
+  bacaklı türlerde sessizce doyuma girer; kapı yalnız referans türde olduğu sürece
+  bu görünmez.
+- **Golden bit-özdeşliği:** `ws_quad3_gait_run` sagittal golden sahnelerden
+  ayrıdır; 18 golden sahne bu değişiklikten sonra bit-özdeş kaldı (doğrulandı).
+
