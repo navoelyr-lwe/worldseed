@@ -83,6 +83,38 @@ ws_quad3_gait ws_quad3_gait_run(const ws_species_profile *p);
 void ws_quad3_gait_apply(ws_body3d *c, const ws_quad3_parts *parts,
                          const ws_quad3_gait *g, double phase);
 
+/* Closed-loop gait state. The open-loop driver above writes fixed joint angles,
+ * so it cannot regulate speed: at a given cadence the body settles wherever the
+ * passive dynamics leave it, and the small species stall well below their
+ * commanded speed. The closed-loop driver instead places each foot with the
+ * Raibert rule (a neutral point plus a velocity-error term), which is what the
+ * planar product model already uses, so the body tracks a commanded speed. */
+typedef struct ws_quad3_gait_state {
+    double td_x[WS_LEG_COUNT]; /* touchdown x per leg (world), m */
+    int stance[WS_LEG_COUNT];  /* previous-step stance flag per leg */
+    double kv;                 /* velocity-error foot-placement gain, s */
+    double foot_lift;          /* swing apex, m */
+    int initialised;
+} ws_quad3_gait_state;
+
+/* Initialise the closed-loop state, scaling the swing apex and foot-placement
+ * gain from the species profile so a small species does not lift a deer-sized
+ * foot or saturate its short leg reach at startup. NULL profile falls back to
+ * the reference-deer defaults (0.08 m apex, 0.30 s gain). */
+void ws_quad3_gait_state_init(ws_quad3_gait_state *gs,
+                              const ws_species_profile *p);
+
+/* Drive every leg joint for `phase` in [0,1) to track a commanded forward speed
+ * `v_des` (m/s) using Raibert foot placement, sampling the ground under each
+ * foot. The swing cadence and stance fraction come from `g`; the geometry from
+ * `p`. The caller pairs this with ws_quad3_balance for torso stabilisation, as
+ * with the open-loop driver. */
+void ws_quad3_gait_closed_loop(ws_body3d *c, const ws_quad3_parts *parts,
+                               const ws_species_profile *p,
+                               ws_quad3_gait_state *gs,
+                               const ws_quad3_gait *g, double phase,
+                               double v_des);
+
 /* Simple periodic trot: diagonal pairs (front-left with rear-right, front-right
  * with rear-left) swing together. Writes each leg hip/knee motor target for
  * `phase` in [0,1). Knee lift is a species-scaled fraction of leg length. This

@@ -308,10 +308,25 @@ Kabul kapıları:
   teması CI'da kapılanıyor (`docs/life/MODEL-KARTI-UCD-BEDEN.md`,
   `tools/ws_body3d_check.c`, `tests/test_body3d.c`). Bu çözücü sagittal golden
   sahnelerden ayrıdır; golden CPU çıktısı bit-özdeş kalır.
+- *Dilim 3–5:* referans türde komutlu dönüş ve %10 eğimli yokuş tırmanışı CI
+  kapısı oldu; koşu (~2,1 m/s) ve 10 cm genlikli engebeli zemin senaryoları
+  eklendi; küçük türlerin adım kuralı düzeltildi (`ws_quad3_suggested_dt` artık
+  `leg_upper` ile doğrusal ölçekler) ve kanıt aracı her türün kendi yürüyüş
+  frekansını kullanır (`species walk own dt` testi).
+- *Dilim 6 — kapalı-çevrim yürüyüş:* açık-çevrim sürücü hız geri beslemesi
+  içermediği için küçük türler komut hızının çok altında kalıyordu. Yeni
+  `ws_quad3_gait_closed_loop` Raibert ayak yerleştirme + hız geri beslemesi
+  kullanır; dikey IK referansı nominal ayakta durma yüksekliğidir ve ileri
+  besleme hızı bacak erişimine sınırlanır. Ölçülen: tilki 0,63→0,81, tavşan
+  0,17→0,36 m/s, dört tür de dik kalır. `closed-loop speed` birim testi ve
+  `ws_body3d_check` `closed_loop` satırları bunu kilitler.
 
-Yukarıdaki kapıların açık kısmı: koşu/yokuş/farklı zemin senaryoları, dinamik
-temas kuvveti ve 3B denge/enerji D3 kıyası, ve diğer üç türün (tilki, tavşan,
-domuz) aynı standartta 3B doğrulaması.
+Yukarıdaki kapıların açık kısmı: koşu/yokuş/farklı zemin senaryolarının dört
+türe yayılması, dinamik temas kuvveti ve 3B denge/enerji D3 kıyası, ve diğer üç
+türün (tilki, tavşan, domuz) aynı standartta 3B doğrulaması. Kapalı-çevrim
+denetleyici hızı komuta yaklaştırır ama küçük türlerin komut hızları (tilki 1,8 /
+tavşan 2,0 m/s) bu gövde geometrisiyle ulaşılamaz ve Froude ölçeklemesiyle
+tutarsızdır; bu ayrı bir dilimdir.
 
 ### P14 — Çok duyulu algı ve doğal davranış
 
