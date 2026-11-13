@@ -206,27 +206,27 @@ geometrisinin yeniden ayarlanması ayrı bir dilimdir.
   devriliyordu (`up_min = −0,998`). Düzeltme: hem birim testi hem kanıt aracı
   artık koşu boyunca **minimum dikliği** (`upright_min`) izler ve dönüş kapısı
   `upright_min > 0,9` şartını arar; `body3d turn` satırı `upright_min` değerini
-  yazdırır. Ayrıca yerinde dönüşün **gerçek kararlılık sınırı** ölçüldü
-  (ikili arama): tüm türler ~0,15 rad/s'de devriliyor (geyik 0,157, tilki 0,158,
-  tavşan 0,160, domuz 0,138 rad/s). Kök neden mimari: bacaklar yalnız **sagittal
-  menteşeli** (`hinge_lock=1`, yalnız lateral eksen), **abduction (yanal
-  serbestlik) eklemi yok**; dönüş komutu stance'i aştığında ayaklar yerden
-  kesiliyor ve gövde öne devriliyor. Dünya-çerçevesi, gövde-çerçevesi,
-  diferansiyel adım uzunluğu ve skid-steer ayak yerleştirme denendi; hiçbiri
-  ~0,15 rad/s üstünde kararlılığı sağlamadı (kök neden yerleştirme kuralı değil,
-  eklem serbestlik derecesi). Kapalı-çevrim Raibert gait geyikte sınırı geçici
-  olarak ~0,28 rad/s'ye taşıdı ama 15 s'de 0,18'de yine devrildi (kaotik), bu
-  yüzden güvenilir bir iyileştirme olarak iddia edilmedi. Dönüş kapısı geniş
-  marjla kararlı **0,10 rad/s**'de kalır (dört türde `upright_min ≥ 0,965`).
-  Gerçek çözüm (hip abduction eklemi) ayrı bir modelleme dilimidir. 17 golden
-  sahne bit-özdeş kalır (bu çözücü sagittal golden sahnelerden ayrıdır).
+  yazdırır. Dokuzuncu dilim bu kapıyı bir kat daha sıkılaştırdı: 0,10 rad/s'de
+  her tür **15–21 s sonra** yavaşça öne yunuslayıp devriliyor (tavşan 14,7 /
+  domuz 14,9 / tilki 16,8 / geyik 20,8 s), yani 10 s'lik pencere sürdürülemeyen
+  bir dönüşü "geçiriyordu". Yalnız **≤0,04 rad/s** dört türde 30–45 s dik kalır
+  (0,05 rad/s geyikte 42, tavşanda 28 s'de devrilir). Kapı artık **0,04 rad/s'de
+  30 s** koşar (`upright_min > 0,9`; ölçülen ≥ 0,933). **Kök neden önceki
+  "abduction eklemi yokluğu" iddiası ölçümle çürütüldü:** sınır mimari değil,
+  denetleyici/ayar sınırıdır. Dönüş-hızına bağlı denge kazancı, integral terimi,
+  hip abduction eklemi (roll geri beslemesiyle), gövde/dünya-çerçevesi yaw torku,
+  dönüşe yatış referansı ve dt/4 denendi; hiçbiri hem dönüşü hem yürüyüşü aynı
+  anda düzeltmedi (dt/4 dönüşü düzeltir ama geyik yürüyüşünü 2,2→0,25 m/s'ye
+  düşürür; 16–32× kazanç dönüşü düzeltir ama yürüyüşü bozar). Sürdürülebilir
+  dönüş sınırını yükseltmek ayrı bir modelleme dilimidir. 17 golden sahne
+  bit-özdeş kalır (bu çözücü sagittal golden sahnelerden ayrıdır).
 
 **Açık:** dinamik temas kuvveti ve 3B denge/enerji D3 kıyası. **Dönüş hızı
-sınırı mimari:** ~0,15 rad/s üstünde kararlı dönüş için bacaklara yanal
-serbestlik (abduction) eklemi gerekir; mevcut sagittal model bunu yapısal olarak
-engeller. Kapalı-çevrim denetleyicinin dönüş/yokuş/engebeli zeminde de
-kapılanması ve 3B doğrulamanın dört türün tamamında D3 kıyasıyla tamamlanması
-da açıktır.
+sınırı (ölçüldü, mimari değil):** sürdürülebilir yerinde dönüş ≤0,04 rad/s;
+0,10 rad/s'de tüm türler 15–21 s'de devrilir. Sınırı yükseltmek dönüş-hızına
+bağlı denge kazancı veya yanal hip serbestliği gerektirir; ayrı bir dilimdir.
+Kapalı-çevrim denetleyicinin dönüş/yokuş/engebeli zeminde de kapılanması ve 3B
+doğrulamanın dört türün tamamında D3 kıyasıyla tamamlanması da açıktır.
 
 ## P14 — Çok duyulu algı ve doğal davranış
 
