@@ -138,6 +138,35 @@ kural kanıtla uygulanır:
   Ayrıca Windows GUI iş akışına gerçek paketleme betiğini koşturan "Release package
   smoke" adımı eklendi; kırık release yolu artık PR'da yakalanır. Yeni bir
   sahne/tür kapısı eklerken hem `ci.yml` hem `tools/package-windows.ps1` güncellenir.
+- **İki ayrı dört-ayak yürüyüş sistemi karıştırılmasın:** Ürün hayvan hareketi
+  **planar** `ws_quadruped.c` ile sürülür (`ws_env_scene.c`, `ws_motion.c`).
+  `ws_quad3d.c` / `ws_body3d.c` ise **P13 tam 3B referans** modelidir ve şu an
+  ürün render'ına bağlı değildir; yalnız P13 kanıt araçları kullanır. P13 temas
+  kusurunu (havada-kalma) ürün yürüyüşünün sorunu sanma.
+- **P13 havada-kalma kusuru tek parametreyle çözülmez (ölçüldü, denendi, geri
+  alındı):** kapalı-çevrim 3B gait'te `knee_lift`/`foot_lift`/`duty` havada-kalmayı
+  düşürmüyor (denetleyici kendi IK ayak hedefini kullanır). Dikey gövde-yüksekliği
+  denetleyicisi (yeni bir dış kuvvet kanalı gerektirir) zıplamayı azalttı ama
+  havada-kalmayı çözmedi. Gait dikey referansını bükmek (gövdeyi alçaltmak,
+  1,0→0,8) kısa bacaklı türlere yardım ediyor (tavşan %12,3→%1,4) ama uzun
+  bacaklı geyiği (%46,8 sabit) ve ağır domuzu (%50,7→%54,4) kötüleştiriyor. Kök
+  neden: neredeyse tam uzun bacakta öne konan ayak hedefi erişimi aşıp IK'da
+  kırpılıyor. Bu, türe bağlı bir denetleyici dilimidir; tek katsayı ile kapatma.
+- **Yayım notları `release.yml` içindedir ve geride kalabilir:** yayım notu metni
+  workflow'un içinde gömülüdür; PR #64/#66/#67 GPU canlı yolunu bağladıktan sonra
+  bile notlar "tam sahne GPU yolu bağlanmadı / gerçek GPU ölçümü yok" diyordu ve
+  v0.26.0-preview'e kadar yanlış gitti. Yeni özellik yayımlanacaksa `release.yml`
+  notu ve `src/core/ws_version.h` + `CMakeLists.txt` `VERSION` birlikte güncellenir.
+- **Branch protection token yetkisi dış engeldir:** `GET branches/main/protection`
+  ve `POST rulesets` → 403 "Resource not accessible by integration"; token'da
+  `administration` yazma yetkisi yok. Hazır ruleset + betik `docs/ci/` altındadır;
+  yetkili token gelince `docs/ci/apply-main-protection.sh navoelyr-lwe/worldseed`
+  ile uygulanır. Kurulmuş gibi işaretlenmez.
+- **Canlı 4K GPU kabulü 6 GB laptop GPU'da marjinaldir:** izole Windows runner'da
+  native 3840×2160 canlı ürün döngüsü GPU yolunda 10 dk ölçüldü; `path=gpu`,
+  `cpu_fallback_frames=0`, `gpu_errors=0` (koşular: p95 20,99 / 23,32 ms geçti,
+  36,55 ms düştü; ~1,57x salınım). Nihai 4K/30 FPS kabulü 12 GB sınıfı referans
+  donanımda alınmalıdır; hedef düşürülmez.
 
 ## P13 notları — frontal düzlem denge, dört ayak teması ve dönüş (ilk dilim)
 
