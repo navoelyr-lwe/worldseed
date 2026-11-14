@@ -136,7 +136,8 @@ doğrulanan `main` koşusu (commit `4348b5f6`, izole Windows GUI run `4328068316
     p99_ms=22.02 worst_ms=75.06 fps=52.1`, `gpu_frames=31275
     cpu_fallback_frames=0 gpu_errors=0`, `world_digest=c13ed0fd…`, `pop=85
     loaded=49`.**
-  - `p95_ok=1` — native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda karşılanır.
+  - `p95_ok=1` — native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda **karşılanır
+    ama marjinaldir** (aşağıdaki koşu-arası salınım notuna bakın).
   - Ham kare zamanları: `evidence/gui/live/gpu-4k/frames.csv` (31277 satır).
 - `evidence/gui/gpu/gpu-check.txt`: `semantic_match=ok`, `tiled bit_identical=1`
   (`tiled_ms=0.80`), `device_loss_recovered=1`, CPU fallback ok.
@@ -162,6 +163,16 @@ gpu_errors=0`, `world_digest=518bd15e…431a`, `p95_ok=1`. Aynı koşuda
 `evidence/gui/gpu/gpu-check.txt`: `gpu=available device="NVIDIA GeForce RTX 3060
 Laptop GPU" version="OpenCL 3.0 CUDA" units=30`; `semantic_match=ok`;
 `tiled bit_identical=1`; `device_loss_recovered=1`; CPU fallback ok. Bu koşu
-**dönüş hızı sağlamlaştırması** ile geldi (bkz. P13 notları): önceki denemede
-Windows'ta tavşanın dönüş sahnesi devrilmişti, kapı 0,10 rad/s'ye çekilince
+**Dönüş hızı sağlamlaştırması** ile geldi (bkz. P13 notları): önceki denemede
+Windows'ta tavşanın dönüş sahnesi devrilmişti, kapı 0,04 rad/s'ye çekilince
 GUI adımı yeşile döndü.
+
+**Koşu-arası salınım (dürüst uyarı, 2026-11-13):** Aynı commit'te (`90764355`,
+PR #80) aynı canlı 4K GPU adımı iki farklı sonuç verdi — `p95_ms=36.55` (eşik
+aşıldı, `p95_ok=0`, iş düştü) ve yeniden çalıştırmada `p95_ms=23.32` (`p95_ok=1`,
+`frames=29362`, `fps=48.9`). ~1,57x koşu-arası varyans; başarısız koşunun ham
+kare verisinde p50 tüm 10 dakika ~22 ms sabit kaldı (termal düşüş değil). Bu,
+paylaşımlı 6 GB laptop GPU'da eşiğin marjinal olduğunu gösterir: adım zorunlu
+geçit olarak kalır (gerçek gerileme yine düşürür, başarısız ölçüm gizlenmez),
+ancak tek bir başarısız koşu "kesin regresyon" diye yorumlanmamalıdır ve gerçek
+kabul 12 GB sınıfı referans donanımda alınmalıdır.

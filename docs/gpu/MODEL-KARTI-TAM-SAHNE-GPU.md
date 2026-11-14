@@ -92,9 +92,14 @@
     `p50=19,41 ms p95=21,67 ms p99=25,36 ms` (~51 FPS),
     `cpu_fallback_frames=0 gpu_errors=0`, cihaz "NVIDIA GeForce RTX 3060 Laptop
     GPU" / "OpenCL 3.0 CUDA" / 30 birim / 6 GB, `world_digest=518bd15e…431a`
-    kayıtlı — 30 FPS hedefi (`p95 ≤ 33,3 ms`) bu cihazda karşılanır ve artık
-    zorunlu CI geçididir. (Önceki kayıtlar: PR #71 `p95=20,90 ms`; PR #67
-    `p95=21,96 ms`; aynı iş yükü, aynı cihaz sınıfı.)
+    kayıtlı — 30 FPS hedefi (`p95 ≤ 33,3 ms`) bu cihazda **karşılanabilir ama
+    marjinaldir**: aynı commit'te (PR #80, `90764355`) iki koşu `p95=23,32 ms`
+    (geçti) ve `p95=36,55 ms` (düştü) verdi (~1,57x koşu-arası salınım; başarısız
+    koşuda p50 tüm 10 dakika ~22 ms sabit kaldı, yani termal düşüş değil).
+    Bu yüzden eşik zorunlu CI geçidi olarak kalır ama tek bir başarısız koşu
+    kesin regresyon sayılmaz; gerçek kabul 12 GB sınıfı referans donanımda
+    alınmalıdır. (Önceki kayıtlar: PR #71 `p95=20,90 ms`; PR #67 `p95=21,96 ms`;
+    aynı iş yükü, aynı cihaz sınıfı.)
     Sınır: ölçüm `shadows=0` ve 6 GB cihazda; 12 GB sınıfı referans donanım ve
     gölge-açık canlı ölçüm ayrıca üretilmelidir.
 11. **Değişiklik kaydı:** Edge testi, derinlik kuralı, gölgeleme ardışık düzeni,
