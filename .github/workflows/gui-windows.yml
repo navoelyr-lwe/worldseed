@@ -305,9 +305,13 @@ jobs:
           }
           if (-not (Test-Path evidence/gui/live/gpu-4k/frames.csv)) { Write-Error "no raw frame-time evidence"; exit 1 }
           # Native-4K/30-FPS acceptance gate: p95 <= 33.3 ms (docs/11). The real
-          # live loop now meets this on the isolated runner (measured p95 ~22 ms,
-          # 51 FPS), so it is a hard gate; a regression fails the job and a failing
-          # measurement is never hidden.
+          # live loop meets this on the isolated runner, but only marginally:
+          # on the same commit two runs measured p95 23.3 ms (pass) and 36.6 ms
+          # (fail) on the shared 6 GB laptop GPU (~1.57x run-to-run spread), so a
+          # single failure is not a definitive regression and the real acceptance
+          # must be taken on 12 GB reference hardware. The gate stays hard so a
+          # genuine regression still fails the job and no failing measurement is
+          # hidden.
           $verdict = (Select-String -Path evidence/gui/live/gpu-4k-live.txt -Pattern "live_bench verdict").Line
           $verdict | Write-Output
           if (-not (Select-String -Path evidence/gui/live/gpu-4k-live.txt -Pattern "p95_ok=1" -Quiet)) {
