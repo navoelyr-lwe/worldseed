@@ -162,7 +162,19 @@
    sınırını yükseltmek (dönüş-hızına bağlı kazanç veya yanal hip serbestliği) ayrı
    bir modelleme dilimidir; burada iddia edilmez. 3B referans gait'in stance
    sırasında zamanın ~%46'sında temasın sıfıra düşmesi (gövde zıplaması) de ayrı
-   bir dilim olarak açıktır. Kapalı-çevrim hız denetimi de sınırlıdır: Raibert
+   bir dilim olarak açıktır. **Onuncu dilimde bu ölçüldü ve kök nedeni daraltıldı**
+   (20 s kapalı-çevrim yürüyüş, türün kendi dt'si): havada-kalma oranı dört türde
+   geyik %46,0 / tilki %33,1 / tavşan %16,6 / domuz %51,4 ve `min_contacts = 0`;
+   gövde yükselme salınımı (bounce) geyik 0,211 m / domuz 0,097 m. Bu, **gövdenin
+   dikey zıplamasından çok salınım ayağının kaldırılmasından** gelir: diz kaldırma
+   (`knee_lift` 0,60→0,15), ayak kaldırma yüksekliği (`foot_lift` 0,08→0,005) ve
+   stance oranı (`duty` 0,60→0,90) süpürüldü; hiçbiri havada-kalma oranını
+   belirgin düşürmedi (en iyi ~%44). Kapalı-çevrim denetleyici `knee_lift`'i zaten
+   yok sayar (kendi IK ayak hedefini kullanır), bu yüzden diz kaldırma parametresi
+   kapalı-çevrimde etkisizdir. Dikey gövde-yüksekliği denetleyicisi (ek bir dış
+   kuvvet kanalı gerektirir) denendi; zıplamayı azalttı (geyik 0,211→0,170 m) ama
+   havada-kalma oranını çözmedi, bu yüzden geri alındı. Temas kalitesini (havada
+   kalmayı) düşürmek ayrı bir denetleyici dilimidir. Kapalı-çevrim hız denetimi de sınırlıdır: Raibert
    nötr ayağı bacak erişiminin 0,8 katıyla sınırlı olduğundan, doğal gait hızı bu
    adımı aşan gövdeyi frenleyemez — ölçülen: geyik komutun ~1,5 katına (2,29 /
    1,50) kaçar, domuz ~0,8 katında kalır; profil hızı kendi erişimini aşan

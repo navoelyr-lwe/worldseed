@@ -19,27 +19,22 @@ Bu belge ilk görevde kurulan geliştirme altyapısını ve tespit edilen erişi
 
 ## Branch protection kurulumu (yönetici erişimi gerektirir)
 
-Depo public; klasik branch protection / ruleset API'si mevcut bağlı entegrasyon token'ı için **403 "Resource not accessible by integration"** döndürüyor (`branches/main/protection`, `rulesets`, `--input` PUT/POST hepsi). Repo `permissions.admin=true` bildirse de token'ın `administration` yetkisi yoktur; bu nedenle koruma ayarları bu token ile **otomatik kurulamaz ve doğrulanamaz**. `main` için `protected:false` durumu sürüyor. Bu, kurulmuş gibi işaretlenmez. Yönetici yetkili erişim sağlandığında aşağıdaki ayarlar uygulanır:
+Depo public; klasik branch protection / ruleset API'si mevcut bağlı entegrasyon token'ı için **403 "Resource not accessible by integration"** döndürüyor (`branches/main/protection` GET/PUT, `rulesets` POST). Repo `permissions.admin=true` bildirse de token'ın `administration` yazma kapsamı yoktur; bu nedenle koruma ayarları bu token ile **otomatik kurulamaz ve doğrulanamaz**. `main` için `protected:false` durumu sürüyor. Bu, kurulmuş gibi işaretlenmez.
 
-1. `main` için: PR zorunlu, en az 1 onay, "Require status checks to pass" açık, zorunlu kontroller = `ci.yml` işleri (`linux-matrix`, `windows-msvc`, `plan-integrity`, `docs-links`).
-2. "Require branches to be up to date before merging" açık.
-3. Doğrudan push ve force-push kapalı; dal silme sınırlı.
-4. "Require conversation resolution before merging" açık.
-
-Ayar komutu (yönetici token'ı ile):
+Yönetici yetkili erişim sağlandığında **tek komutla** kurulur; kanonik ayar `docs/ci/main-ruleset.json` içindedir (elle menü dolaşmaya gerek yok):
 
 ```sh
-gh api -X PUT repos/navoelyr-lwe/worldseed/branches/main/protection --input - <<'JSON'
-{
-  "required_status_checks": {"strict": true, "contexts": ["plan integrity", "docs links", "linux gcc Debug on"]},
-  "enforce_admins": true,
-  "required_pull_request_reviews": {"required_approving_review_count": 1},
-  "restrictions": null
-}
-JSON
+GH_TOKEN=<admin token> docs/ci/apply-main-protection.sh navoelyr-lwe/worldseed
 ```
 
-**Son doğrulama (2026-11-12):** `main` için klasik branch-protection okuması (`GET .../branches/main/protection`) ve ruleset okuma/yazma (`GET`/`POST .../rulesets`) uçları hâlâ `403 Resource not accessible by integration` döndürüyor; ayarlar kurulamadı. Bu, yapılmış gibi işaretlenmez. Koruma, yönetici erişimi sağlanana kadar PR akışı + zorunlu workflow kapılarıyla uygulanır.
+Kurulacak politikalar:
+
+1. `main` için PR zorunlu; `required_approving_review_count: 0` (tek geliştirici akışı — OpenHands kendi PR'ını tüm kapılar geçince birleştirebilir, `AGENTS.md` yetki devri).
+2. Zorunlu durum kontrolleri = gerçek workflow bağlamları: `linux gcc Debug on`, `linux gcc Release off`, `linux clang Debug on`, `linux clang Release off`, `windows msvc Debug`, `windows msvc Release`, `opencl cpu kernel`, `plan integrity`, `docs links`, `windows x64 gui/smoke`.
+3. "Require branches to be up to date before merging" (`strict: true`) açık.
+4. Doğrudan push ve force-push kapalı (`non_fast_forward`); dal silme yasak (`deletion`); doğrusal geçmiş (`required_linear_history`).
+
+**Son doğrulama (2026-11-13, bu PR):** `main` için klasik branch-protection okuması (`GET .../branches/main/protection`) ve ruleset oluşturma (`POST .../rulesets`) uçları hâlâ `403 Resource not accessible by integration` döndürüyor; ayarlar kurulamadı. Repo meta verisi `permissions.admin=true` ve `push=true` bildirse de bağlı token'ın yönetim yazma kapsamı yoktur; `GET /rulesets` yalnız **boş liste** döndürür (hiç ruleset yok). Bu, yapılmış gibi işaretlenmez. Koruma, yönetici erişimi sağlanana kadar PR akışı + zorunlu workflow kapılarıyla uygulanır.
 
 ## İzole Windows GUI runner gereksinimleri
 
@@ -136,7 +131,8 @@ doğrulanan `main` koşusu (commit `4348b5f6`, izole Windows GUI run `4328068316
     p99_ms=22.02 worst_ms=75.06 fps=52.1`, `gpu_frames=31275
     cpu_fallback_frames=0 gpu_errors=0`, `world_digest=c13ed0fd…`, `pop=85
     loaded=49`.**
-  - `p95_ok=1` — native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda karşılanır.
+  - `p95_ok=1` — native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda **karşılanır
+    ama marjinaldir** (aşağıdaki koşu-arası salınım notuna bakın).
   - Ham kare zamanları: `evidence/gui/live/gpu-4k/frames.csv` (31277 satır).
 - `evidence/gui/gpu/gpu-check.txt`: `semantic_match=ok`, `tiled bit_identical=1`
   (`tiled_ms=0.80`), `device_loss_recovered=1`, CPU fallback ok.
@@ -162,6 +158,16 @@ gpu_errors=0`, `world_digest=518bd15e…431a`, `p95_ok=1`. Aynı koşuda
 `evidence/gui/gpu/gpu-check.txt`: `gpu=available device="NVIDIA GeForce RTX 3060
 Laptop GPU" version="OpenCL 3.0 CUDA" units=30`; `semantic_match=ok`;
 `tiled bit_identical=1`; `device_loss_recovered=1`; CPU fallback ok. Bu koşu
-**dönüş hızı sağlamlaştırması** ile geldi (bkz. P13 notları): önceki denemede
-Windows'ta tavşanın dönüş sahnesi devrilmişti, kapı 0,10 rad/s'ye çekilince
+**Dönüş hızı sağlamlaştırması** ile geldi (bkz. P13 notları): önceki denemede
+Windows'ta tavşanın dönüş sahnesi devrilmişti, kapı 0,04 rad/s'ye çekilince
 GUI adımı yeşile döndü.
+
+**Koşu-arası salınım (dürüst uyarı, 2026-11-13):** Aynı commit'te (`90764355`,
+PR #80) aynı canlı 4K GPU adımı iki farklı sonuç verdi — `p95_ms=36.55` (eşik
+aşıldı, `p95_ok=0`, iş düştü) ve yeniden çalıştırmada `p95_ms=23.32` (`p95_ok=1`,
+`frames=29362`, `fps=48.9`). ~1,57x koşu-arası varyans; başarısız koşunun ham
+kare verisinde p50 tüm 10 dakika ~22 ms sabit kaldı (termal düşüş değil). Bu,
+paylaşımlı 6 GB laptop GPU'da eşiğin marjinal olduğunu gösterir: adım zorunlu
+geçit olarak kalır (gerçek gerileme yine düşürür, başarısız ölçüm gizlenmez),
+ancak tek bir başarısız koşu "kesin regresyon" diye yorumlanmamalıdır ve gerçek
+kabul 12 GB sınıfı referans donanımda alınmalıdır.
