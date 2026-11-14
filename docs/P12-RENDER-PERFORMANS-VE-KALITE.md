@@ -565,13 +565,15 @@ geçer" kuralını kanıtla uygular.
 `3840×2160`, `--live-gpu` ve en az `600` s (10 dakika) ile koşar; `path=gpu`,
 `cpu_fallback_frames=0`, `gpu_errors=0` ve `gpu_frames>0` **zorunlu** geçitlerdir.
 P12 kabul eşiği (`p95_ok=1`, p95 ≤ 33,3 ms) artık **zorunlu** geçittir: canlı döngü
-gerçek GPU'da eşiği tuttuğu için bir gerileme işi düşürür ve başarısız ölçüm
-gizlenmez. Ham kare zamanları `evidence/gui/live/gpu-4k/frames.csv` olarak
-`gui-smoke` artefaktında saklanır. Linux CI (`ci.yml`) ve paket betiği
-(`tools/package-windows.ps1`) aynı modu CPU yolunda koşup sayaçların `path=cpu`
-bildirdiğini doğrular.
+gerçek GPU'da eşiği tutabildiği için bir gerileme işi düşürür ve başarısız ölçüm
+gizlenmez. Ancak 6 GB laptop GPU'da ölçüm **marjinaldir** (aşağıdaki koşu-arası
+salınım uyarısına bakın): eşik tutulur ama garanti değildir, bu yüzden tek bir
+başarısız koşu "kesin regresyon" sayılmaz. Ham kare zamanları
+`evidence/gui/live/gpu-4k/frames.csv` olarak `gui-smoke` artefaktında saklanır.
+Linux CI (`ci.yml`) ve paket betiği (`tools/package-windows.ps1`) aynı modu CPU
+yolunda koşup sayaçların `path=cpu` bildirdiğini doğrular.
 
-**Ölçülen — gerçek GPU, izole Windows runner (güncel: run 43366085226, PR #77; önceki: run 43239422714, PR #71):**
+**Ölçülen — gerçek GPU, izole Windows runner (en yeni: run 43524348217 yeniden çalıştırma, PR #80; önceki: run 43366085226, PR #77):**
 
 - Donanım: `NVIDIA GeForce RTX 3060 Laptop GPU`, OpenCL 3.0 CUDA, 30 birim, 6 GB,
   16 CPU iş parçacığı, 15,7 GB RAM, Windows.
@@ -585,6 +587,24 @@ bildirdiğini doğrular.
   `p95_ms=20.90`; run 43209725164: `frames=30730`, `p95_ms=21.96`.)
 - Kabul: `p95_ok=1` — **native 4K/30 FPS hedefi (p95 ≤ 33,3 ms) bu cihazda
   karşılanmıştır.**
+
+**Ölçüm koşular arası salınım (dürüst uyarı).** Aynı commit'te (`90764355`,
+PR #80) aynı yapılandırmayla iki koşu alındı ve p95 belirgin biçimde değişti:
+
+- Koşu 43524348217 (ilk deneme): `path=gpu frames=24647 avg_ms=24.34 p50_ms=22.58
+  p95_ms=36.55 p99_ms=50.51 fps=41.1` — **eşik aşıldı** (`p95_ok=0`), iş düştü.
+- Koşu 43524348217 (yeniden çalıştırma): `path=gpu frames=29362 avg_ms=20.43
+  p50_ms=20.20 p95_ms=23.32 p99_ms=27.50 fps=48.9` — `p95_ok=1`.
+
+Başarısız koşunun ham kare verisi incelendi: p50 **tüm 10 dakika boyunca ~22 ms**
+sabitti (yani sona doğru termal düşüş değil); kuyruk (p95/p99) baştan sona
+yüksekti. Aynı iş yükünde p95 23,32 ile 36,55 ms arasında — **1,57× koşu-arası
+varyans**. Bu, 6 GB paylaşımlı laptop GPU'da eşiğin **marjinal** olduğunu ve
+`p95 ≤ 33,3 ms` zorunlu geçidinin bu donanımda aralıklı olarak başarısız
+olabileceğini gösterir. Sonuç: (1) 30 FPS hedefi bu cihazda **karşılanabilir**
+ama garantili değildir; (2) gerçek kabul ölçümü 12 GB sınıfı referans donanımda
+alınmalıdır; (3) geçit, ölçüm gizlenmeden bir gerilemeyi yakalamaya devam eder,
+ancak tek bir başarısız koşu "kesin regresyon" diye yorumlanmamalıdır.
 
 **Dürüst sınır:** Bu ölçüm `shadows=0` (varsayılan; gölge geçişi opt-in) ile alındı
 ve cihaz **6 GB**, referans 12 GB sınıfının altındadır. Bu yüzden ölçüm, 4K/30 FPS

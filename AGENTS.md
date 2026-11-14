@@ -120,7 +120,11 @@ kural kanıtla uygulanır:
   (`gpu_frames`, `cpu_fallback_frames`, `gpu_errors`) GPU'nun her kareyi çizdiğini
   kanıtlar. Ölçülen (izole runner, PR #67): `path=gpu p95_ms=21.96` (51,2 FPS),
   `cpu_fallback_frames=0 gpu_errors=0` — native 4K/30 FPS hedefi (p95 ≤ 33,3 ms)
-  bu cihazda **karşılanır** ve zorunlu CI geçididir. Döşemeli çekirdek yalnız
+  bu cihazda **karşılanabilir**, ama **marjinaldir**: aynı commit'te (PR #80) iki
+  koşu p95 23,32 ms (geçti) ve 36,55 ms (düştü) verdi — 6 GB paylaşımlı laptop
+  GPU'da ~1,57× koşu-arası varyans. Bu yüzden eşik zorunlu geçit olarak kalır ama
+  tek bir başarısız koşu "kesin regresyon" sayılmaz; gerçek kabul 12 GB sınıfı
+  referans donanımda alınmalıdır. Döşemeli çekirdek yalnız
   **düz-renk** rasterdir; ürün gölgelemesi ayrı `kernels/ws_scene.cl` yolundadır ve
   CI golden kapısı CPU golden'ıyla **bit-özdeş** olmayı (`cmp`, 17 sahne) şart
   koştuğu için GPU yolu golden üretiminde kullanılmaz. **Sınır:** ölçüm `shadows=0`
