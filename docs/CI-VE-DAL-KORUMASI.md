@@ -19,27 +19,22 @@ Bu belge ilk görevde kurulan geliştirme altyapısını ve tespit edilen erişi
 
 ## Branch protection kurulumu (yönetici erişimi gerektirir)
 
-Depo public; klasik branch protection / ruleset API'si mevcut bağlı entegrasyon token'ı için **403 "Resource not accessible by integration"** döndürüyor (`branches/main/protection`, `rulesets`, `--input` PUT/POST hepsi). Repo `permissions.admin=true` bildirse de token'ın `administration` yetkisi yoktur; bu nedenle koruma ayarları bu token ile **otomatik kurulamaz ve doğrulanamaz**. `main` için `protected:false` durumu sürüyor. Bu, kurulmuş gibi işaretlenmez. Yönetici yetkili erişim sağlandığında aşağıdaki ayarlar uygulanır:
+Depo public; klasik branch protection / ruleset API'si mevcut bağlı entegrasyon token'ı için **403 "Resource not accessible by integration"** döndürüyor (`branches/main/protection` GET/PUT, `rulesets` POST). Repo `permissions.admin=true` bildirse de token'ın `administration` yazma kapsamı yoktur; bu nedenle koruma ayarları bu token ile **otomatik kurulamaz ve doğrulanamaz**. `main` için `protected:false` durumu sürüyor. Bu, kurulmuş gibi işaretlenmez.
 
-1. `main` için: PR zorunlu, en az 1 onay, "Require status checks to pass" açık, zorunlu kontroller = `ci.yml` işleri (`linux-matrix`, `windows-msvc`, `plan-integrity`, `docs-links`).
-2. "Require branches to be up to date before merging" açık.
-3. Doğrudan push ve force-push kapalı; dal silme sınırlı.
-4. "Require conversation resolution before merging" açık.
-
-Ayar komutu (yönetici token'ı ile):
+Yönetici yetkili erişim sağlandığında **tek komutla** kurulur; kanonik ayar `docs/ci/main-ruleset.json` içindedir (elle menü dolaşmaya gerek yok):
 
 ```sh
-gh api -X PUT repos/navoelyr-lwe/worldseed/branches/main/protection --input - <<'JSON'
-{
-  "required_status_checks": {"strict": true, "contexts": ["plan integrity", "docs links", "linux gcc Debug on"]},
-  "enforce_admins": true,
-  "required_pull_request_reviews": {"required_approving_review_count": 1},
-  "restrictions": null
-}
-JSON
+GH_TOKEN=<admin token> docs/ci/apply-main-protection.sh navoelyr-lwe/worldseed
 ```
 
-**Son doğrulama (2026-11-12):** `main` için klasik branch-protection okuması (`GET .../branches/main/protection`) ve ruleset okuma/yazma (`GET`/`POST .../rulesets`) uçları hâlâ `403 Resource not accessible by integration` döndürüyor; ayarlar kurulamadı. Bu, yapılmış gibi işaretlenmez. Koruma, yönetici erişimi sağlanana kadar PR akışı + zorunlu workflow kapılarıyla uygulanır.
+Kurulacak politikalar:
+
+1. `main` için PR zorunlu; `required_approving_review_count: 0` (tek geliştirici akışı — OpenHands kendi PR'ını tüm kapılar geçince birleştirebilir, `AGENTS.md` yetki devri).
+2. Zorunlu durum kontrolleri = gerçek workflow bağlamları: `linux gcc Debug on`, `linux gcc Release off`, `linux clang Debug on`, `linux clang Release off`, `windows msvc Debug`, `windows msvc Release`, `opencl cpu kernel`, `plan integrity`, `docs links`, `windows x64 gui/smoke`.
+3. "Require branches to be up to date before merging" (`strict: true`) açık.
+4. Doğrudan push ve force-push kapalı (`non_fast_forward`); dal silme yasak (`deletion`); doğrusal geçmiş (`required_linear_history`).
+
+**Son doğrulama (2026-11-13, bu PR):** `main` için klasik branch-protection okuması (`GET .../branches/main/protection`) ve ruleset oluşturma (`POST .../rulesets`) uçları hâlâ `403 Resource not accessible by integration` döndürüyor; ayarlar kurulamadı. Repo meta verisi `permissions.admin=true` ve `push=true` bildirse de bağlı token'ın yönetim yazma kapsamı yoktur; `GET /rulesets` yalnız **boş liste** döndürür (hiç ruleset yok). Bu, yapılmış gibi işaretlenmez. Koruma, yönetici erişimi sağlanana kadar PR akışı + zorunlu workflow kapılarıyla uygulanır.
 
 ## İzole Windows GUI runner gereksinimleri
 
