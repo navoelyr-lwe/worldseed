@@ -192,9 +192,17 @@ jobs:
             "cikti BIT-OZDES (tiled bit_identical=1); aygit kaybi CPU geri donusune temiz" \
             "kapaniyor (device_loss_recovered=1). Referans GPU cekirdegi bu is yukunde CPU'dan" \
             "yavas oldugu icin karar use_cpu; yani GPU yalnizca gercekten kazanc sagladiginda" \
-            "onerilir. Native 4K urun sahnesi su an CPU referans yolunda olculur (~7 FPS);" \
-            "P12'nin native 4K/30 FPS hedefi icin urun sahnesinin golgeleme boru hattinin" \
-            "GPU'ya bit-ozdes tasinmasi gerekir ve bu surumde tamamlanmadi." \
+            "onerilir. TAM SAHNE GPU RENDERER (OpenCL C 1.2; kernels/ws_scene.cl + src/render/" \
+            "ws_gpu_scene.c) artik CANLI URUN DONGUSUNE baglidir: ayarlar menusunde 'GPU render" \
+            "(OpenCL)' satiri ve --live-gpu bayragi ile opt-in acilir (varsayilan kapali). 17" \
+            "katalog sahnesinde yapisal fark sifirdir (world_stream gibi es-duzlemli yuzeylerde" \
+            "float/double derislik beraberligi nedeniyle renk farki belgelidir). Gercek izole" \
+            "Windows runner'da native 3840x2160 canli urun dongusu (dunya adimi + ekoloji + canli" \
+            "aktorler + kamera + render + HUD) GPU yolunda 10 dakika olculdu: p50 20,2 ms / p95" \
+            "23,3 ms (~49 FPS), her kare cihazda cizildi (gpu_frames=29362, cpu_fallback_frames=0," \
+            "gpu_errors=0, path=gpu). Ayni commit'te ayni adim bir kez p95 36,6 ms (esik asildi)" \
+            "verdi: ~1,57x kosu-arasi salinim var; bu yuzden 4K/30 FPS kabulu MARJINALDIR ve nihai" \
+            "kabul 12 GB sinifi referans donanimda alinmalidir." \
             "" \
             "Onceki surumlerin ozellikleri korunur: disa aktarma (zaman damgali kare dizisi" \
             "+ WAV), kamera yer/su carpismasi ve agac kacinma, ayarlar menusu (fare" \
@@ -230,6 +238,7 @@ jobs:
             "  worldseed.exe --live-tour cikti --size 1280x720 deterministik tur (gorunum/kayit-yukle)" \
             "  worldseed.exe --live-select cikti --size 1280x720 dunya secimi kaniti (yeni/yukle/ornek)" \
             "  worldseed.exe --live-export cikti --size 1280x720 disa aktarma kaniti (kare dizisi + WAV)" \
+            "  worldseed.exe --live-bench 600 --live-gpu --size 3840x2160  canli 4K GPU kare-zamani kapisi (path=gpu)" \
             "  live/*.png turun gercek kareleri, live/manifest.txt tur ozetini icerir." \
             "" \
             "Sabit referans sahneler de duruyor: worldseed.exe --list, --scene N." \
@@ -249,12 +258,13 @@ jobs:
             "kernel + CPU fallback ve deterministik cok cekirdekli zamanlayici. GPU yalniz" \
             "gercek kazanc oldugunda kullanilir (ADR-001)." \
             "" \
-            "Bilinen sinirlamalar: 4K/30 FPS referans donanim hedefi henuz olculup gecilemedi;" \
-            "CPU referans yolunda kalan buyuk maliyet piksel basina sis (exp) ve spekuler" \
-            "(pow) cagrilaridir; bunlari ve tam sahne GPU yolunu baglamak sonraki dilimdir." \
-            "GPU compute cihazi olmayan makinede CPU yolu kullanilir ve ic cozunurluk otomatik" \
-            "olceklendirilir; gercek GPU donaniminda olcum bu ortamda yoktur ve acik blokaj" \
-            "olarak kayitlidir. Ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir)." \
+            "Bilinen sinirlamalar: 4K/30 FPS kabulu bu 6 GB laptop GPU'da MARJINALDIR (p95 23-37 ms" \
+            "salinir); nihai kabul 12 GB sinifi referans donanimda alinmalidir. GPU'da cizilen her" \
+            "kare CPU referansiyla semantik eslesir (tolerans icinde) ve dosemeli (tiled) cekirdek" \
+            "bit-ozdestir. CPU referans yolunda kalan buyuk maliyet piksel basina sis (exp) ve" \
+            "spekuler (pow) cagrilaridir. GPU compute cihazi olmayan makinede CPU yolu kullanilir ve" \
+            "ic cozunurluk otomatik olceklendirilir; aygit kaybi CPU geri donusune temiz kapanir." \
+            "Ses calma cihazi arayuzu sonraki surumdedir (WAV uretilir)." \
             "" \
             "Kanit: worldseed-windows-x64.zip (worldseed.exe + preview/ + live/ + select/ + export/ + MANIFEST.txt)," \
             "sha256 dosyasi, ekteki PNG kareleri ve CI artefaktlari." \
