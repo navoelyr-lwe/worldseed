@@ -348,4 +348,12 @@ kural kanıtla uygulanır:
   notu geçersizdir; birim testi ve kanıt aracı `0,04 rad/s'de 30 s` koşar
   (`upright_min > 0,9`; ölçülen dört türde ≥ 0,933). 17 golden sahne bit-özdeş
   kalır.
+- **Kapalı-çevrim hız denetimi sınırlı; kaçış kapısı eklendi.** Raibert nötr
+  ayağı bacak erişiminin 0,8 katıyla sınırlıdır, bu yüzden doğal gait hızı bu
+  adımı aşan gövdeyi frenleyemez: ölçülen geyik komutun ~1,5 katına kaçar
+  (2,29 / 1,50), domuz ~0,8 katında kalır; profil hızı kendi erişimini aşan
+  tilki/tavşan altında kalır (0,45 / 0,18 katı). Dokuzuncu dilim hem birim
+  testine hem kanıt aracına **üst sınır** ekledi (`v_fwd < 2 × v_des`) ki bir
+  kaçış (sürekli hızlanan gövde) gerçek hata olarak yakalansın. Kaçışın kendisi
+  açık bir kalibrasyon işidir.
 

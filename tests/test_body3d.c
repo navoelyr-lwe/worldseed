@@ -505,6 +505,15 @@ static int test_closed_loop_speed(void)
         WS_CHECK(v > 0.05);
         WS_CHECK(upright_min > 0.9);
         WS_CHECK(fabs(c2.z - c1.z) < 0.6);
+        /* The controller must also stay bounded. The Raibert neutral offset is
+         * capped at 0.8 x the leg's horizontal reach, so the stance cannot brake
+         * a body whose natural gait speed exceeds that stride: measured, the
+         * deer runs ~1.5x its commanded 1.50 m/s and the boar ~0.8x. Species
+         * whose profile speed exceeds their own stride reach undershoot instead
+         * (fox ~0.45x, rabbit ~0.18x), which is the documented reach limit. A
+         * runaway (a body that keeps accelerating) would be a real defect, so it
+         * is gated here. */
+        WS_CHECK(v < 2.0 * v_des);
     }
     return 1;
 }
