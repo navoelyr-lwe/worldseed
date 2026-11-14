@@ -174,7 +174,13 @@
    kapalı-çevrimde etkisizdir. Dikey gövde-yüksekliği denetleyicisi (ek bir dış
    kuvvet kanalı gerektirir) denendi; zıplamayı azalttı (geyik 0,211→0,170 m) ama
    havada-kalma oranını çözmedi, bu yüzden geri alındı. Temas kalitesini (havada
-   kalmayı) düşürmek ayrı bir denetleyici dilimidir. Kapalı-çevrim hız denetimi de sınırlıdır: Raibert
+   kalmayı) düşürmek ayrı bir denetleyici dilimidir. Kök neden daraltması şunu
+   gösterdi: gövde neredeyse tam uzun bacakla durduğundan öne konan ayak hedefi
+   bacak erişimini aşıp IK'da kırpılıyor ve ayak yere değmiyor. Gait dikey
+   referansını bükmek (gövdeyi alçaltmak, 1,0→0,8) kısa bacaklı türlere yardım
+   ediyor (tavşan %12,3→%1,4; tilki %32,6→%17,3) ama uzun bacaklı geyiği (%46,8
+   sabit) ve ağır domuzu (%50,7→%54,4) **kötüleştiriyor**; yani türe bağlı bir
+   denetleyici işidir, tek parametreyle çözülmez. Kapalı-çevrim hız denetimi de sınırlıdır: Raibert
    nötr ayağı bacak erişiminin 0,8 katıyla sınırlı olduğundan, doğal gait hızı bu
    adımı aşan gövdeyi frenleyemez — ölçülen: geyik komutun ~1,5 katına (2,29 /
    1,50) kaçar, domuz ~0,8 katında kalır; profil hızı kendi erişimini aşan
